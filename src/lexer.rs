@@ -2,7 +2,7 @@ use crate::tokens::Token;
 use crate::tokens::SourceInfo;
 use std::{fs, path::PathBuf};
 
-struct File {
+pub struct File {
     contents: Vec<String>,
     path: PathBuf,
 }

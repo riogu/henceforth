@@ -7,6 +7,8 @@ use std::path::PathBuf;
 use clap::{arg, Parser};
 use lexer::Lexer;
 
+use crate::lexer::File;
+
 #[derive(Parser, Debug, Clone)]
 #[command(author, version, about)]
 struct Args {
@@ -18,6 +20,7 @@ struct Args {
 
 fn main() {
     let args = Args::parse();
+    let file = File::new(args.source);
     println!("{:?}", args);
     let lexer = Lexer::new();
     let tokens = lexer.tokenize();

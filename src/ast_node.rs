@@ -1,21 +1,17 @@
+pub struct Type {}
 pub trait ASTNode {
-    fn get_type(&self) -> TypeName;
-}
-struct IfStmt {}
-struct ReturnStmt {}
-
-enum TypeName {
-    String,
-    Int,
-    Bool,
+    fn get_type(&self) -> Type;
+    fn analyze(&self);
 }
 
-enum Declaration<'a> {
-    VarDeclaration(&'a Expression<'a>, &'a Expression<'a>),
-    FunctionDeclaration(&'a Expression<'a>, &'a Expression<'a>),
-}
+pub enum  IfStmt {}
+pub enum  ReturnStmt {}
 
-enum Operation<'a> {
+pub enum  Declaration<'a> {
+    VarDeclaration      (&'a Expression<'a>, &'a Expression<'a>),
+    FunctionDeclaration (&'a Vec<Expression<'a>>),
+}
+pub enum Operation<'a> {
     Add      (&'a Expression<'a>, &'a Expression<'a>),
     Subtract (&'a Expression<'a>, &'a Expression<'a>),
     Multiply (&'a Expression<'a>, &'a Expression<'a>),
@@ -25,59 +21,81 @@ enum Operation<'a> {
     And      (&'a Expression<'a>, &'a Expression<'a>),
     Not      (&'a Expression<'a>),
 }
-
-enum Expression<'a> {
+pub enum Expression<'a> {
     Operation           (Operation<'a>),
     VarIdentifier       (String),
     FunctionIdentifier  (String),
-    Assignment          (),
+    Assignment          (&'a Expression<'a>),
+}
+pub enum Statement<'a> {
+    If          (&'a IfStmt),
+    Return      (&'a ReturnStmt),
+    StackBlocks ()
 }
 
-enum Statement<'a> {
-    If(&'a IfStmt),
-    Return(&'a ReturnStmt),
-    StackBlocks()
+pub enum RootNode<'a> {
+    Declaration (&'a Declaration<'a>),
+    Statement   (&'a Statement<'a>),
 }
 
-enum RootNode<'a> {
-    Declaration(&'a Declaration<'a>),
-    Statement(&'a Statement<'a>),
-}
 
 impl<'a> ASTNode for Declaration<'a> {
-    fn get_type(&self) -> TypeName {
+    fn get_type(&self) -> Type {
         match self {
             Declaration::VarDeclaration(expression, value) => todo!(),
-            Declaration::FunctionDeclaration(expression, expression1) => todo!(),
+            Declaration::FunctionDeclaration(vec) => todo!(),
         }
     }
-}
-
-impl<'a> ASTNode for RootNode<'a> {
-    fn get_type(&self) -> TypeName {
+    fn analyze(&self) {
         match self {
-            RootNode::Declaration(declaration) => declaration.get_type(),
-            RootNode::Statement(statement) => todo!(),
+            Declaration::VarDeclaration(expression, expression1) => todo!(),
+            Declaration::FunctionDeclaration(expressions) => todo!(),
         }
     }
 }
 
-// impl Eval for Operation {
-//     fn eval(&self) {
-//         match self {
-//             Operation::Add(expression, expression1) => todo!(),
-//             Operation::Subtract(expression, expression1) => todo!(),
-//         }
-//     }
-// }
+impl ASTNode for Operation<'_> {
+    fn analyze(&self) {
+        match self {
+            Operation::Add(lhs, rhs) => todo!(),
+            Operation::Subtract(lhs, rhs) => todo!(),
+            Operation::Multiply(lhs, rhs) => todo!(),
+            Operation::Divide(lhs, rhs) => todo!(),
+            Operation::Negate(lhs, rhs) => todo!(),
+            Operation::Or(lhs, rhs) => todo!(),
+            Operation::And(lhs, rhs) => todo!(),
+            Operation::Not(expr) => todo!(),
+        }
+    }
+    fn get_type(&self) -> Type {
+        match self {
+            Operation::Add(lhs, rhs) => todo!(),
+            Operation::Subtract(lhs, rhs) => todo!(),
+            Operation::Multiply(lhs, rhs) => todo!(),
+            Operation::Divide(lhs, rhs) => todo!(),
+            Operation::Negate(lhs, rhs) => todo!(),
+            Operation::Or(lhs, rhs) => todo!(),
+            Operation::And(lhs, rhs) => todo!(),
+            Operation::Not(expr) => todo!(),
+        }
+    }
+}
+impl<'a> ASTNode for Expression<'a> {
+    fn get_type(&self) -> Type {
+        match self {
+            Expression::Operation(operation) => todo!(),
+            Expression::VarIdentifier(_) => todo!(),
+            Expression::FunctionIdentifier(_) => todo!(),
+            Expression::Assignment(_) => todo!(),
+        }
+    }
 
-// fn analyze(ast: Vec<TopLevelNode>) {
-//     for node in ast {
-//         match node {
-//             TopLevelNode::Declaration(declaration) => {
-//                 declaration.check_type().check_isadopkom().jiodas
-//             }
-//             TopLevelNode::Expression(expression) => todo!(),
-//         }
-//     }
-// }
+    fn analyze(&self) {
+        match self {
+            Expression::Operation(operation) => todo!(),
+            Expression::VarIdentifier(_) => todo!(),
+            Expression::FunctionIdentifier(_) => todo!(),
+            Expression::Assignment(_) => todo!(),
+        }
+    }
+}

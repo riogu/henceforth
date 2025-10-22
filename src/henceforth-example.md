@@ -1,9 +1,10 @@
 ## Code examples
 ```cpp
+// @() blocks are used to do operations on the stack
 fn foo: (i32 i32) -> (i32) {
     let var1: i32;
     let var2: i32;
-    @((3213 123 123)foofunc 23 +)
+    @((3213 123)foo 23 +)
     := var1; // copy
     @(var1 123 +) &= var2; // move
 
@@ -19,11 +20,8 @@ fn foo: (i32 i32) -> (i32) {
 }
 
 fn somefunc: () -> (bool str i32 i32 i32 i32 ) {
-    @(false "this i dont care" 6969696 312 3 12) 
-}
-
-fn try_send_message:() -> (bool) {
-    @(false) return;
+    @(false "some string thing" 6969696 312 3 12) 
+    // functions return whatever changes they made to the stack 
 }
 
 fn main: (i32) -> i32 {

@@ -1,4 +1,5 @@
 #![feature(inherent_associated_types)]
+#![allow(unused)]
 
 pub mod lexer;
 pub mod token;
@@ -26,8 +27,5 @@ fn main() {
     println!("{:?}", args);
     let lexer = Lexer::new();
     let tokens = lexer.tokenize(&file);
-    drop(tokens);
     println!("{:?}", file);
 }
-
-

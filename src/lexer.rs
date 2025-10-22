@@ -40,9 +40,7 @@ impl Lexer {
             let mut chars_iter = line_string.chars().peekable();
             while let Some(char) = chars_iter.next() {
                 let kind = match char {
-                    // Whitespace
                     ' ' | '\t' | '\r' => todo!(),
-                    // Single-character delimiters
                     '(' => Token::Kind::LeftParen,
                     ')' => Token::Kind::RightParen,
                     '{' => Token::Kind::LeftBrace,
@@ -51,8 +49,6 @@ impl Lexer {
                     '%' => Token::Kind::Percent,
                     '@' => Token::Kind::At,
                     '+' => Token::Kind::Plus,
-
-                    // Operators that may be compound
                     ':' => {
                         if let Some(_) = chars_iter.next_if_eq(&'=') {
                             Token::Kind::CopyAssign
@@ -66,25 +62,24 @@ impl Lexer {
                         } else {
                             Token::Kind::Minus
                         }
-                    } // - or ->
-                    '*' => Token::Kind::Star, // *
+                    }
+                    '*' => Token::Kind::Star,
                     '/' => {
                         if let Some(_) = chars_iter.next_if_eq(&'/') {
                             continue;
                         } else {
                             Token::Kind::Slash
                         }
-                    } // / or /= or // (comments)
-                    '=' => todo!(),           // = or ==
-                    '!' => todo!(),           // ! or !=
-                    '<' => todo!(),           // < or <=
-                    '>' => todo!(),           // > or >=
-                    '&' => todo!(),           // &&
-                    '|' => todo!(),           // ||
+                    }
+                    '=' => todo!(), // = or ==
+                    '!' => todo!(), // ! or !=
+                    '<' => todo!(), // < or <=
+                    '>' => todo!(), // > or >=
+                    '&' => todo!(), // &&
+                    '|' => todo!(), // ||
 
                     '"' => todo!(),
                     '0'..='9' => todo!(),
-
                     'a'..='z' | 'A'..='Z' | '_' => todo!(),
                     _ => todo!(),
                 };

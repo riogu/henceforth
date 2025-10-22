@@ -9,7 +9,7 @@ pub enum Literal {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-enum TokenKind {
+pub enum TokenKind {
     // Keywords
     Literal(Literal),
     Let,
@@ -73,7 +73,7 @@ enum TokenKind {
 }
 
 impl TokenKind {
-    fn str(&self) -> String {
+    pub fn str(&self) -> String {
         match self {
             TokenKind::Literal(literal) => format!("{:?}", literal),
             TokenKind::Let => "let".to_string(),

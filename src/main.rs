@@ -2,6 +2,8 @@
 
 pub mod lexer;
 pub mod tokens;
+pub mod parser;
+pub mod ast_node;
 use std::path::PathBuf;
 
 use clap::{arg, Parser};

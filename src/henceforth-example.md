@@ -3,7 +3,7 @@
 fn foo: (i32 i32) -> (i32) {
     let var1: i32;
     let var2: i32;
-    @(23 23 +)
+    @((3213 123 123)foofunc 23 +)
     := var1; // copy
     @(var1 123 +) &= var2; // move
 

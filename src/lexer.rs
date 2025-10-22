@@ -1,6 +1,6 @@
+use crate::tokens::Token;
 use std::{path::PathBuf, vec};
 
-use crate::tokens::Token;
 struct File {
     contents: String,
     path: PathBuf,
@@ -26,7 +26,46 @@ impl Lexer {
         }
     }
     #[must_use]
-    pub fn tokenize(&self) -> Vec<Token> {
+    pub fn tokenize(&self, file: File) -> Vec<Token> {
+        let mut char_iter = file.contents.chars().peekable();
+
+        while let Some(char) = char_iter.next() {
+            match char {
+                // Whitespace
+                ' ' | '\t' | '\r' => todo!(),
+                '\n' => todo!(),
+                // Single-character delimiters
+                '(' => todo!(),
+                ')' => todo!(),
+                '{' => todo!(),
+                '}' => todo!(),
+                '[' => todo!(),
+                ']' => todo!(),
+                ';' => todo!(),
+                ',' => todo!(),
+                '.' => todo!(),
+                ':' => todo!(),
+                '%' => todo!(),
+                // Operators that may be compound
+                '+' => todo!(), // + or +=
+                '-' => todo!(), // - or -= or ->
+                '*' => todo!(), // * or *=
+                '/' => todo!(), // / or /= or // (comments)
+                '=' => todo!(), // = or ==
+                '!' => todo!(), // ! or !=
+                '<' => todo!(), // < or <=
+                '>' => todo!(), // > or >=
+                '&' => todo!(), // &&
+                '|' => todo!(), // ||
+
+                '"' => todo!(),
+                '0'..='9' => todo!(),
+
+                'a'..='z' | 'A'..='Z' | '_' => todo!(),
+                _ => todo!(),
+            }
+        }
         vec![]
     }
 }
+

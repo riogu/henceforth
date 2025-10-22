@@ -45,12 +45,8 @@ pub enum TokenKind {
     Not, // ! or 'not'
 
     // Assignment
-    Assign,      // =
-    PlusAssign,  // +=
-    MinusAssign, // -=
-    StarAssign,  // *=
-    SlashAssign, // /=
-
+    CopyAssign, // &=
+    MoveAssign, // :=
     // Delimiters
     LeftParen,    // (
     RightParen,   // )
@@ -102,11 +98,6 @@ impl TokenKind {
             TokenKind::And => "&&".to_string(),
             TokenKind::Or => "||".to_string(),
             TokenKind::Not => "!".to_string(),
-            TokenKind::Assign => "=".to_string(),
-            TokenKind::PlusAssign => "+=".to_string(),
-            TokenKind::MinusAssign => "-=".to_string(),
-            TokenKind::StarAssign => "*=".to_string(),
-            TokenKind::SlashAssign => "/=".to_string(),
             TokenKind::LeftParen => "(".to_string(),
             TokenKind::RightParen => ")".to_string(),
             TokenKind::LeftBrace => "{".to_string(),
@@ -120,6 +111,9 @@ impl TokenKind {
             TokenKind::Arrow => "->".to_string(),
             TokenKind::Newline => "\\n".to_string(),
             TokenKind::Eof => "EOF".to_string(),
+            TokenKind::CopyAssign => ":=".to_string(),
+            TokenKind::MoveAssign => "&=".to_string(),
+            TokenKind::At => "@".to_string(),
         }
     }
 }

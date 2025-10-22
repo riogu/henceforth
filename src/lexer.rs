@@ -54,18 +54,33 @@ impl Lexer {
 
                     // Operators that may be compound
                     ':' => {
-                        match chars_iter.next_if_eq('=') {
+                        if let Some(_) = chars_iter.next_if_eq(&'=') {
+                            Token::Kind::CopyAssign
+                        } else {
+                            Token::Kind::Colon
                         }
-                    },
-                    '-' => , // - or -= or ->
-                    '*' => , // * or *=
-                    '/' => , // / or /= or // (comments)
-                    '=' => , // = or ==
-                    '!' => , // ! or !=
-                    '<' => , // < or <=
-                    '>' => , // > or >=
-                    '&' => , // &&
-                    '|' => , // ||
+                    }
+                    '-' => {
+                        if let Some(_) = chars_iter.next_if_eq(&'>') {
+                            Token::Kind::Arrow
+                        } else {
+                            Token::Kind::Minus
+                        }
+                    } // - or ->
+                    '*' => Token::Kind::Star, // *
+                    '/' => {
+                        if let Some(_) = chars_iter.next_if_eq(&'/') {
+                            continue;
+                        } else {
+                            Token::Kind::Slash
+                        }
+                    } // / or /= or // (comments)
+                    '=' => todo!(),           // = or ==
+                    '!' => todo!(),           // ! or !=
+                    '<' => todo!(),           // < or <=
+                    '>' => todo!(),           // > or >=
+                    '&' => todo!(),           // &&
+                    '|' => todo!(),           // ||
 
                     '"' => todo!(),
                     '0'..='9' => todo!(),
@@ -74,7 +89,10 @@ impl Lexer {
                     _ => todo!(),
                 };
                 line_offset += 1;
-                tokens.push(Token::new( kind, SourceInfo::new(line_number, line_offset, 1, line_string)));
+                tokens.push(Token::new(
+                    kind,
+                    SourceInfo::new(line_number, line_offset, 1, line_string),
+                ));
             }
         }
         tokens

@@ -9,7 +9,7 @@ pub struct File<'a> {
 }
 
 impl<'a> File<'a> {
-    pub fn new(path: &PathBuf) -> File {
+    pub fn new(path: &'a PathBuf) -> File<'a> {
         File {
             contents: fs::read_to_string(&path)
                 .expect("Could not read file.")

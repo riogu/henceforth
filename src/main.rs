@@ -1,7 +1,7 @@
 #![feature(inherent_associated_types)]
 
 pub mod lexer;
-pub mod tokens;
+pub mod token;
 pub mod parser;
 pub mod ast_node;
 use std::path::PathBuf;

@@ -1,5 +1,5 @@
-use crate::tokens::SourceInfo;
-use crate::tokens::Token;
+use crate::token::SourceInfo;
+use crate::token::Token;
 use std::{fs, path::PathBuf};
 
 #[derive(Debug)]

@@ -1,3 +1,17 @@
-pub struct ASTNode {
-    var: i32,
+use crate::token::Token;
+
+pub trait ASTNode {
+}
+
+struct IfStmt {
+}
+struct ReturnStmt {
+}
+
+impl ASTNode for IfStmt {
+}
+
+enum ASTNode {
+    IfStmt(IfStmt),
+    ReturnStmt(ReturnStmt),
 }

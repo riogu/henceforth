@@ -1,14 +1,15 @@
-use crate::tokens::Token;
 use crate::tokens::SourceInfo;
+use crate::tokens::Token;
 use std::{fs, path::PathBuf};
 
-pub struct File {
+#[derive(Debug)]
+pub struct File<'a> {
     contents: Vec<String>,
-    path: PathBuf,
+    path: &'a PathBuf,
 }
 
-impl File {
-    pub fn new(path: PathBuf) -> File {
+impl<'a> File<'a> {
+    pub fn new(path: &PathBuf) -> File {
         File {
             contents: fs::read_to_string(&path)
                 .expect("Could not read file.")
@@ -31,8 +32,9 @@ impl Lexer {
         }
     }
     #[must_use]
-    
-    pub fn tokenize<'a>(&self, file: &'a File) -> Vec<Token<'a>> /* means that 'a is a subset of 'b */ {
+
+    pub fn tokenize<'a>(&self, file: &'a File) -> Vec<Token<'a>> /* means that 'a is a subset of 'b */
+    {
         let mut line_iter = file.contents.iter();
         let mut tokens = Vec::<Token>::new();
         let mut line_offset = 0;
@@ -74,7 +76,10 @@ impl Lexer {
                     _ => todo!(),
                 };
                 line_offset += 1;
-                tokens.push(Token::new(kind, SourceInfo::new(line_number, line_offset, 1, line_string)));
+                tokens.push(Token::new(
+                    kind,
+                    SourceInfo::new(line_number, line_offset, 1, line_string),
+                ));
             }
         }
         tokens

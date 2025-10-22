@@ -20,9 +20,10 @@ struct Args {
 
 fn main() {
     let args = Args::parse();
-    let file = File::new(args.source);
+    let file = File::new(&args.source);
     println!("{:?}", args);
     let lexer = Lexer::new();
-    let tokens = lexer.tokenize();
-
+    let tokens = lexer.tokenize(&file);
+    drop(tokens);
+    println!("{:?}", file);
 }

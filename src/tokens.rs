@@ -1,4 +1,3 @@
-
 #[derive(Debug, Clone, PartialEq)]
 pub enum Literal {
     Integer(i64),
@@ -59,6 +58,7 @@ pub enum TokenKind {
     RightBrace,   // }
     LeftBracket,  // [
     RightBracket, // ]
+    At,
 
     // Punctuation
     Semicolon, // ;
@@ -132,8 +132,18 @@ pub struct SourceInfo<'a> {
 }
 
 impl<'a> SourceInfo<'a> {
-    pub fn new(line_number: usize, line_offset: usize, token_width: usize, line_string: &'a str) -> Self {
-        Self { line_number, line_offset, token_width, line_string }
+    pub fn new(
+        line_number: usize,
+        line_offset: usize,
+        token_width: usize,
+        line_string: &'a str,
+    ) -> Self {
+        Self {
+            line_number,
+            line_offset,
+            token_width,
+            line_string,
+        }
     }
 }
 
@@ -148,4 +158,3 @@ impl<'a> Token<'a> {
     }
     pub type Kind = TokenKind;
 }
-

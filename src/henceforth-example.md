@@ -1,4 +1,5 @@
-
+## Code examples
+```cpp
 fn foo: (i32 i32) -> (i32) {
     let var1: i32;
     let var2: i32;
@@ -36,6 +37,5 @@ fn main: (i32) -> i32 {
     while @(typeof int !=) {
         @(sum +) &= sum;
     }
-
 }
-
+```

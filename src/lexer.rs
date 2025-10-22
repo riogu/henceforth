@@ -33,7 +33,6 @@ impl Lexer {
     }
     #[must_use]
     pub fn tokenize<'a>(&self, file: &'a File) -> Vec<Token<'a>> {
-        let mut line_iter = file.contents.iter();
         let mut tokens = Vec::<Token>::new();
         let mut line_offset = 0;
 
@@ -48,24 +47,25 @@ impl Lexer {
                     ')' => Token::Kind::RightParen,
                     '{' => Token::Kind::LeftBrace,
                     '}' => Token::Kind::RightBrace,
-                    '[' => Token::Kind::LeftBracket,
-                    ']' => Token::Kind::RightBracket,
                     ';' => Token::Kind::Semicolon,
-                    ',' => Token::Kind::Comma,
-                    '.' => Token::Kind::Dot,
-                    ':' => Token::Kind::Colon,
                     '%' => Token::Kind::Percent,
+                    '@' => Token::Kind::At,
+                    '+' => Token::Kind::Plus,
+
                     // Operators that may be compound
-                    '+' => todo!(), // + or +=
-                    '-' => todo!(), // - or -= or ->
-                    '*' => todo!(), // * or *=
-                    '/' => todo!(), // / or /= or // (comments)
-                    '=' => todo!(), // = or ==
-                    '!' => todo!(), // ! or !=
-                    '<' => todo!(), // < or <=
-                    '>' => todo!(), // > or >=
-                    '&' => todo!(), // &&
-                    '|' => todo!(), // ||
+                    ':' => {
+                        match chars_iter.next_if_eq('=') {
+                        }
+                    },
+                    '-' => , // - or -= or ->
+                    '*' => , // * or *=
+                    '/' => , // / or /= or // (comments)
+                    '=' => , // = or ==
+                    '!' => , // ! or !=
+                    '<' => , // < or <=
+                    '>' => , // > or >=
+                    '&' => , // &&
+                    '|' => , // ||
 
                     '"' => todo!(),
                     '0'..='9' => todo!(),

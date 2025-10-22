@@ -32,9 +32,7 @@ impl Lexer {
         }
     }
     #[must_use]
-
-    pub fn tokenize<'a>(&self, file: &'a File) -> Vec<Token<'a>> /* means that 'a is a subset of 'b */
-    {
+    pub fn tokenize<'a>(&self, file: &'a File) -> Vec<Token<'a>> {
         let mut line_iter = file.contents.iter();
         let mut tokens = Vec::<Token>::new();
         let mut line_offset = 0;

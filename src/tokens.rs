@@ -1,3 +1,4 @@
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Literal {
     Integer(i64),
@@ -8,7 +9,7 @@ pub enum Literal {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Token {
+enum TokenKind {
     // Keywords
     Literal(Literal),
     Let,
@@ -23,102 +24,128 @@ pub enum Token {
     Return,
     Function,
     Fn,
-    
+
     // Operators - Arithmetic
-    Plus,           // +
-    Minus,          // -
-    Star,           // *
-    Slash,          // /
-    Percent,        // %
-    
+    Plus,    // +
+    Minus,   // -
+    Star,    // *
+    Slash,   // /
+    Percent, // %
+
     // Operators - Comparison
-    Equal,          // ==
-    NotEqual,       // !=
-    Less,           // 
-    LessEqual,      // <=
-    Greater,        // >
-    GreaterEqual,   // >=
-    
+    Equal,        // ==
+    NotEqual,     // !=
+    Less,         //
+    LessEqual,    // <=
+    Greater,      // >
+    GreaterEqual, // >=
+
     // Operators - Logical
-    And,            // && or 'and'
-    Or,             // || or 'or'
-    Not,            // ! or 'not'
-    
+    And, // && or 'and'
+    Or,  // || or 'or'
+    Not, // ! or 'not'
+
     // Assignment
-    Assign,         // =
-    PlusAssign,     // +=
-    MinusAssign,    // -=
-    StarAssign,     // *=
-    SlashAssign,    // /=
-    
+    Assign,      // =
+    PlusAssign,  // +=
+    MinusAssign, // -=
+    StarAssign,  // *=
+    SlashAssign, // /=
+
     // Delimiters
-    LeftParen,      // (
-    RightParen,     // )
-    LeftBrace,      // {
-    RightBrace,     // }
-    LeftBracket,    // [
-    RightBracket,   // ]
-    
+    LeftParen,    // (
+    RightParen,   // )
+    LeftBrace,    // {
+    RightBrace,   // }
+    LeftBracket,  // [
+    RightBracket, // ]
+
     // Punctuation
-    Semicolon,      // ;
-    Comma,          // ,
-    Dot,            // .
-    Colon,          // :
-    Arrow,          // ->
-    
+    Semicolon, // ;
+    Comma,     // ,
+    Dot,       // .
+    Colon,     // :
+    Arrow,     // ->
+
     // Special
-    Newline,        // if significant whitespace
+    Newline, // if significant whitespace
     Eof,
 }
 
-impl Token {
+impl TokenKind {
     fn str(&self) -> String {
         match self {
-            Token::Literal(literal)  => format!("{:?}", literal), 
-            Token::Let               => "let".to_string(),
-            Token::Mut               => "mut".to_string(),
-            Token::If                => "if".to_string(),
-            Token::Else              => "else".to_string(),
-            Token::While             => "while".to_string(),
-            Token::For               => "for".to_string(),
-            Token::In                => "in".to_string(),
-            Token::Break             => "break".to_string(),
-            Token::Continue          => "continue".to_string(),
-            Token::Return            => "return".to_string(),
-            Token::Function          => "function".to_string(),
-            Token::Fn                => "fn".to_string(),
-            Token::Plus              => "+".to_string(),
-            Token::Minus             => "-".to_string(),
-            Token::Star              => "*".to_string(),
-            Token::Slash             => "/".to_string(),
-            Token::Percent           => "%".to_string(),
-            Token::Equal             => "==".to_string(),
-            Token::NotEqual          => "!=".to_string(),
-            Token::Less              => "<".to_string(),
-            Token::LessEqual         => "<=".to_string(),
-            Token::Greater           => ">".to_string(),
-            Token::GreaterEqual      => ">=".to_string(),
-            Token::And               => "&&".to_string(),
-            Token::Or                => "||".to_string(),
-            Token::Not               => "!".to_string(),
-            Token::Assign            => "=".to_string(),
-            Token::PlusAssign        => "+=".to_string(),
-            Token::MinusAssign       => "-=".to_string(),
-            Token::StarAssign        => "*=".to_string(),
-            Token::SlashAssign       => "/=".to_string(),
-            Token::LeftParen         => "(".to_string(),
-            Token::RightParen        => ")".to_string(),
-            Token::LeftBrace         => "{".to_string(),
-            Token::RightBrace        => "}".to_string(),
-            Token::LeftBracket       => "[".to_string(),
-            Token::RightBracket      => "]".to_string(),
-            Token::Semicolon         => ";".to_string(),
-            Token::Comma             => ",".to_string(),
-            Token::Dot               => ".".to_string(),
-            Token::Colon             => ":".to_string(),
-            Token::Arrow             => "->".to_string(),
-            Token::Newline           => "\\n".to_string(),
-            Token::Eof               => "EOF".to_string(),
+            TokenKind::Literal(literal) => format!("{:?}", literal),
+            TokenKind::Let => "let".to_string(),
+            TokenKind::Mut => "mut".to_string(),
+            TokenKind::If => "if".to_string(),
+            TokenKind::Else => "else".to_string(),
+            TokenKind::While => "while".to_string(),
+            TokenKind::For => "for".to_string(),
+            TokenKind::In => "in".to_string(),
+            TokenKind::Break => "break".to_string(),
+            TokenKind::Continue => "continue".to_string(),
+            TokenKind::Return => "return".to_string(),
+            TokenKind::Function => "function".to_string(),
+            TokenKind::Fn => "fn".to_string(),
+            TokenKind::Plus => "+".to_string(),
+            TokenKind::Minus => "-".to_string(),
+            TokenKind::Star => "*".to_string(),
+            TokenKind::Slash => "/".to_string(),
+            TokenKind::Percent => "%".to_string(),
+            TokenKind::Equal => "==".to_string(),
+            TokenKind::NotEqual => "!=".to_string(),
+            TokenKind::Less => "<".to_string(),
+            TokenKind::LessEqual => "<=".to_string(),
+            TokenKind::Greater => ">".to_string(),
+            TokenKind::GreaterEqual => ">=".to_string(),
+            TokenKind::And => "&&".to_string(),
+            TokenKind::Or => "||".to_string(),
+            TokenKind::Not => "!".to_string(),
+            TokenKind::Assign => "=".to_string(),
+            TokenKind::PlusAssign => "+=".to_string(),
+            TokenKind::MinusAssign => "-=".to_string(),
+            TokenKind::StarAssign => "*=".to_string(),
+            TokenKind::SlashAssign => "/=".to_string(),
+            TokenKind::LeftParen => "(".to_string(),
+            TokenKind::RightParen => ")".to_string(),
+            TokenKind::LeftBrace => "{".to_string(),
+            TokenKind::RightBrace => "}".to_string(),
+            TokenKind::LeftBracket => "[".to_string(),
+            TokenKind::RightBracket => "]".to_string(),
+            TokenKind::Semicolon => ";".to_string(),
+            TokenKind::Comma => ",".to_string(),
+            TokenKind::Dot => ".".to_string(),
+            TokenKind::Colon => ":".to_string(),
+            TokenKind::Arrow => "->".to_string(),
+            TokenKind::Newline => "\\n".to_string(),
+            TokenKind::Eof => "EOF".to_string(),
         }
     }
 }
+
+pub struct SourceInfo<'a> {
+    line_number: usize,
+    line_offset: usize,
+    token_width: usize,
+    line_string: &'a str,
+}
+
+impl<'a> SourceInfo<'a> {
+    pub fn new(line_number: usize, line_offset: usize, token_width: usize, line_string: &'a str) -> Self {
+        Self { line_number, line_offset, token_width, line_string }
+    }
+}
+
+pub struct Token<'a> {
+    kind: TokenKind,
+    source_info: SourceInfo<'a>,
+}
+
+impl<'a> Token<'a> {
+    pub fn new(kind: TokenKind, source_info: SourceInfo<'a>) -> Self {
+        Self { kind, source_info }
+    }
+    pub type Kind = TokenKind;
+}
+

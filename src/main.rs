@@ -1,3 +1,5 @@
+#![feature(inherent_associated_types)]
+
 pub mod lexer;
 pub mod tokens;
 use std::path::PathBuf;
@@ -19,4 +21,5 @@ fn main() {
     println!("{:?}", args);
     let lexer = Lexer::new();
     let tokens = lexer.tokenize();
+
 }

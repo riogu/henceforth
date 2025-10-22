@@ -1,5 +1,6 @@
 use crate::tokens::Token;
-use std::{fs, path::PathBuf, vec};
+use crate::tokens::SourceInfo;
+use std::{fs, path::PathBuf};
 
 struct File {
     contents: Vec<String>,
@@ -30,45 +31,52 @@ impl Lexer {
         }
     }
     #[must_use]
-    pub fn tokenize(&self, file: File) -> Vec<Token> {
-        let mut char_iter = file.contents.chars().peekable();
+    
+    pub fn tokenize<'a>(&self, file: &'a File) -> Vec<Token<'a>> /* means that 'a is a subset of 'b */ {
+        let mut line_iter = file.contents.iter();
+        let mut tokens = Vec::<Token>::new();
+        let mut line_offset = 0;
 
-        while let Some(char) = char_iter.next() {
-            match char {
-                // Whitespace
-                ' ' | '\t' | '\r' => todo!(),
-                '\n' => todo!(),
-                // Single-character delimiters
-                '(' => todo!(),
-                ')' => todo!(),
-                '{' => todo!(),
-                '}' => todo!(),
-                '[' => todo!(),
-                ']' => todo!(),
-                ';' => todo!(),
-                ',' => todo!(),
-                '.' => todo!(),
-                ':' => todo!(),
-                '%' => todo!(),
-                // Operators that may be compound
-                '+' => todo!(), // + or +=
-                '-' => todo!(), // - or -= or ->
-                '*' => todo!(), // * or *=
-                '/' => todo!(), // / or /= or // (comments)
-                '=' => todo!(), // = or ==
-                '!' => todo!(), // ! or !=
-                '<' => todo!(), // < or <=
-                '>' => todo!(), // > or >=
-                '&' => todo!(), // &&
-                '|' => todo!(), // ||
+        for (line_number, line_string) in file.contents.iter().enumerate() {
+            let mut chars_iter = line_string.chars().peekable();
+            while let Some(char) = chars_iter.next() {
+                let kind = match char {
+                    // Whitespace
+                    ' ' | '\t' | '\r' => todo!(),
+                    // Single-character delimiters
+                    '(' => Token::Kind::LeftParen,
+                    ')' => Token::Kind::RightParen,
+                    '{' => Token::Kind::LeftBrace,
+                    '}' => Token::Kind::RightBrace,
+                    '[' => Token::Kind::LeftBracket,
+                    ']' => Token::Kind::RightBracket,
+                    ';' => Token::Kind::Semicolon,
+                    ',' => Token::Kind::Comma,
+                    '.' => Token::Kind::Dot,
+                    ':' => Token::Kind::Colon,
+                    '%' => Token::Kind::Percent,
+                    // Operators that may be compound
+                    '+' => todo!(), // + or +=
+                    '-' => todo!(), // - or -= or ->
+                    '*' => todo!(), // * or *=
+                    '/' => todo!(), // / or /= or // (comments)
+                    '=' => todo!(), // = or ==
+                    '!' => todo!(), // ! or !=
+                    '<' => todo!(), // < or <=
+                    '>' => todo!(), // > or >=
+                    '&' => todo!(), // &&
+                    '|' => todo!(), // ||
 
-                '"' => todo!(),
-                '0'..='9' => todo!(),
+                    '"' => todo!(),
+                    '0'..='9' => todo!(),
 
-                'a'..='z' | 'A'..='Z' | '_' => todo!(),
-                _ => todo!(),
+                    'a'..='z' | 'A'..='Z' | '_' => todo!(),
+                    _ => todo!(),
+                };
+                line_offset += 1;
+                tokens.push(Token::new(kind, SourceInfo::new(line_number, line_offset, 1, line_string)));
             }
         }
-        vec![]
+        tokens
     }
 }

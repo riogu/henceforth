@@ -74,10 +74,7 @@ impl Lexer {
                     _ => todo!(),
                 };
                 line_offset += 1;
-                tokens.push(Token::new(
-                    kind,
-                    SourceInfo::new(line_number, line_offset, 1, line_string),
-                ));
+                tokens.push(Token::new( kind, SourceInfo::new(line_number, line_offset, 1, line_string)));
             }
         }
         tokens

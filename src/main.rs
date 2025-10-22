@@ -1,5 +1,9 @@
 pub mod tokens;
 pub mod lexer;
+
+use lexer::Lexer;
 fn main() {
-    println!("Hello, world!");
+
+    let lexer = Lexer::new();
+    let tokens = lexer.tokenize();
 }

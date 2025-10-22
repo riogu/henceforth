@@ -5,4 +5,8 @@ edition = "2024"
 
 [dependencies]
 clap = { version = "4.5.50", features = ["derive"] }
+[unstable]
+inherent_associated_types = true
+
+
 

@@ -3,7 +3,8 @@
 fn foo: (i32 i32) -> (i32) {
     let var1: i32;
     let var2: i32;
-    @(23 23 +) := var1; // copy
+    @(23 23 +)
+    := var1; // copy
     @(var1 123 +) &= var2; // move
 
     if @(69420 ==) { // left value in the stack

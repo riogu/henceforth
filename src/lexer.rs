@@ -1,15 +1,19 @@
 use crate::tokens::Token;
-use std::{path::PathBuf, vec};
+use std::{fs, path::PathBuf, vec};
 
 struct File {
-    contents: String,
+    contents: Vec<String>,
     path: PathBuf,
 }
 
 impl File {
     pub fn new(path: PathBuf) -> File {
         File {
-            contents: "foo".to_string(),
+            contents: fs::read_to_string(&path)
+                .expect("Could not read file.")
+                .lines()
+                .map(String::from)
+                .collect(),
             path,
         }
     }
@@ -68,4 +72,3 @@ impl Lexer {
         vec![]
     }
 }
-

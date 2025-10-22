@@ -1,9 +1,22 @@
-pub mod tokens;
 pub mod lexer;
+pub mod tokens;
+use std::path::PathBuf;
 
+use clap::{arg, Parser};
 use lexer::Lexer;
-fn main() {
 
+#[derive(Parser, Debug, Clone)]
+#[command(author, version, about)]
+struct Args {
+    source: PathBuf,
+
+    #[arg(short, long, default_value = "./a.out")]
+    output: PathBuf,
+}
+
+fn main() {
+    let args = Args::parse();
+    println!("{:?}", args);
     let lexer = Lexer::new();
     let tokens = lexer.tokenize();
 }

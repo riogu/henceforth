@@ -1,10 +1,11 @@
 #![feature(inherent_associated_types)]
 #![allow(unused)]
-
 pub mod lexer;
 pub mod token;
 pub mod parser;
 pub mod ast_node;
+pub mod semantic_analysis;
+
 use std::path::PathBuf;
 
 use clap::{arg, Parser};

@@ -11,7 +11,7 @@ pub enum  Declaration<'a> {
     FunctionDeclaration (&'a Vec<Expression<'a>>),
 }
 pub enum Operation<'a> {
-    Add      (&'a mut Expression<'a>, &'a mut Expression<'a>),
+    Add      (&'a Expression<'a>, &'a Expression<'a>),
     Subtract (&'a Expression<'a>, &'a Expression<'a>),
     Multiply (&'a Expression<'a>, &'a Expression<'a>),
     Divide   (&'a Expression<'a>, &'a Expression<'a>),
@@ -37,101 +37,12 @@ pub enum RootNode<'a> {
 }
 
 pub struct Type {}
-pub trait ASTNode {
+pub trait Typed {
     fn get_type(&self) -> Type;
+
+}
+pub trait ASTNode {
     fn analyze(&self);
 }
 
 
-impl<'a> ASTNode for Declaration<'a> {
-    fn get_type(&self) -> Type {
-        match self {
-            Declaration::VarDeclaration(expression, value) => todo!(),
-            Declaration::FunctionDeclaration(vec) => todo!(),
-        }
-    }
-    fn analyze(&self) {
-        match self {
-            Declaration::VarDeclaration(expression, expression1) => todo!(),
-            Declaration::FunctionDeclaration(expressions) => todo!(),
-        }
-    }
-}
-
-impl ASTNode for Operation<'_> {
-    fn analyze(&self) {
-        match self {
-            Operation::Add(lhs, rhs) => todo!(),
-            Operation::Subtract(lhs, rhs) => todo!(),
-            Operation::Multiply(lhs, rhs) => todo!(),
-            Operation::Divide(lhs, rhs) => todo!(),
-            Operation::Negate(lhs, rhs) => todo!(),
-            Operation::Or(lhs, rhs) => todo!(),
-            Operation::And(lhs, rhs) => todo!(),
-            Operation::Not(expr) => todo!(),
-        }
-    }
-    fn get_type(&self) -> Type {
-        match self {
-            Operation::Add(lhs, rhs) => todo!(),
-            Operation::Subtract(lhs, rhs) => todo!(),
-            Operation::Multiply(lhs, rhs) => todo!(),
-            Operation::Divide(lhs, rhs) => todo!(),
-            Operation::Negate(lhs, rhs) => todo!(),
-            Operation::Or(lhs, rhs) => todo!(),
-            Operation::And(lhs, rhs) => todo!(),
-            Operation::Not(expr) => todo!(),
-        }
-    }
-}
-impl<'a> ASTNode for Expression<'a> {
-    fn get_type(&self) -> Type {
-        match self {
-            Expression::Operation(operation) => todo!(),
-            Expression::Assignment(_) => todo!(),
-            Expression::Identifier(identifier) => todo!(),
-        }
-    }
-
-    fn analyze(&self) {
-        match self {
-            Expression::Operation(operation) => todo!(),
-            Expression::Assignment(_) => todo!(),
-            Expression::Identifier(identifier) => todo!(),
-        }
-    }
-}
-
-impl<'a> ASTNode for Statement<'a> {
-    fn get_type(&self) -> Type {
-        match self {
-            Statement::If(if_stmt) => todo!(),
-            Statement::Return(return_stmt) => todo!(),
-            Statement::StackBlocks() => todo!(),
-        }
-    }
-
-    fn analyze(&self) {
-        match self {
-            Statement::If(if_stmt) => todo!(),
-            Statement::Return(return_stmt) => todo!(),
-            Statement::StackBlocks() => todo!(),
-        }
-    }
-}
-
-impl<'a> ASTNode for RootNode<'a> {
-    fn get_type(&self) -> Type {
-        match self {
-            RootNode::Declaration(declaration) => todo!(),
-            RootNode::Statement(statement) => todo!(),
-        }
-    }
-
-    fn analyze(&self) {
-        match self {
-            RootNode::Declaration(declaration) => todo!(),
-            RootNode::Statement(statement) => todo!(),
-        }
-    }
-}

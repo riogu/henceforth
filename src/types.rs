@@ -1,14 +1,5 @@
 use crate::ast_node::*;
 
-impl<'a> Typed for Declaration<'a> {
-    fn get_type(&self) -> Type {
-        match self {
-            Declaration::VarDeclaration(expression, value) => todo!(),
-            Declaration::FunctionDeclaration(vec) => todo!(),
-        }
-    }
-}
-
 impl<'a> Typed for Operation<'a> {
     fn get_type(&self) -> Type {
         match self {
@@ -37,8 +28,11 @@ impl<'a> Typed for Statement<'a> {
     fn get_type(&self) -> Type {
         match self {
             Statement::If(if_stmt) => todo!(),
-            Statement::Return(return_stmt) => todo!(),
-            Statement::StackBlocks() => todo!(),
+            Statement::Return => todo!(),
+            Statement::StackBlock(stack) => todo!(),
+            Statement::While(expression, expressions) => todo!(),
+            Statement::Break => todo!(),
+            Statement::Continue => todo!(),
         }
     }
 }
@@ -46,8 +40,9 @@ impl<'a> Typed for Statement<'a> {
 impl<'a> Typed for TopLevelNode<'a> {
     fn get_type(&self) -> Type {
         match self {
-            TopLevelNode::Declaration(declaration) => todo!(),
             TopLevelNode::Statement(statement) => todo!(),
+            TopLevelNode::VarDeclaration(expression) => todo!(),
+            TopLevelNode::FunctionDeclaration(expressions) => todo!(),
         }
     }
 }

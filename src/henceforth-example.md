@@ -1,40 +1,51 @@
 ## Code examples
 ```cpp
-// @() blocks are used to do operations on the stack
-fn foo: (i32 i32) -> (i32) {
-    let var1: i32;
-    let var2: i32;
-    @((3213 123)foo 23 +)
-    := var1; // copy
-    @(var1 123 +) &= var2; // move
-
-    if @(69420 ==) { // left value in the stack
-        @(69) return; 
-    } elif @(123 ==) {
-        @(233321) return;
-    } elif @(123 ==) {
-    } else {
-        @pop; // pop the stack
-        // @(pop);
+// Calculate factorial using stack operations
+fn factorial: (i32) -> (i32) {
+    let n: i32;
+    let result: i32;
+    
+    &= n;  // pop stack and assign to n
+    @(1) := result;  // copy top of stack to result
+    
+    while @(n 1 >) {
+        @(result n *) &= result;  // pop and assign
+        @(n 1 -) &= n;  // pop and assign
     }
+    
+    @(result) return;
+}
+// Helper to generate a range on the stack
+fn push_range: (i32 i32) -> (i32 i32 i32 i32 i32) {
+    let start: i32;
+    let end: i32;
+    
+    @(123123) &= end;  // pop and assign
+    &= start;  // pop and assign
+    
+    @(start)
+    while @(dup end <) {
+        @(1 + dup)  // NOTE: how do we write that we want the output of + to be
+                    // the argument for dup? | @(1 (+)dup) | ??? idk
+    }
+    @(pop);
 }
 
-fn somefunc: () -> (bool str i32 i32 i32 i32) {
-    @(false "some string thing" 6969696 312 3 12) 
-    // functions return whatever changes they made to the stack 
-}
-
-fn main: (i32) -> i32 {
-    let count: i32;
+// Main program: calculate sum of factorials from 1 to 5
+fn main: () -> (i32) {
     let sum: i32;
-
-    (123 123)foo;
-    &= count;
-
-    @( ()somefunc );
-
-    while @(typeof int !=) {
-        @(sum +) &= sum;
+    let temp: i32;
+    
+    @(0) := sum;  // copy to sum
+    @(1 5) push_range;
+    
+    // Stack now has: 1 2 3 4 5
+    while @(@depth 0 >) {
+        &= temp;  // pop and assign
+        @(temp) factorial;
+        @(sum +) &= sum;  // pop and assign
     }
+    
+    @(sum) return;  // Returns 153 (1! + 2! + 3! + 4! + 5!)
 }
 ```

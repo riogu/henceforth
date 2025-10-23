@@ -12,6 +12,7 @@ pub enum TokenKind {
     // Keywords
     Literal(Literal),
     Let,
+    Fn,
     If,
     Else,
     Elif,
@@ -19,11 +20,12 @@ pub enum TokenKind {
     Break,
     Continue,
     Return,
-    Fn,
-    IntT,
-    StringT,
-    BoolT,
-    FloatT,
+
+    // Types
+    Int,
+    String,
+    Bool,
+    Float,
 
     // Operators - Arithmetic
     Plus,    // +
@@ -112,10 +114,10 @@ impl TokenKind {
             TokenKind::MoveAssign => "&=".to_string(),
             TokenKind::At => "@".to_string(),
             TokenKind::Elif => "elif".to_string(),
-            TokenKind::IntT => "i32".to_string(),
-            TokenKind::StringT => "string".to_string(),
-            TokenKind::BoolT => "bool".to_string(),
-            TokenKind::FloatT => "f32".to_string(),
+            TokenKind::Int => "i32".to_string(),
+            TokenKind::String => "string".to_string(),
+            TokenKind::Bool => "bool".to_string(),
+            TokenKind::Float => "f32".to_string(),
         }
     }
 }

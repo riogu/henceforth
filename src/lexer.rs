@@ -1,6 +1,7 @@
 use crate::token::Literal;
 use crate::token::SourceInfo;
 use crate::token::Token;
+use crate::token::TokenKind;
 use std::{fs, path::PathBuf};
 
 #[derive(Debug)]
@@ -41,71 +42,71 @@ impl Lexer {
             let mut chars_iter = line_string.chars().peekable();
             while let Some(char) = chars_iter.next() {
                 let kind = match char {
-                    ' ' | '\t' | '\r' => todo!(),
-                    '(' => Token::Kind::LeftParen,
-                    ')' => Token::Kind::RightParen,
-                    '{' => Token::Kind::LeftBrace,
-                    '}' => Token::Kind::RightBrace,
-                    ';' => Token::Kind::Semicolon,
-                    '%' => Token::Kind::Percent,
-                    '@' => Token::Kind::At,
-                    '+' => Token::Kind::Plus,
+                    ' ' | '\t' | '\r' => continue,
+                    '(' => TokenKind::LeftParen,
+                    ')' => TokenKind::RightParen,
+                    '{' => TokenKind::LeftBrace,
+                    '}' => TokenKind::RightBrace,
+                    ';' => TokenKind::Semicolon,
+                    '%' => TokenKind::Percent,
+                    '@' => TokenKind::At,
+                    '+' => TokenKind::Plus,
                     ':' => {
                         if let Some(_) = chars_iter.next_if_eq(&'=') {
-                            Token::Kind::CopyAssign
+                            TokenKind::CopyAssign
                         } else {
-                            Token::Kind::Colon
+                            TokenKind::Colon
                         }
                     }
                     '-' => {
                         if let Some(_) = chars_iter.next_if_eq(&'>') {
-                            Token::Kind::Arrow
+                            TokenKind::Arrow
                         } else {
-                            Token::Kind::Minus
+                            TokenKind::Minus
                         }
                     }
-                    '*' => Token::Kind::Star,
+                    '*' => TokenKind::Star,
                     '/' => {
                         if let Some(_) = chars_iter.next_if_eq(&'/') {
                             continue;
                         } else {
-                            Token::Kind::Slash
+                            TokenKind::Slash
                         }
                     }
                     '=' => {
                         if let Some(_) = chars_iter.next_if_eq(&'=') {
-                            Token::Kind::Equal
+                            TokenKind::Equal
                         } else {
                             panic!("lexer error")
                         }
                     } // ==
                     '!' => {
                         if let Some(_) = chars_iter.next_if_eq(&'=') {
-                            Token::Kind::NotEqual
+                            TokenKind::NotEqual
                         } else {
-                            Token::Kind::Not
+                            TokenKind::Not
                         }
                     } // ! or !=
                     '<' => {
                         if let Some(_) = chars_iter.next_if_eq(&'=') {
-                            Token::Kind::LessEqual
+                            TokenKind::LessEqual
                         } else {
-                            Token::Kind::Less
+                            TokenKind::Less
                         }
                     } // < or <=
                     '>' => {
                         if let Some(_) = chars_iter.next_if_eq(&'=') {
-                            Token::Kind::GreaterEqual
+                            TokenKind::GreaterEqual
                         } else {
-                            Token::Kind::Greater
+                            TokenKind::Greater
                         }
                     } // > or >=
                     '&' => {
                         if let Some(_) = chars_iter.next_if_eq(&'&') {
-                            Token::Kind::And
+                            TokenKind::And
                         } else {
                             if let Some(_) = chars_iter.next_if_eq(&'=') {
-                                Token::Kind::MoveAssign
+                                TokenKind::MoveAssign
                             } else {
                                 panic!("lexer error")
                             }
@@ -113,7 +114,7 @@ impl Lexer {
                     }
                     '|' => {
                         if let Some(_) = chars_iter.next_if_eq(&'|') {
-                            Token::Kind::Or
+                            TokenKind::Or
                         } else {
                             panic!("lexer error")
                         }
@@ -132,7 +133,7 @@ impl Lexer {
                                 }
                             }
                         }
-                        Token::Kind::Literal(Literal::String(lit))
+                        TokenKind::Literal(Literal::String(lit))
                     }
                     '0'..='9' => {
                         let mut lit = String::new();
@@ -149,34 +150,34 @@ impl Lexer {
                             },
                         };
                         match number {
-                            Ok(int) => Token::Kind::Literal(Literal::Integer(int)),
-                            Err(float) => Token::Kind::Literal(Literal::Float(float)),
+                            Ok(int) => TokenKind::Literal(Literal::Integer(int)),
+                            Err(float) => TokenKind::Literal(Literal::Float(float)),
                         }
                     }
                     'a'..='z' | 'A'..='Z' | '_' => {
-                        let mut lit = String::new();
+                        let mut lit = char.to_string();
                         while let Some(c) = chars_iter.next_if(|c| {
                             ('a'..='z').contains(c) || ('A'..='Z').contains(c) || c == &'_'
                         }) {
                             lit.push(c);
                         }
                         match lit.as_str() {
-                            "let" => Token::Kind::Let,
-                            "if" => Token::Kind::If,
-                            "else" => Token::Kind::Else,
-                            "elif" => Token::Kind::Elif,
-                            "while" => Token::Kind::While,
-                            "break" => Token::Kind::Break,
-                            "continue" => Token::Kind::Continue,
-                            "return" => Token::Kind::Return,
-                            "fn" => Token::Kind::Fn,
+                            "let" => TokenKind::Let,
+                            "if" => TokenKind::If,
+                            "else" => TokenKind::Else,
+                            "elif" => TokenKind::Elif,
+                            "while" => TokenKind::While,
+                            "break" => TokenKind::Break,
+                            "continue" => TokenKind::Continue,
+                            "return" => TokenKind::Return,
+                            "fn" => TokenKind::Fn,
 
-                            "i32" => Token::Kind::IntT,
-                            "string" => Token::Kind::StringT,
-                            "f32" => Token::Kind::FloatT,
-                            "bool" => Token::Kind::BoolT,
+                            "i32" => TokenKind::IntT,
+                            "string" => TokenKind::StringT,
+                            "f32" => TokenKind::FloatT,
+                            "bool" => TokenKind::BoolT,
 
-                            _ => Token::Kind::Literal(Literal::Identifier(lit)),
+                            _ => TokenKind::Literal(Literal::Identifier(lit)),
                         }
                     }
                     _ => panic!("lexer error"),
@@ -189,5 +190,41 @@ impl Lexer {
             }
         }
         tokens
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::rc::Rc;
+
+    use super::*;
+
+    #[test]
+    fn test_tokenize_kind_simple_main() {
+        let path = PathBuf::from("test/simple_main.hfs");
+        let file = File::new(&path);
+
+        let lexer = Lexer::new();
+        let tokens: Vec<TokenKind> = lexer
+            .tokenize(&file)
+            .into_iter()
+            .map(|token| token.kind)
+            .collect();
+
+        let expected = vec![
+            TokenKind::Fn,
+            TokenKind::Literal(Literal::Identifier(String::from("main"))),
+            TokenKind::Colon,
+            TokenKind::LeftParen,
+            TokenKind::RightParen,
+            TokenKind::Arrow,
+            TokenKind::LeftParen,
+            TokenKind::RightParen,
+            TokenKind::LeftBrace,
+            TokenKind::Return,
+            TokenKind::Semicolon,
+            TokenKind::RightBrace,
+        ];
+        assert_eq!(tokens, expected);
     }
 }

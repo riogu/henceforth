@@ -7,7 +7,7 @@ use std::vec::IntoIter;
 
 pub struct Parser<'a> {
     nodes: Vec<TopLevelNode<'a>>,
-    tokens: Peekable<IntoIter<Token<'a>>>,  // Own the tokens, iterate by value
+    tokens: Peekable<IntoIter<Token<'a>>>, // Own the tokens, iterate by value
 }
 
 impl<'a> Parser<'a> {
@@ -17,12 +17,15 @@ impl<'a> Parser<'a> {
     }
 }
 
-impl<'a> Parser<'a> { // recursive descent parser
-    #[must_use]
-    pub fn parse_tokens(tokens: Vec<Token<'a>>) -> Vec<TopLevelNode<'a>> {
-        let parser = Parser{nodes: Vec::new(), tokens: tokens.into_iter().peekable()};
-
-    }
+impl<'a> Parser<'a> {
+    // recursive descent parser
+    // #[must_use]
+    // pub fn parse_tokens(tokens: Vec<Token<'a>>) -> Vec<TopLevelNode<'a>> {
+    //     let parser = Parser {
+    //         nodes: Vec::new(),
+    //         tokens: tokens.into_iter().peekable(),
+    //     };
+    // }
     #[must_use]
     fn statement(&mut self) {
         while let Some(token) = self.tokens.peek() {

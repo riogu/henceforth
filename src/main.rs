@@ -1,10 +1,10 @@
 #![allow(unused)]
 
-pub mod lexer;
-pub mod token;
-pub mod parser;
 pub mod ast_node;
+pub mod lexer;
+pub mod parser;
 pub mod semantic_analysis;
+pub mod token;
 pub mod types;
 
 use std::path::PathBuf;
@@ -31,6 +31,5 @@ fn main() {
 
     let lexer = Lexer::new();
     let tokens = lexer.tokenize(&file);
-    parser::Parser::parse_tokens(tokens);
-
+    // parser::Parser::parse_tokens(tokens);
 }

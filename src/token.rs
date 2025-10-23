@@ -144,13 +144,12 @@ impl<'a> SourceInfo<'a> {
 }
 
 pub struct Token<'a> {
-    kind: TokenKind,
-    source_info: SourceInfo<'a>,
+    pub kind: TokenKind,
+    pub source_info: SourceInfo<'a>,
 }
 
 impl<'a> Token<'a> {
     pub fn new(kind: TokenKind, source_info: SourceInfo<'a>) -> Self {
         Self { kind, source_info }
     }
-    pub type Kind = TokenKind;
 }

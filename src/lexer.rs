@@ -170,10 +170,12 @@ impl Lexer {
                             "continue" => Token::Kind::Continue,
                             "return" => Token::Kind::Return,
                             "fn" => Token::Kind::Fn,
+
                             "i32" => Token::Kind::IntT,
                             "string" => Token::Kind::StringT,
                             "f32" => Token::Kind::FloatT,
                             "bool" => Token::Kind::BoolT,
+
                             _ => Token::Kind::Literal(Literal::Identifier(lit)),
                         }
                     }

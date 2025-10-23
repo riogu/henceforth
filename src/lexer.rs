@@ -10,6 +10,23 @@ pub struct File<'a> {
     path: &'a PathBuf,
 }
 
+macro_rules! empty_void_func_tokens {
+    ($name:ident) => {
+        TokenKind::Fn,
+        TokenKind::Literal(Literal::Identifier(String::from(stringify!($name)))),
+        TokenKind::Colon,
+        TokenKind::LeftParen,
+        TokenKind::RightParen,
+        TokenKind::Arrow,
+        TokenKind::LeftParen,
+        TokenKind::RightParen,
+        TokenKind::LeftBrace,
+        TokenKind::Return,
+        TokenKind::Semicolon,
+        TokenKind::RightBrace,
+    }
+}
+
 impl<'a> File<'a> {
     pub fn new(path: &'a PathBuf) -> File<'a> {
         File {
@@ -121,7 +138,7 @@ impl Lexer {
                     } // ||
 
                     '"' => {
-                        let mut lit = String::new();
+                        let mut lit = char.to_string();
                         loop {
                             if let Some(_) = chars_iter.next_if_eq(&'"') {
                                 break;
@@ -136,7 +153,7 @@ impl Lexer {
                         TokenKind::Literal(Literal::String(lit))
                     }
                     '0'..='9' => {
-                        let mut lit = String::new();
+                        let mut lit = char.to_string();
                         while let Some(c) =
                             chars_iter.next_if(|c| ('0'..='9').contains(c) || c == &'.')
                         {
@@ -211,20 +228,7 @@ mod tests {
             .map(|token| token.kind)
             .collect();
 
-        let expected = vec![
-            TokenKind::Fn,
-            TokenKind::Literal(Literal::Identifier(String::from("main"))),
-            TokenKind::Colon,
-            TokenKind::LeftParen,
-            TokenKind::RightParen,
-            TokenKind::Arrow,
-            TokenKind::LeftParen,
-            TokenKind::RightParen,
-            TokenKind::LeftBrace,
-            TokenKind::Return,
-            TokenKind::Semicolon,
-            TokenKind::RightBrace,
-        ];
+        let expected = vec![empty_void_func_tokens!(main)];
         assert_eq!(tokens, expected);
     }
 }

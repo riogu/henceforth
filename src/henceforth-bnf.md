@@ -1,6 +1,8 @@
-<program> ::= <function>*
+<program> ::= <top_level_node>*
 
-<function> ::= "fn" <identifier> ":" <signature> "{" <statement>* "}"
+<top_level_node> ::= <function_decl>
+
+<function_decl> ::= "fn" <identifier> ":" <signature> "{" <block_scope> "}"
 
 <signature> ::= "(" <type_list>? ")" "->" "(" <type_list>? ")"
 
@@ -8,27 +10,49 @@
 
 <type> ::= "i32"
 
-<statement> ::= <let_decl>
-              | <assignment>
-              | <stack_block>
-              | <while_loop>
-              | <if_stmt>
-              | <return_stmt>
-              | <function_call>
+<block_scope> ::= <scope_item>*
 
-<let_decl> ::= "let" <identifier> ":" <type> ";"
+<scope_item> ::= <var_decl>
+               | <statement>
+
+<var_decl> ::= "let" <identifier> ":" <type> ";"
+
+<statement> ::= <if_stmt>
+              | <stack_block>
+              | <while_stmt>
+              | <assignment>
+              | <return_stmt>
+              | <break_stmt>
+              | <continue_stmt>
+              | ";"
+
+<if_stmt> ::= "if" <stack_block> "{" <block_scope> "}" <else_stmt>?
+
+<else_stmt> ::= "else" "if" <stack_block> "{" <block_scope> "}" <else_stmt>?
+              | "else" "{" <block_scope> "}"
+
+<while_stmt> ::= "while" <stack_block> "{" <block_scope> "}"
+
+<stack_block> ::= "@" "(" <expression_list> ")"
+
+<expression_list> ::= <expression> (<expression>)*
 
 <assignment> ::= "&=" <identifier> ";"
-               | <stack_expr> ":=" <identifier> ";"
+               | ":=" <identifier> ";"
 
-<stack_block> ::= "@" "(" <stack_expr> ")" ";"?
+<return_stmt> ::= "return" ";"
 
-<stack_expr> ::= <expr> (<expr>)*
+<break_stmt> ::= "break" ";"
 
-<expr> ::= <number>
-         | <identifier>
-         | <binary_op>
-         | <stack_op>
+<continue_stmt> ::= "continue" ";"
+
+<expression> ::= <operation>
+               | <identifier>
+               | <literal>
+
+<operation> ::= <binary_op>
+              | <unary_op>
+              | <stack_op>
 
 <binary_op> ::= "+"
               | "-"
@@ -37,21 +61,16 @@
               | ">"
               | "<"
               | "=="
+              | "&&"
+              | "||"
+
+<unary_op> ::= "!"
 
 <stack_op> ::= "dup"
              | "pop"
              | "depth"
 
-<while_loop> ::= "while" <stack_block> "{" <statement>* "}"
-
-<if_stmt> ::= "if" <stack_block> "{" <statement>* "}" <else_clause>?
-
-<else_clause> ::= "else" "if" <stack_block> "{" <statement>* "}" <else_clause>?
-                | "else" "{" <statement>* "}"
-
-<return_stmt> ::= <stack_block> "return" ";"
-
-<function_call> ::= <identifier> ";"
+<literal> ::= <number>
 
 <identifier> ::= [a-zA-Z_][a-zA-Z0-9_]*
 

@@ -1,48 +1,60 @@
+
+#[derive(Debug)]
 pub enum  IfStmt {}
+#[derive(Debug)]
 pub enum  ReturnStmt {}
 
+#[derive(Debug)]
 pub enum Identifier {
     VarIdentifier       (String),
     FunctionIdentifier  (String),
 }
 
+#[derive(Debug)]
 pub enum  Declaration<'a> {
-    VarDeclaration      (&'a Expression<'a>, &'a Expression<'a>),
-    FunctionDeclaration (&'a Vec<Expression<'a>>),
+    VarDeclaration      (&'a mut Expression<'a>, &'a mut Expression<'a>),
+    FunctionDeclaration (&'a mut Vec<Expression<'a>>),
 }
+#[derive(Debug)]
 pub enum Operation<'a> {
-    Add      (&'a Expression<'a>, &'a Expression<'a>),
-    Subtract (&'a Expression<'a>, &'a Expression<'a>),
-    Multiply (&'a Expression<'a>, &'a Expression<'a>),
-    Divide   (&'a Expression<'a>, &'a Expression<'a>),
-    Negate   (&'a Expression<'a>, &'a Expression<'a>),
-    Or       (&'a Expression<'a>, &'a Expression<'a>),
-    And      (&'a Expression<'a>, &'a Expression<'a>),
-    Not      (&'a Expression<'a>),
+    Add      (&'a mut Expression<'a>, &'a mut Expression<'a>),
+    Subtract (&'a mut Expression<'a>, &'a mut Expression<'a>),
+    Multiply (&'a mut Expression<'a>, &'a mut Expression<'a>),
+    Divide   (&'a mut Expression<'a>, &'a mut Expression<'a>),
+    Negate   (&'a mut Expression<'a>, &'a mut Expression<'a>),
+    Or       (&'a mut Expression<'a>, &'a mut Expression<'a>),
+    And      (&'a mut Expression<'a>, &'a mut Expression<'a>),
+    Not      (&'a mut Expression<'a>),
 }
+#[derive(Debug)]
 pub enum Expression<'a> {
     Operation  (Operation<'a>),
-    Assignment (&'a Expression<'a>),
-    Identifier (&'a Identifier),
+    Assignment (&'a mut Expression<'a>),
+    Identifier (&'a mut Identifier),
 }
+#[derive(Debug)]
 pub enum Statement<'a> {
-    If          (&'a IfStmt),
-    Return      (&'a ReturnStmt),
+    If          (&'a mut IfStmt),
+    Return      (&'a mut ReturnStmt),
     StackBlocks ()
 }
 
-pub enum RootNode<'a> {
-    Declaration (&'a Declaration<'a>),
-    Statement   (&'a Statement<'a>),
+#[derive(Debug)]
+pub enum TopLevelNode<'a> {
+    Declaration (&'a mut Declaration<'a>),
+    Statement   (&'a mut Statement<'a>),
 }
 
 pub struct Type {}
+
 pub trait Typed {
     fn get_type(&self) -> Type;
 
 }
-pub trait ASTNode {
+pub trait Analyze {
     fn analyze(&self);
 }
+
+
 
 

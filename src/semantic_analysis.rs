@@ -1,6 +1,6 @@
 use crate::ast_node::*;
 
-impl<'a> ASTNode for Declaration<'a> {
+impl<'a> Analyze for Declaration<'a> {
     fn analyze(&self) {
         match self {
             Declaration::VarDeclaration(expression, expression1) => todo!(),
@@ -9,7 +9,7 @@ impl<'a> ASTNode for Declaration<'a> {
     }
 }
 
-impl ASTNode for Operation<'_> {
+impl Analyze for Operation<'_> {
     fn analyze(&self) {
         match self {
             Operation::Add(lhs, rhs) => todo!(),
@@ -23,7 +23,7 @@ impl ASTNode for Operation<'_> {
         }
     }
 }
-impl<'a> ASTNode for Expression<'a> {
+impl<'a> Analyze for Expression<'a> {
 
     fn analyze(&self) {
         match self {
@@ -34,7 +34,7 @@ impl<'a> ASTNode for Expression<'a> {
     }
 }
 
-impl<'a> ASTNode for Statement<'a> {
+impl<'a> Analyze for Statement<'a> {
 
     fn analyze(&self) {
         match self {
@@ -45,12 +45,23 @@ impl<'a> ASTNode for Statement<'a> {
     }
 }
 
-impl<'a> ASTNode for RootNode<'a> {
+impl<'a> Analyze for TopLevelNode<'a> {
 
     fn analyze(&self) {
         match self {
-            RootNode::Declaration(declaration) => todo!(),
-            RootNode::Statement(statement) => todo!(),
+            TopLevelNode::Declaration(declaration) => todo!(),
+            TopLevelNode::Statement(statement) => todo!(),
         }
     }
 }
+
+
+struct Analyzer<'a> {
+    nodes: Vec<TopLevelNode<'a>>
+}
+
+fn analyze_file() {
+
+}
+
+

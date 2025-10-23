@@ -1,10 +1,12 @@
 #![feature(inherent_associated_types)]
 #![allow(unused)]
+
 pub mod lexer;
 pub mod token;
 pub mod parser;
 pub mod ast_node;
 pub mod semantic_analysis;
+pub mod types;
 
 use std::path::PathBuf;
 
@@ -26,7 +28,11 @@ fn main() {
     let args = Args::parse();
     let file = File::new(&args.source);
     println!("{:?}", args);
+    println!("{:?}", file);
+
     let lexer = Lexer::new();
     let tokens = lexer.tokenize(&file);
-    println!("{:?}", file);
+
+    let parser = parser::Parser::new();
+    parser.parse_tokens(tokens);
 }

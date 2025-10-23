@@ -1,3 +1,4 @@
+use crate::token::Literal;
 use crate::token::SourceInfo;
 use crate::token::Token;
 use std::{fs, path::PathBuf};
@@ -71,17 +72,112 @@ impl Lexer {
                             Token::Kind::Slash
                         }
                     }
-                    '=' => todo!(), // = or ==
-                    '!' => todo!(), // ! or !=
-                    '<' => todo!(), // < or <=
-                    '>' => todo!(), // > or >=
-                    '&' => todo!(), // &&
-                    '|' => todo!(), // ||
+                    '=' => {
+                        if let Some(_) = chars_iter.next_if_eq(&'=') {
+                            Token::Kind::Equal
+                        } else {
+                            panic!("lexer error")
+                        }
+                    } // ==
+                    '!' => {
+                        if let Some(_) = chars_iter.next_if_eq(&'=') {
+                            Token::Kind::NotEqual
+                        } else {
+                            Token::Kind::Not
+                        }
+                    } // ! or !=
+                    '<' => {
+                        if let Some(_) = chars_iter.next_if_eq(&'=') {
+                            Token::Kind::LessEqual
+                        } else {
+                            Token::Kind::Less
+                        }
+                    } // < or <=
+                    '>' => {
+                        if let Some(_) = chars_iter.next_if_eq(&'=') {
+                            Token::Kind::GreaterEqual
+                        } else {
+                            Token::Kind::Greater
+                        }
+                    } // > or >=
+                    '&' => {
+                        if let Some(_) = chars_iter.next_if_eq(&'&') {
+                            Token::Kind::And
+                        } else {
+                            if let Some(_) = chars_iter.next_if_eq(&'=') {
+                                Token::Kind::MoveAssign
+                            } else {
+                                panic!("lexer error")
+                            }
+                        } // &&
+                    }
+                    '|' => {
+                        if let Some(_) = chars_iter.next_if_eq(&'|') {
+                            Token::Kind::Or
+                        } else {
+                            panic!("lexer error")
+                        }
+                    } // ||
 
-                    '"' => todo!(),
-                    '0'..='9' => todo!(),
-                    'a'..='z' | 'A'..='Z' | '_' => todo!(),
-                    _ => todo!(),
+                    '"' => {
+                        let mut lit = String::new();
+                        loop {
+                            if let Some(_) = chars_iter.next_if_eq(&'"') {
+                                break;
+                            } else {
+                                if let Some(c) = chars_iter.next() {
+                                    lit.push(c);
+                                } else {
+                                    panic!("lexer error");
+                                }
+                            }
+                        }
+                        Token::Kind::Literal(Literal::String(lit))
+                    }
+                    '0'..='9' => {
+                        let mut lit = String::new();
+                        while let Some(c) =
+                            chars_iter.next_if(|c| ('0'..='9').contains(c) || c == &'.')
+                        {
+                            lit.push(c);
+                        }
+                        let number: Result<i32, f32> = match lit.parse::<i32>() {
+                            Ok(number) => Ok(number),
+                            Err(_) => match lit.parse::<f32>() {
+                                Ok(number) => Err(number),
+                                Err(_) => panic!("lexer error"),
+                            },
+                        };
+                        match number {
+                            Ok(int) => Token::Kind::Literal(Literal::Integer(int)),
+                            Err(float) => Token::Kind::Literal(Literal::Float(float)),
+                        }
+                    }
+                    'a'..='z' | 'A'..='Z' | '_' => {
+                        let mut lit = String::new();
+                        while let Some(c) = chars_iter.next_if(|c| {
+                            ('a'..='z').contains(c) || ('A'..='Z').contains(c) || c == &'_'
+                        }) {
+                            lit.push(c);
+                        }
+                        match lit.as_str() {
+                            "let" => Token::Kind::Let,
+                            "if" => Token::Kind::If,
+                            "else" => Token::Kind::Else,
+                            "elif" => Token::Kind::Elif,
+                            "while" => Token::Kind::While,
+                            "break" => Token::Kind::Break,
+                            "continue" => Token::Kind::Continue,
+                            "return" => Token::Kind::Return,
+                            "fn" => Token::Kind::Fn,
+                            "i32" => Token::Kind::IntT,
+                            "string" => Token::Kind::StringT,
+                            "f32" => Token::Kind::FloatT,
+                            "bool" => Token::Kind::BoolT,
+                            _ => Token::Kind::Literal(Literal::Identifier(lit)),
+                        }
+                    }
+                    _ => panic!("lexer error"),
                 };
                 line_offset += 1;
                 tokens.push(Token::new(

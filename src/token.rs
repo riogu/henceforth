@@ -1,7 +1,7 @@
 #[derive(Debug, Clone, PartialEq)]
 pub enum Literal {
-    Integer(i64),
-    Float(f64),
+    Integer(i32),
+    Float(f32),
     String(String),
     Identifier(String),
     Bool(bool),
@@ -12,17 +12,18 @@ pub enum TokenKind {
     // Keywords
     Literal(Literal),
     Let,
-    Mut,
     If,
     Else,
+    Elif,
     While,
-    For,
-    In,
     Break,
     Continue,
     Return,
-    Function,
     Fn,
+    IntT,
+    StringT,
+    BoolT,
+    FloatT,
 
     // Operators - Arithmetic
     Plus,    // +
@@ -73,16 +74,12 @@ impl TokenKind {
         match self {
             TokenKind::Literal(literal) => format!("{:?}", literal),
             TokenKind::Let => "let".to_string(),
-            TokenKind::Mut => "mut".to_string(),
             TokenKind::If => "if".to_string(),
             TokenKind::Else => "else".to_string(),
             TokenKind::While => "while".to_string(),
-            TokenKind::For => "for".to_string(),
-            TokenKind::In => "in".to_string(),
             TokenKind::Break => "break".to_string(),
             TokenKind::Continue => "continue".to_string(),
             TokenKind::Return => "return".to_string(),
-            TokenKind::Function => "function".to_string(),
             TokenKind::Fn => "fn".to_string(),
             TokenKind::Plus => "+".to_string(),
             TokenKind::Minus => "-".to_string(),
@@ -114,6 +111,11 @@ impl TokenKind {
             TokenKind::CopyAssign => ":=".to_string(),
             TokenKind::MoveAssign => "&=".to_string(),
             TokenKind::At => "@".to_string(),
+            TokenKind::Elif => "elif".to_string(),
+            TokenKind::IntT => "i32".to_string(),
+            TokenKind::StringT => "string".to_string(),
+            TokenKind::BoolT => "bool".to_string(),
+            TokenKind::FloatT => "f32".to_string(),
         }
     }
 }

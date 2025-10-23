@@ -19,7 +19,7 @@ fn foo: (i32 i32) -> (i32) {
     }
 }
 
-fn somefunc: () -> (bool str i32 i32 i32 i32 ) {
+fn somefunc: () -> (bool str i32 i32 i32 i32) {
     @(false "some string thing" 6969696 312 3 12) 
     // functions return whatever changes they made to the stack 
 }

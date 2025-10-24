@@ -1,0 +1,3 @@
+fn no_args: () -> (i32) {
+	@(4) return;
+}

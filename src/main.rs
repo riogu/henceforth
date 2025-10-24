@@ -1,6 +1,7 @@
 #![allow(unused)]
 
 pub mod ast_node;
+pub mod builder;
 pub mod lexer;
 pub mod parser;
 pub mod semantic_analysis;

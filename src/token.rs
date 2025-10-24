@@ -7,6 +7,27 @@ pub enum Literal {
     Bool(bool),
 }
 
+impl From<i32> for Literal {
+    fn from(value: i32) -> Self {
+        Literal::Integer(value)
+    }
+}
+impl From<f32> for Literal {
+    fn from(value: f32) -> Self {
+        Literal::Float(value)
+    }
+}
+impl From<&str> for Literal {
+    fn from(value: &str) -> Self {
+        Literal::String(value.to_string())
+    }
+}
+impl From<bool> for Literal {
+    fn from(value: bool) -> Self {
+        Literal::Bool(value)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum TokenKind {
     // Keywords

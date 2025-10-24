@@ -10,23 +10,6 @@ pub struct File<'a> {
     path: &'a PathBuf,
 }
 
-// macro_rules! empty_void_func_tokens {
-//     ($name:ident) => {
-//         TokenKind::Fn,
-//         TokenKind::Literal(Literal::Identifier(String::from(stringify!($name)))),
-//         TokenKind::Colon,
-//         TokenKind::LeftParen,
-//         TokenKind::RightParen,
-//         TokenKind::Arrow,
-//         TokenKind::LeftParen,
-//         TokenKind::RightParen,
-//         TokenKind::LeftBrace,
-//         TokenKind::Return,
-//         TokenKind::Semicolon,
-//         TokenKind::RightBrace
-//     }
-// }
-
 impl<'a> File<'a> {
     pub fn new(path: &'a PathBuf) -> File<'a> {
         File {
@@ -138,7 +121,7 @@ impl Lexer {
                     } // ||
 
                     '"' => {
-                        let mut lit = char.to_string();
+                        let mut lit = String::new();
                         loop {
                             if let Some(_) = chars_iter.next_if_eq(&'"') {
                                 break;
@@ -174,7 +157,10 @@ impl Lexer {
                     'a'..='z' | 'A'..='Z' | '_' => {
                         let mut lit = char.to_string();
                         while let Some(c) = chars_iter.next_if(|c| {
-                            ('a'..='z').contains(c) || ('A'..='Z').contains(c) || c == &'_'
+                            ('a'..='z').contains(c)
+                                || ('A'..='Z').contains(c)
+                                || ('0'..='9').contains(c)
+                                || c == &'_'
                         }) {
                             lit.push(c);
                         }
@@ -190,9 +176,11 @@ impl Lexer {
                             "fn" => TokenKind::Fn,
 
                             "i32" => TokenKind::Int,
-                            "string" => TokenKind::String,
+                            "str" => TokenKind::String,
                             "f32" => TokenKind::Float,
                             "bool" => TokenKind::Bool,
+                            "true" => TokenKind::Literal(Literal::Bool(true)),
+                            "false" => TokenKind::Literal(Literal::Bool(false)),
 
                             _ => TokenKind::Literal(Literal::Identifier(lit)),
                         }
@@ -210,25 +198,87 @@ impl Lexer {
     }
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use std::rc::Rc;
-//
-//     use super::*;
-//
-//     #[test]
-//     fn test_tokenize_kind_simple_main() {
-//         let path = PathBuf::from("test/simple_main.hfs");
-//         let file = File::new(&path);
-//
-//         let lexer = Lexer::new();
-//         let tokens: Vec<TokenKind> = lexer
-//             .tokenize(&file)
-//             .into_iter()
-//             .map(|token| token.kind)
-//             .collect();
-//
-//         let expected = vec![empty_void_func_tokens!(main)];
-//         assert_eq!(tokens, expected);
-//     }
-// }
+#[cfg(test)]
+mod tests {
+    use std::rc::Rc;
+
+    use crate::{
+        ast_node::Type,
+        builder::{FunctionOps, StackOps, TokenSequence},
+    };
+
+    use super::*;
+
+    fn tokenize_file_into_kinds(path: &str) -> Vec<TokenKind> {
+        let path = PathBuf::from(path);
+        let file = File::new(&path);
+        Lexer::new()
+            .tokenize(&file)
+            .into_iter()
+            .map(|token| token.kind)
+            .collect()
+    }
+
+    #[test]
+    fn test_tokenize_simple_main() {
+        let tokens = tokenize_file_into_kinds("test/simple_main.hfs");
+
+        let expected = TokenSequence::new()
+            .func_with("main", None, None)
+            .body()
+            .return_statement()
+            .end_body()
+            .build();
+
+        assert_eq!(tokens, expected);
+    }
+
+    #[test]
+    fn test_function_with_lots_of_arguments() {
+        let tokens = tokenize_file_into_kinds("test/function_with_lots_of_arguments.hfs");
+        let expected = TokenSequence::new()
+            .func_with(
+                "func_with_lots_of_arguments",
+                Some(vec![Type::Int, Type::Float, Type::String, Type::Bool]),
+                Some(vec![Type::Int, Type::Float, Type::Bool, Type::String]),
+            )
+            .body()
+            .stack_block()
+            .push_literal(5)
+            .push_literal(5.0)
+            .push_literal(false)
+            .push_literal("test")
+            .end_stack_block()
+            .return_statement()
+            .end_body()
+            .build();
+
+        assert_eq!(tokens, expected);
+    }
+
+    #[test]
+    fn test_function_with_no_arguments() {
+        let tokens = tokenize_file_into_kinds("test/function_with_no_arguments.hfs");
+        let expected = TokenSequence::new()
+            .func_with("no_args", None, Some(vec![Type::Int]))
+            .body()
+            .stack_block()
+            .push_literal(4)
+            .end_stack_block()
+            .return_statement()
+            .end_body()
+            .build();
+
+        assert_eq!(tokens, expected);
+    }
+
+    #[test]
+    fn test_function_with_no_return_type() {
+        let tokens = tokenize_file_into_kinds("test/function_with_no_return_type.hfs");
+        let expected = TokenSequence::new()
+            .func_with("no_return_type", Some(vec![Type::Int]), None)
+            .body()
+            .return_statement()
+            .end_body();
+    }
+}

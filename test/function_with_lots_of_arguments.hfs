@@ -1,0 +1,3 @@
+fn func_with_lots_of_arguments: (i32 f32 str bool) -> (i32 f32 bool str) {
+	@(5 5.0 false "test") return;
+}

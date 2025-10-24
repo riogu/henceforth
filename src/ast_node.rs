@@ -1,3 +1,5 @@
+use crate::token::TokenKind;
+
 #[derive(Debug)]
 pub struct BlockScope<'a> {
     nodes: Vec<TopLevelNode<'a>>,
@@ -68,6 +70,17 @@ pub enum Type {
     Bool,
     Float,
     // Struct(Identifier),
+}
+
+impl Type {
+    pub fn to_token(&self) -> TokenKind {
+        match self {
+            Type::Int => TokenKind::Int,
+            Type::String => TokenKind::String,
+            Type::Bool => TokenKind::Bool,
+            Type::Float => TokenKind::Float,
+        }
+    }
 }
 
 pub trait Typed {

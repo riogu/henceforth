@@ -30,7 +30,7 @@ impl<'a> Parser<'a> {
     fn variable_declaration(&mut self) {
         // let var: i32;
         // expect(identifier) | expect(:) | expect(identifier) | expect(;)
-        let var = TokenKind::Literal(Literal::Identifier("foo".to_string()));
+        let var = TokenKind::Identifier("foo".to_string());
     }
 }
 

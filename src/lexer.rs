@@ -51,6 +51,17 @@ impl Lexer {
                     '%' => TokenKind::Percent,
                     '@' => TokenKind::At,
                     '+' => TokenKind::Plus,
+                    '.' => {
+                        if let Some(_) = chars_iter.next_if_eq(&'.') {
+                            if let Some(_) = chars_iter.next_if_eq(&'.') {
+                                TokenKind::DotDotDot
+                            } else {
+                                panic!("lexer error")
+                            }
+                        } else {
+                            panic!("lexer error")
+                        }
+                    }
                     ':' => {
                         if let Some(_) = chars_iter.next_if_eq(&'=') {
                             TokenKind::CopyAssign
@@ -204,7 +215,9 @@ mod tests {
 
     use crate::{
         ast_node::Type,
-        builder::{FunctionOps, StackOps, TokenSequence},
+        builder::{
+            ControlFlowOps, FunctionOps, LoopOps, Operation, StackOps, TokenSequence, VariableOps,
+        },
     };
 
     use super::*;
@@ -244,11 +257,17 @@ mod tests {
             )
             .body()
             .stack_block()
+            .push_function_implicit("pop")
+            .push_function_implicit("pop")
+            .push_function_implicit("pop")
+            .push_function_implicit("pop")
+            .end_stack_block(true)
+            .stack_block()
             .push_literal(5)
             .push_literal(5.0)
             .push_literal(false)
             .push_literal("test")
-            .end_stack_block()
+            .end_stack_block(false)
             .return_statement()
             .end_body()
             .build();
@@ -264,7 +283,7 @@ mod tests {
             .body()
             .stack_block()
             .push_literal(4)
-            .end_stack_block()
+            .end_stack_block(false)
             .return_statement()
             .end_body()
             .build();
@@ -278,7 +297,283 @@ mod tests {
         let expected = TokenSequence::new()
             .func_with("no_return_type", Some(vec![Type::Int]), None)
             .body()
+            .stack_block()
+            .push_function_implicit("pop")
+            .end_stack_block(false)
             .return_statement()
-            .end_body();
+            .end_body()
+            .build();
+        assert_eq!(tokens, expected);
+    }
+
+    #[test]
+    fn test_variable_declarations() {
+        let tokens = tokenize_file_into_kinds("test/variable_declarations.hfs");
+        let expected = TokenSequence::new()
+            .func_with("main", None, None)
+            .body()
+            .variable("a", Type::Int)
+            .variable("b", Type::Float)
+            .variable("c", Type::String)
+            .variable("d", Type::Bool)
+            .return_statement()
+            .end_body()
+            .build();
+
+        assert_eq!(tokens, expected);
+    }
+
+    #[test]
+    fn test_copy_and_move() {
+        let tokens = tokenize_file_into_kinds("test/copy_and_move.hfs");
+        let expected = TokenSequence::new()
+            .func_with("main", None, None)
+            .body()
+            .variable("copy", Type::Int)
+            .variable("move", Type::Int)
+            .stack_block()
+            .push_literal(5)
+            .end_stack_block(false)
+            .copy_to("copy")
+            .move_to("move")
+            .return_statement()
+            .end_body()
+            .build();
+        assert_eq!(tokens, expected);
+    }
+
+    #[test]
+    fn test_operations() {
+        let tokens = tokenize_file_into_kinds("test/operations.hfs");
+        let expected = TokenSequence::new()
+            .func_with("main", None, None)
+            .body()
+            .stack_block()
+            .push_literal(1)
+            .push_literal(1)
+            .push_operation(Operation::Add)
+            .push_literal(2)
+            .push_operation(Operation::Multiply)
+            .push_function_implicit("dup")
+            .push_operation(Operation::Divide)
+            .push_literal(2)
+            .push_operation(Operation::Multiply)
+            .push_literal(2)
+            .push_operation(Operation::Modulo)
+            .push_function_implicit("pop")
+            .end_stack_block(true)
+            .stack_block()
+            .push_function("dup", vec![false], 1)
+            .push_operation(Operation::Or)
+            .push_operation(Operation::Not)
+            .push_literal(true)
+            .push_operation(Operation::And)
+            .push_function_implicit("pop")
+            .end_stack_block(true)
+            .return_statement()
+            .end_body()
+            .build();
+        assert_eq!(tokens, expected);
+    }
+
+    #[test]
+    fn test_while_loop() {
+        let tokens = tokenize_file_into_kinds("test/while_loop.hfs");
+        let expected = TokenSequence::new()
+            .func_with("main", None, None)
+            .body()
+            .variable("a", Type::Int)
+            .variable("b", Type::Int)
+            .stack_block()
+            .push_literal(100)
+            .end_stack_block(false)
+            .move_to("a")
+            .stack_block()
+            .push_literal(0)
+            .end_stack_block(false)
+            .move_to("b")
+            .while_loop()
+            .stack_block()
+            .push_variable("a")
+            .push_literal(0)
+            .push_operation(Operation::GreaterThan)
+            .push_variable("b")
+            .push_literal(200)
+            .push_operation(Operation::LessThan)
+            .push_operation(Operation::And)
+            .end_stack_block(false)
+            .body()
+            .stack_block()
+            .push_variable("a")
+            .push_literal(1)
+            .push_operation(Operation::Subtract)
+            .end_stack_block(false)
+            .move_to("a")
+            .stack_block()
+            .push_variable("b")
+            .push_literal(2)
+            .push_operation(Operation::Add)
+            .end_stack_block(false)
+            .move_to("b")
+            .end_body()
+            .return_statement()
+            .end_body()
+            .build();
+        assert_eq!(tokens, expected)
+    }
+
+    #[test]
+    fn test_simple_if_else() {
+        let tokens = tokenize_file_into_kinds("test/simple_if_else.hfs");
+        let expected = TokenSequence::new()
+            .func_with("main", None, None)
+            .body()
+            .if_statement()
+            .stack_block()
+            .push_literal(5)
+            .push_literal(2)
+            .push_operation(Operation::GreaterThan)
+            .end_stack_block(false)
+            .body()
+            .stack_block()
+            .push_literal(1)
+            .push_literal(2)
+            .push_literal(3)
+            .push_literal(4)
+            .push_function::<Vec<i32>>("pop_all", vec![], 0)
+            .end_stack_block(true)
+            .return_statement()
+            .end_body()
+            .else_statement()
+            .body()
+            .return_statement()
+            .end_body()
+            .end_body()
+            .build();
+        assert_eq!(tokens, expected);
+    }
+
+    #[test]
+    fn test_if_elif_else() {
+        let tokens = tokenize_file_into_kinds("test/if_elif_else.hfs");
+        let expected = TokenSequence::new()
+            .func_with("fizz_buzz", Some(vec![Type::Int]), Some(vec![Type::String]))
+            .body()
+            .if_statement()
+            .stack_block()
+            .push_literal(15)
+            .push_operation(Operation::Modulo)
+            .push_literal(0)
+            .push_operation(Operation::Equals)
+            .end_stack_block(false)
+            .body()
+            .stack_block()
+            .push_literal("fizzbuzz")
+            .end_stack_block(false)
+            .return_statement()
+            .end_body()
+            .elif_statement()
+            .stack_block()
+            .push_literal(3)
+            .push_operation(Operation::Modulo)
+            .push_literal(0)
+            .push_operation(Operation::Equals)
+            .end_stack_block(false)
+            .body()
+            .stack_block()
+            .push_literal("fizz")
+            .end_stack_block(false)
+            .return_statement()
+            .end_body()
+            .elif_statement()
+            .stack_block()
+            .push_literal(5)
+            .push_operation(Operation::Modulo)
+            .push_literal(0)
+            .push_operation(Operation::Equals)
+            .end_stack_block(false)
+            .body()
+            .stack_block()
+            .push_literal("buzz")
+            .end_stack_block(false)
+            .return_statement()
+            .end_body()
+            .else_statement()
+            .body()
+            .stack_block()
+            .push_function_implicit("pop")
+            .push_literal("no fizzbuzz")
+            .end_stack_block(false)
+            .return_statement()
+            .end_body()
+            .end_body()
+            .func_with("main", None, None)
+            .body()
+            .stack_block()
+            .push_function("fizz_buzz", vec![530], 1)
+            .push_function_implicit("pop")
+            .end_stack_block(false)
+            .return_statement()
+            .end_body()
+            .build();
+        assert_eq!(tokens, expected);
+    }
+
+    #[test]
+    fn test_partially_implicit_function_calls() {
+        let tokens = tokenize_file_into_kinds("test/partially_implicit_function_calls.hfs");
+        let expected = TokenSequence::new()
+            .func_with(
+                "max",
+                Some(vec![Type::Int, Type::Int]),
+                Some(vec![Type::Int]),
+            )
+            .body()
+            .if_statement()
+            .stack_block()
+            .push_function_implicit("swap")
+            .push_function_implicit("dup")
+            .push_function_implicit("rot")
+            .push_operation(Operation::GreaterThan)
+            .end_stack_block(false)
+            .body()
+            .return_statement()
+            .end_body()
+            .else_statement()
+            .body()
+            .stack_block()
+            .push_function_implicit("swap")
+            .push_function_implicit("pop")
+            .end_stack_block(false)
+            .return_statement()
+            .end_body()
+            .end_body()
+            .func_with(
+                "max3",
+                Some(vec![Type::Int, Type::Int, Type::Int]),
+                Some(vec![Type::Int]),
+            )
+            .body()
+            .stack_block()
+            .push_function_implicit("rot")
+            .push_function_implicit("rot")
+            .push_function_implicit("max")
+            .push_function_implicit("max")
+            .end_stack_block(false)
+            .return_statement()
+            .end_body()
+            .func_with("main", None, None)
+            .body()
+            .stack_block()
+            .push_literal(50)
+            .end_stack_block(true)
+            .stack_block()
+            .push_function("max3", vec![10, 30], 3)
+            .push_function_implicit("pop")
+            .end_stack_block(false)
+            .return_statement()
+            .end_body()
+            .build();
+        assert_eq!(tokens, expected)
     }
 }

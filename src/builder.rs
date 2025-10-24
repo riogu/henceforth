@@ -3,6 +3,23 @@ use crate::{
     token::{Literal, TokenKind},
 };
 
+pub enum Operation {
+    Add,
+    Subtract,
+    Multiply,
+    Divide,
+    Modulo,
+    Not,
+    Or,
+    And,
+    GreaterThan,
+    GreaterThanEq,
+    Equals,
+    NotEquals,
+    LessThan,
+    LessThanEq,
+}
+
 pub struct TokenSequence {
     tokens: Vec<TokenKind>,
 }
@@ -19,8 +36,73 @@ pub trait FunctionOps {
 
 pub trait StackOps {
     fn stack_block(self) -> Self;
-    fn end_stack_block(self) -> Self;
+    fn end_stack_block(self, semicolon: bool) -> Self;
     fn push_literal<T: Into<Literal>>(self, lit: T) -> Self;
+    fn push_operation(self, op: Operation) -> Self;
+    fn push_function<I>(self, name: &str, args: I, expected_args: usize) -> Self
+    where
+        I: IntoIterator,
+        I::Item: Into<Literal>;
+    fn push_function_implicit(self, name: &str) -> Self;
+    fn push_variable(self, name: &str) -> Self;
+}
+
+pub trait VariableOps {
+    fn variable(self, name: &str, typename: Type) -> Self;
+    fn move_to(self, name: &str) -> Self;
+    fn copy_to(self, name: &str) -> Self;
+}
+
+pub trait LoopOps {
+    fn while_loop(self) -> Self;
+}
+
+pub trait ControlFlowOps {
+    fn if_statement(self) -> Self;
+    fn elif_statement(self) -> Self;
+    fn else_statement(self) -> Self;
+}
+
+impl ControlFlowOps for TokenSequence {
+    fn if_statement(self) -> Self {
+        self.push(TokenKind::If)
+    }
+
+    fn elif_statement(self) -> Self {
+        self.push(TokenKind::Else).push(TokenKind::If)
+    }
+
+    fn else_statement(self) -> Self {
+        self.push(TokenKind::Else)
+    }
+}
+
+impl LoopOps for TokenSequence {
+    fn while_loop(self) -> Self {
+        self.push(TokenKind::While)
+    }
+}
+
+impl VariableOps for TokenSequence {
+    fn variable(self, name: &str, typename: Type) -> Self {
+        self.push(TokenKind::Let)
+            .push(TokenKind::Identifier(name.to_string()))
+            .push(TokenKind::Colon)
+            .push(typename.into())
+            .push(TokenKind::Semicolon)
+    }
+
+    fn move_to(self, name: &str) -> Self {
+        self.push(TokenKind::MoveAssign)
+            .push(TokenKind::Identifier(name.to_string()))
+            .push(TokenKind::Semicolon)
+    }
+
+    fn copy_to(self, name: &str) -> Self {
+        self.push(TokenKind::CopyAssign)
+            .push(TokenKind::Identifier(name.to_string()))
+            .push(TokenKind::Semicolon)
+    }
 }
 
 impl TokenSequence {
@@ -50,7 +132,7 @@ impl FunctionOps for TokenSequence {
         if let Some(args) = args {
             let tokens = args
                 .into_iter()
-                .map(|typename| typename.to_token())
+                .map(|typename| typename.into())
                 .collect::<Vec<TokenKind>>();
             return self.push_many(tokens);
         }
@@ -60,7 +142,7 @@ impl FunctionOps for TokenSequence {
         if let Some(return_types) = return_types {
             let tokens = return_types
                 .into_iter()
-                .map(|typename| typename.to_token())
+                .map(|typename| typename.into())
                 .collect::<Vec<TokenKind>>();
             return self.push_many(tokens);
         }
@@ -74,7 +156,7 @@ impl FunctionOps for TokenSequence {
         return_type: Option<Vec<Type>>,
     ) -> Self {
         self.push(TokenKind::Fn)
-            .push(TokenKind::Literal(Literal::Identifier(String::from(name))))
+            .push(TokenKind::Identifier(name.to_string()))
             .push(TokenKind::Colon)
             .push(TokenKind::LeftParen)
             .args(args)
@@ -103,11 +185,46 @@ impl StackOps for TokenSequence {
         self.push(TokenKind::At).push(TokenKind::LeftParen)
     }
 
-    fn end_stack_block(mut self) -> Self {
-        self.push(TokenKind::RightParen)
+    fn end_stack_block(mut self, semicolon: bool) -> Self {
+        self = self.push(TokenKind::RightParen);
+        if semicolon {
+            self = self.push(TokenKind::Semicolon);
+        }
+        self
     }
 
     fn push_literal<T: Into<Literal>>(mut self, lit: T) -> Self {
         self.push(TokenKind::Literal(lit.into()))
+    }
+
+    fn push_operation(mut self, op: Operation) -> Self {
+        self.push(op.into())
+    }
+
+    fn push_function<I>(mut self, name: &str, args: I, expected_args: usize) -> Self
+    where
+        I: IntoIterator,
+        I::Item: Into<Literal>,
+    {
+        self = self.push(TokenKind::LeftParen);
+        let args: Vec<Literal> = args.into_iter().map(|arg| arg.into()).collect();
+        if args.len() < expected_args {
+            self = self.push(TokenKind::DotDotDot);
+        }
+        for arg in args {
+            self = self.push(TokenKind::Literal(arg));
+        }
+        self.push(TokenKind::RightParen)
+            .push(TokenKind::Identifier(name.to_string()))
+    }
+    fn push_function_implicit(mut self, name: &str) -> Self {
+        self.push(TokenKind::LeftParen)
+            .push(TokenKind::DotDotDot)
+            .push(TokenKind::RightParen)
+            .push(TokenKind::Identifier(name.to_string()))
+    }
+
+    fn push_variable(self, name: &str) -> Self {
+        self.push(TokenKind::Identifier(name.to_string()))
     }
 }

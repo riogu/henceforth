@@ -83,7 +83,7 @@ pub enum TokenKind {
     // Punctuation
     Semicolon, // ;
     Comma,     // ,
-    Dot,       // .
+    DotDotDot, // .
     Colon,     // :
     Arrow,     // ->
 
@@ -92,7 +92,41 @@ pub enum TokenKind {
     Eof,
 }
 
+impl From<Operation> for TokenKind {
+    fn from(value: Operation) -> Self {
+        match value {
+            Operation::Add => TokenKind::Plus,
+            Operation::Subtract => TokenKind::Minus,
+            Operation::Multiply => TokenKind::Star,
+            Operation::Divide => TokenKind::Slash,
+            Operation::Modulo => TokenKind::Percent,
+            Operation::Not => TokenKind::Not,
+            Operation::Or => TokenKind::Or,
+            Operation::And => TokenKind::And,
+            Operation::GreaterThan => TokenKind::Greater,
+            Operation::GreaterThanEq => TokenKind::GreaterEqual,
+            Operation::Equals => TokenKind::Equal,
+            Operation::NotEquals => TokenKind::NotEqual,
+            Operation::LessThan => TokenKind::Less,
+            Operation::LessThanEq => TokenKind::LessEqual,
+        }
+    }
+}
+
+impl From<Type> for TokenKind {
+    fn from(value: Type) -> Self {
+        match value {
+            Type::Int => TokenKind::Int,
+            Type::String => TokenKind::String,
+            Type::Bool => TokenKind::Bool,
+            Type::Float => TokenKind::Float,
+        }
+    }
+}
+
 use std::fmt;
+
+use crate::{ast_node::Type, builder::Operation};
 
 impl fmt::Display for TokenKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -128,7 +162,7 @@ impl fmt::Display for TokenKind {
             TokenKind::RightBracket => write!(f, "]"),
             TokenKind::Semicolon => write!(f, ";"),
             TokenKind::Comma => write!(f, ","),
-            TokenKind::Dot => write!(f, "."),
+            TokenKind::DotDotDot => write!(f, "..."),
             TokenKind::Colon => write!(f, ":"),
             TokenKind::Arrow => write!(f, "->"),
             TokenKind::Newline => write!(f, "\\n"),
@@ -141,6 +175,7 @@ impl fmt::Display for TokenKind {
             TokenKind::String => write!(f, "string"),
             TokenKind::Bool => write!(f, "bool"),
             TokenKind::Float => write!(f, "f32"),
+            TokenKind::Identifier(_) => todo!(),
         }
     }
 }

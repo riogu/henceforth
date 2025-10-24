@@ -20,13 +20,14 @@ fn push_range: (i32 i32) -> (i32 i32 i32 i32 i32) {
     let start: i32;
     let end: i32;
     
-    @(123123) &= end;  // pop and assign
+    @(123123)
+    &= end;  // pop and assign
     &= start;  // pop and assign
     
     @(start)
     while @(dup end <) {
-        @(1 + dup)  // NOTE: how do we write that we want the output of + to be
-                    // the argument for dup? | @(1 (+)dup) | ??? idk
+        @(1 + dup)  
+                   
     }
     @(pop);
 }
@@ -36,7 +37,8 @@ fn main: () -> (i32) {
     let sum: i32;
     let temp: i32;
     
-    @(0) := sum;  // copy to sum
+    @(0)
+    := sum;  // copy to sum
     @(1 5) push_range;
     
     // Stack now has: 1 2 3 4 5

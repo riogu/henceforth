@@ -14,12 +14,11 @@ impl<'a> Parser<'a> {
     fn push(&mut self, node: TopLevelNode<'a>) {
         self.nodes.push(node);
     }
-    fn expect(&mut self, token_kind: TokenKind) -> TokenKind {
+    fn expect(&mut self, token_kind: TokenKind) -> Token {
         match self.tokens.next() {
-            Some(val) if val.kind == token_kind => val.kind,
-            Some(_) | None => {
-                panic!("expected '{}'", token_kind)
-            }
+            Some(token) if token.kind == token_kind => token,
+            Some(_) | None => panic!("expected '{}'", token_kind),
+            // TODO: replace panic with source location info and arrow thingy
         }
     }
 }
@@ -30,7 +29,6 @@ impl<'a> Parser<'a> {
     fn variable_declaration(&mut self) {
         // let var: i32;
         // expect(identifier) | expect(:) | expect(identifier) | expect(;)
-        let var = TokenKind::Identifier("foo".to_string());
     }
 }
 
@@ -52,15 +50,14 @@ impl<'a> Parser<'a> {
         return parser.nodes;
     }
     fn statement(&mut self) -> Statement<'a> {
-        todo!()
-        // if let Some(token) = self.tokens.peek() {
-        //     match token.kind {
-        //         TokenKind::If => todo!(),
-        //         TokenKind::At => todo!("stack block"),
-        //         TokenKind::Return => todo!(),
-        //         _ => panic!("expected statement"),
-        //     }
-        // }
+        let Some(token) = self.tokens.next() else { panic!("unexpected end of input") };
+
+        match token.kind {
+            TokenKind::If => todo!(),
+            TokenKind::At => todo!("stack block"),
+            TokenKind::Return => todo!(),
+            _ => panic!("expected statement"),
+        }
     }
     fn stack_block(&mut self) {}
 }

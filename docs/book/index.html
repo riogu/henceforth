@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Introduction - Henceforth Language Specification</title>
+        <title>Introduction - Henceforth Documentation</title>
 
 
         <!-- Custom HTML head -->
@@ -138,7 +138,7 @@
                         </button>
                     </div>
 
-                    <h1 class="menu-title">Henceforth Language Specification</h1>
+                    <h1 class="menu-title">Henceforth Documentation</h1>
 
                     <div class="right-buttons">
                         <a href="print.html" title="Print this book" aria-label="Print this book">
@@ -176,12 +176,46 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="introduction"><a class="header" href="#introduction">Introduction</a></h1>
+<p>Welcome to the official documentation of the Henceforth language.</p>
+<p>This book will help you install all the necessary tooling, and build up your knowledge of Henceforth from the most basic concepts to the most advanced.
+For more experienced developers who want to contribute, there is also a detailed language specification.</p>
+<h2 id="how-to-read-this-book"><a class="header" href="#how-to-read-this-book">How to read this book</a></h2>
+<p>You don't have to read everything in order. Feel free to:</p>
+<ul>
+<li>Start with the topics that interest you most.</li>
+<li>Use the sidebar for quick navigation.</li>
+</ul>
+<p>If you're new, we recommend starting with the <strong>Getting Started</strong> section, so you can get all the tools and get a glimpse on what the language offers. After that, go through the language reference in whatever way you want.</p>
+<h2 id="contributing"><a class="header" href="#contributing">Contributing</a></h2>
+<p>If you find any issues on this book or on the language itself, contributions are always welcome! Check out the project's <a href="https://github.com/riogu/henceforth">repository</a> or open an issue with your feedback.</p>
+<hr>
+<p style="text-align: right;">
+  <a href="getting-started/installation.html"
+     style="
+       display: inline-block;
+       padding: 8px 16px;
+       border: 2px solid white;
+       border-radius: 12px;
+       color: white;
+       text-decoration: none;
+       font-weight: bold;
+       background: transparent;
+       transition: all 0.2s ease-in-out;
+     "
+     onmouseover="this.style.background='white'; this.style.color='#222';"
+     onmouseout="this.style.background='transparent'; this.style.color='white';">
+    Next → Installation
+  </a>
+</p>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
 
+                            <a rel="next prefetch" href="getting-started/installation.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
 
                         <div style="clear: both"></div>
                     </nav>
@@ -190,10 +224,29 @@
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
 
+                    <a rel="next prefetch" href="getting-started/installation.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
             </nav>
 
         </div>
 
+        <!-- Livereload script (if served using the cli tool) -->
+        <script>
+            const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsAddress = wsProtocol + "//" + location.host + "/" + "__livereload";
+            const socket = new WebSocket(wsAddress);
+            socket.onmessage = function (event) {
+                if (event.data === "reload") {
+                    socket.close();
+                    location.reload();
+                }
+            };
+
+            window.onbeforeunload = function() {
+                socket.close();
+            }
+        </script>
 
 
 

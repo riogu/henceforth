@@ -3,7 +3,6 @@ pub enum Literal {
     Integer(i32),
     Float(f32),
     String(String),
-    Identifier(String),
     Bool(bool),
 }
 
@@ -32,6 +31,7 @@ impl From<bool> for Literal {
 pub enum TokenKind {
     // Keywords
     Literal(Literal),
+    Identifier(String),
     Let,
     Fn,
     If,

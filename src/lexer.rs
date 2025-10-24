@@ -182,7 +182,7 @@ impl Lexer {
                             "true" => TokenKind::Literal(Literal::Bool(true)),
                             "false" => TokenKind::Literal(Literal::Bool(false)),
 
-                            _ => TokenKind::Literal(Literal::Identifier(lit)),
+                            _ => TokenKind::Identifier(lit),
                         }
                     }
                     _ => panic!("lexer error"),

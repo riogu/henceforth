@@ -63,10 +63,10 @@ impl<'a> Parser<'a> {
             TokenKind::At => self.stack_block(),
             TokenKind::LeftBrace => self.block_scope(),
             TokenKind::While => self.while_statement(),
-            TokenKind::Return => { self.expect(TokenKind::Semicolon); Statement::Return; todo!() }
-            TokenKind::Break => todo!(),
-            TokenKind::Continue => todo!(),
-            TokenKind::Semicolon => {Statement::Empty; todo!()}
+            TokenKind::Return => { self.expect(TokenKind::Semicolon); TopLevelNode::Statement(Statement::Return) }
+            TokenKind::Break => TopLevelNode::Statement(Statement::Return),
+            TokenKind::Continue => TopLevelNode::Statement(Statement::Continue),
+            TokenKind::Semicolon => TopLevelNode::Statement(Statement::Empty),
             _ => panic!("expected statement"),
         }
     }

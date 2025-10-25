@@ -7,7 +7,6 @@ pub mod parser;
 pub mod semantic_analysis;
 pub mod token;
 pub mod types;
-pub mod arena;
 
 use std::path::PathBuf;
 
@@ -20,7 +19,6 @@ use crate::lexer::File;
 #[command(author, version, about)]
 struct Args {
     source: PathBuf,
-
     #[arg(short, long, default_value = "./a.out")]
     output: PathBuf,
 }

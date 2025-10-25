@@ -53,8 +53,9 @@ pub enum Statement {
 }
 #[derive(Debug)]
 pub enum TopLevelNode {
-    VarDeclId(VarId),
-    FuncDeclId(FunctionId),
+    VariableDecl(VarId),
+    FunctionDecl(FunctionId),
+    Statement(Statement),
 }
 
 #[derive(Debug)]

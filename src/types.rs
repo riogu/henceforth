@@ -44,8 +44,9 @@ impl Typed for Statement {
 impl Typed for TopLevelNode {
     fn get_type(&self) -> Type {
         match self {
-            TopLevelNode::VarDeclId(expression) => todo!(),
-            TopLevelNode::FuncDeclId(expressions) => todo!(),
+            TopLevelNode::VariableDecl(expression) => todo!(),
+            TopLevelNode::FunctionDecl(expressions) => todo!(),
+            TopLevelNode::Statement(statement) => todo!(),
         }
     }
 }

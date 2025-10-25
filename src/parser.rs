@@ -1,21 +1,15 @@
 use crate::ast_node::*;
-use crate::push_to;
 use crate::token::*;
 
 use std::iter::Peekable;
 use std::vec::IntoIter;
 
 pub struct Parser<'a> {
-    nodes: Vec<TopLevelNode>,
     tokens: Peekable<IntoIter<Token<'a>>>, // Own the tokens, iterate by value
-    arena: AstArena,
+    arena: AstArena<'a>,
 }
 
 impl<'a> Parser<'a> {
-    // utils
-    fn push(&mut self, node: TopLevelNode) {
-        self.nodes.push(node);
-    }
     fn expect(&mut self, token_kind: TokenKind) -> Token<'a> {
         match self.tokens.next() {
             Some(token) if std::mem::discriminant(&token.kind) 
@@ -46,7 +40,6 @@ impl<'a> Parser<'a> {
     #[must_use]
     pub fn parse_tokens(tokens: Vec<Token>) -> Vec<TopLevelNode> {
         let mut parser = Parser {
-            nodes: Vec::new(),
             tokens: tokens.into_iter().peekable(),
             arena: AstArena::new(),
         };
@@ -57,29 +50,24 @@ impl<'a> Parser<'a> {
                 _ => panic!("expected variable or function declaration"),
             };
         }
-        return parser.nodes;
+        todo!()
     }
 
     // <statement> ::= <if_stmt> | <stack_block> | <while_stmt> | <assignment>
     //               | <return_stmt> | <break_stmt> | <continue_stmt> | ";"
     fn statement(&mut self) -> TopLevelNode {
-        macro_rules! push {
-            ($($tt:tt)*) => {
-                push_to!(self.arena, $($tt)*)
-            };
-        }
         match self.tokens.next().expect("unexpected end of input while parsing statement").kind {
-            TokenKind::If => self.if_statement(),
+            TokenKind::If => Statement::If(self.if_statement()),
             TokenKind::At => self.stack_block(),
             TokenKind::LeftBrace => self.block_scope(),
             TokenKind::While => self.while_statement(),
             TokenKind::Return => {
-                self.expect(TokenKind::Semicolon);
-                push!(Statement::Return)
+                self.expect(TokenKind::Semicolon); todo!()
+                // push!(self.arena, TopLevelNode::Statement(Statement::Return))
             }
-            TokenKind::Break => push!(Statement::Return),
-            TokenKind::Continue => push!(Statement::Continue),
-            TokenKind::Semicolon => push!(Statement::Empty),
+            TokenKind::Break => push!(self.arena, Statement::Return),
+            TokenKind::Continue => push!(self.arena, Statement::Continue),
+            TokenKind::Semicolon => push!(self.arena, Statement::Empty),
             _ => panic!("expected statement"),
         }
     }

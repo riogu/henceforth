@@ -200,6 +200,7 @@ impl<'a> SourceInfo<'a> {
     }
 }
 
+#[derive(Debug)]
 pub struct Token<'a> {
     pub kind: TokenKind,
     pub source_info: SourceInfo<'a>,

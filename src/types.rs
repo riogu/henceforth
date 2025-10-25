@@ -3,25 +3,26 @@ use crate::ast_node::*;
 impl Typed for Operation {
     fn get_type(&self) -> Type {
         match self {
-            Operation::Add(expression, expression1) => todo!(),
-            Operation::Subtract(expression, expression1) => todo!(),
-            Operation::Multiply(expression, expression1) => todo!(),
-            Operation::Divide(expression, expression1) => todo!(),
-            Operation::Negate(expression) => todo!(),
-            Operation::Or(expression, expression1) => todo!(),
-            Operation::And(expression, expression1) => todo!(),
-            Operation::Not(expression) => todo!(),
+            Operation::Add(_, lhs, rhs) => todo!(),
+            Operation::Subtract(_, lhs, rhs) => todo!(),
+            Operation::Multiply(_, lhs, rhs) => todo!(),
+            Operation::Divide(_, lhs, rhs) => todo!(),
+            Operation::Negate(_, expr) => todo!(),
+            Operation::Or(_, lhs, rhs) => todo!(),
+            Operation::And(_, lhs, rhs) => todo!(),
+            Operation::Not(_, expr) => todo!(),
         }
     }
 }
+
 impl Typed for Expression {
     fn get_type(&self) -> Type {
         match self {
-            Expression::Operation(operation) => todo!(),
-            Expression::Assignment(expression, expression1) => todo!(),
-            Expression::Identifier(identifier) => todo!(),
-            Expression::Literal(_) => todo!(),
-            Expression::FunctionCall(function_id, expr_ids) => todo!(),
+            Expression::Operation(_, operation) => todo!(),
+            Expression::Assignment(_, lhs, rhs) => todo!(),
+            Expression::Identifier(_, identifier) => todo!(),
+            Expression::Literal(_, literal) => todo!(),
+            Expression::FunctionCall(_, function_id, args) => todo!(),
         }
     }
 }
@@ -30,13 +31,13 @@ impl Typed for Statement {
     fn get_type(&self) -> Type {
         match self {
             Statement::If(if_stmt) => todo!(),
-            Statement::Return => todo!(),
-            Statement::StackBlock(stack) => todo!(),
-            Statement::BlockScope(scope_block) => todo!(),
-            Statement::While(expression, expressions) => todo!(),
-            Statement::Break => todo!(),
-            Statement::Continue => todo!(),
-            Statement::Empty => todo!(),
+            Statement::Return(token) => todo!(),
+            Statement::StackBlock(stack_block) => todo!(),
+            Statement::BlockScope(block_scope) => todo!(),
+            Statement::While(while_stmt) => todo!(),
+            Statement::Break(token) => todo!(),
+            Statement::Continue(token) => todo!(),
+            Statement::Empty(token) => todo!(),
         }
     }
 }
@@ -44,9 +45,9 @@ impl Typed for Statement {
 impl Typed for TopLevelNode {
     fn get_type(&self) -> Type {
         match self {
-            TopLevelNode::VariableDecl(expression) => todo!(),
-            TopLevelNode::FunctionDecl(expressions) => todo!(),
-            TopLevelNode::Statement(statement) => todo!(),
+            TopLevelNode::VariableDecl(var_id) => todo!(),
+            TopLevelNode::FunctionDecl(fn_id) => todo!(),
+            TopLevelNode::Statement(stmt_id) => todo!(),
         }
     }
 }

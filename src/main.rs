@@ -31,5 +31,5 @@ fn main() {
 
     let lexer = Lexer::new();
     let tokens = lexer.tokenize(&file);
-    // parser::Parser::parse_tokens(tokens);
+    let top_level_nodes =  parser::Parser::parse_tokens(tokens);
 }

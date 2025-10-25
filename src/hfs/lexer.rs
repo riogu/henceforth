@@ -23,18 +23,11 @@ impl<'a> File<'a> {
     }
 }
 
-pub struct Lexer {
-    fumo_line: String,
-}
+pub struct Lexer {} // idk how to make this a namespace
 
 impl Lexer {
-    pub fn new() -> Lexer {
-        Lexer {
-            fumo_line: String::new(),
-        }
-    }
     #[must_use]
-    pub fn tokenize<'a>(&self, file: &'a File) -> Vec<Token<'a>> {
+    pub fn tokenize<'a>(file: &'a File) -> Vec<Token<'a>> {
         let mut tokens = Vec::<Token>::new();
         let mut line_offset = 0;
 
@@ -224,8 +217,7 @@ mod tests {
     fn tokenize_file_into_kinds(path: &str) -> Vec<TokenKind> {
         let path = PathBuf::from(path);
         let file = File::new(&path);
-        Lexer::new()
-            .tokenize(&file)
+        Lexer::tokenize(&file)
             .into_iter()
             .map(|token| token.kind)
             .collect()

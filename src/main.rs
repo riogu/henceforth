@@ -31,7 +31,7 @@ fn main() {
     let file = hfs::File::new(&args.source);
     println!("{:?}", args);
     println!("{:?}", file);
-    let lexer = hfs::Lexer::new();
-    let tokens = lexer.tokenize(&file);
+    let tokens = hfs::Lexer::tokenize(&file);
     let top_level_nodes = hfs::Parser::parse_tokens(tokens);
+    hfs::Analyzer::analyze(top_level_nodes);
 }

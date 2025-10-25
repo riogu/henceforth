@@ -36,13 +36,16 @@ impl ScopeStack {
         }
     }
 }
-struct Analyzer {
+pub struct Analyzer {
     top_level_nodes: Vec<TopLevelId>,
     scope_stack: ScopeStack,
 }
 impl Analyzer {
     pub fn new(top_level_nodes: Vec<TopLevelId>, file_name: String) -> Analyzer {
         Analyzer { top_level_nodes, scope_stack: ScopeStack::new(file_name) }
+    }
+    pub fn analyze(top_level_nodes: Vec<TopLevelId>) {
+        todo!()
     }
 }
 

@@ -18,10 +18,13 @@ pub struct ScopeStack { stack: Vec<Scope> }
 
 impl ScopeStack {
     pub fn new(file_name: String) -> Self {
-        Self { stack: vec![Scope { name: file_name, kind: ScopeKind::Global, inner_count: 0, }], }
+        Self { stack: vec![Scope { name: file_name + "::", kind: ScopeKind::Global, inner_count: 0, }], }
     }
     pub fn push_function(&mut self, name: String) {
-        self.stack.push(Scope { name: format!("{}()::", name), kind: ScopeKind::Function, inner_count: 0, });
+        if let Some(parent) = self.stack.last_mut() {
+            let func_name = format!("{}{}::", parent.name, name);
+            self.stack.push(Scope { name: format!("{}()::", func_name), kind: ScopeKind::Function, inner_count: 0, });
+        }
     }
     pub fn push_block(&mut self) {
         if let Some(parent) = self.stack.last_mut() {
@@ -61,19 +64,46 @@ impl<'a> Analyzer<'a> {
             TopLevelId::Statement(stmt_id) => self.analyze_stmt(stmt_id),
         }
     }
+    fn analyze_identifier(&mut self, id: &Identifier) {
+        match id {
+            Identifier::Unresolved(name) => todo!(),
+            Identifier::Variable(_) => {}
+            Identifier::Function(_) => {}
+        }
+    }
+
+    fn analyze_func_decl(&mut self, func_id: FuncId) {
+        let func = self.arena.get_func(func_id);
+        self.scope_stack.push_function(func.name.clone());
+        // TODO: validate param/return types and analyze body
+        self.scope_stack.pop();
+    }
+
+    fn analyze_var_decl(&mut self, var_id: VarId) {
+        let var = self.arena.get_var(var_id);
+        // TODO: validate type
+    }
 
     fn analyze_stmt(&mut self, stmt_id: StmtId) {
         let stmt = self.arena.get_stmt(stmt_id);
         match stmt {
             Statement::If { cond, body, else_stmt } => todo!(),
-            Statement::While { cond, body } => todo!(),
+            Statement::While { cond, body } => {
+                todo!();
+                self.analyze_stmt(*cond);
+                self.analyze_stmt(*body);
+            }
             Statement::StackBlock(_) => todo!(),
-            Statement::BlockScope(_) => todo!(),
+            Statement::BlockScope(_) => {
+                self.scope_stack.push_block();
+                todo!();
+                self.scope_stack.pop();
+            }
             Statement::Return => todo!(),
             Statement::Break => todo!(),
             Statement::Continue => todo!(),
-            Statement::Empty => {}
             Statement::Assignment { value, identifier } => todo!(),
+            Statement::Empty => {}
         }
     }
 
@@ -88,32 +118,22 @@ impl<'a> Analyzer<'a> {
         }
     }
 
-    fn analyze_var_decl(&mut self, var_id: VarId) {
-        let var = self.arena.get_var(var_id);
-        // TODO: validate type
-    }
-
-    fn analyze_func_decl(&mut self, func_id: FuncId) {
-        let func = self.arena.get_func(func_id);
-        // TODO: validate param/return types and analyze body
-    }
-
-    fn analyze_identifier(&mut self, id: &Identifier) {
-        match id {
-            Identifier::Unresolved(name) => todo!(),
-            Identifier::Variable(_) => {}
-            Identifier::Function(_) => {}
-        }
-    }
-
     fn analyze_operation(&mut self, op: &Operation) {
         match op {
-            Operation::Add(l, r) | Operation::Sub(l, r) | Operation::Mul(l, r)
-            | Operation::Div(l, r) | Operation::Mod(l, r) | Operation::Equal(l, r)
-            | Operation::NotEqual(l, r) | Operation::Less(l, r) | Operation::LessEqual(l, r)
-            | Operation::Greater(l, r) | Operation::GreaterEqual(l, r) | Operation::Or(l, r)
+            Operation::Add(l, r)
+            | Operation::Sub(l, r)
+            | Operation::Mul(l, r)
+            | Operation::Div(l, r)
+            | Operation::Mod(l, r)
+            | Operation::Equal(l, r)
+            | Operation::NotEqual(l, r)
+            | Operation::Less(l, r)
+            | Operation::LessEqual(l, r)
+            | Operation::Greater(l, r)
+            | Operation::GreaterEqual(l, r)
+            | Operation::Or(l, r)
             | Operation::And(l, r) => todo!(),
-            Operation::Negate(_) | Operation::Not(_) => todo!(),
+            Operation::Not(_) => todo!(),
         }
     }
 }

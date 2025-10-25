@@ -118,7 +118,8 @@ impl<'a> Parser<'a> {
     // <if_stmt> ::= "if" <stack_block> "{" <block_scope> "}" <else_stmt>?
     fn if_statement(&mut self) -> StmtId {
         let token = self.expect(TokenKind::If);
-        let cond = self.stack_block();
+        self.stack_block();
+        let cond = self.arena.last_or_error("expected boolean or operation on stack");
         let body = self.block_scope();
         let else_stmt = self.else_statement();
         self.arena.alloc_stmt(Statement::If { cond, body, else_stmt}, token)
@@ -145,7 +146,8 @@ impl<'a> Parser<'a> {
     // <while_stmt> ::= "while" <stack_block> "{" <scope_block> "}"
     fn while_statement(&mut self) -> StmtId {
         let token = self.expect(TokenKind::While);
-        let cond = self.stack_block();
+        self.stack_block();
+        let cond = self.arena.last_or_error("expected boolean or operation on stack");
         let body = self.block_scope();
         self.arena.alloc_stmt(Statement::While { cond, body }, token)
     }
@@ -227,7 +229,7 @@ impl<'a> Parser<'a> {
             }
             TokenKind::Not => {
                 let expr = self.arena.pop_or_error("expected at least 1 value in stack for '-' unary operator.");
-                self.arena.push_expr(Expression::Operation(Operation::Negate(expr)), token)
+                self.arena.push_expr(Expression::Operation(Operation::Not(expr)), token)
             }
             _ => panic!("expected stack operator")
         }

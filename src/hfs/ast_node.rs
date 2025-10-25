@@ -33,7 +33,6 @@ pub enum Operation {
     LessEqual(ExprId, ExprId),
     Greater(ExprId, ExprId),
     GreaterEqual(ExprId, ExprId),
-    Negate(ExprId),
     Or(ExprId, ExprId),
     And(ExprId, ExprId),
     Not(ExprId),
@@ -84,12 +83,12 @@ pub enum ElseStmt {
 #[derive(Debug)]
 pub enum Statement {
     If {
-        cond: StmtId, // points to StackBlock
+        cond: ExprId, // boolean from the stack or operation
         body: StmtId, // points to BlockScope
         else_stmt: Option<ElseStmt>,
     },
     While {
-        cond: StmtId, // points to StackBlock
+        cond: ExprId, // boolean from the stack or operation
         body: StmtId, // points to BlockScope
     },
     StackBlock(Vec<ExprId>),
@@ -201,19 +200,19 @@ impl<'a> AstArena<'a> {
     }
 
     // Accessor methods
-    pub fn get_expr(&self, id: ExprId) -> &Expression {
+    pub fn get_expr(&mut self, id: ExprId) -> &Expression {
         &self.exprs[id.0]
     }
 
-    pub fn get_stmt(&self, id: StmtId) -> &Statement {
+    pub fn get_stmt(&mut self, id: StmtId) -> &Statement {
         &self.stmts[id.0]
     }
 
-    pub fn get_var(&self, id: VarId) -> &VarDeclaration {
-        &self.vars[id.0]
+    pub fn get_var(&mut self, id: VarId) -> &mut VarDeclaration {
+        &mut self.vars[id.0]
     }
 
-    pub fn get_func(&self, id: FuncId) -> &FunctionDeclaration {
+    pub fn get_func(&mut self, id: FuncId) -> &FunctionDeclaration {
         &self.functions[id.0]
     }
 

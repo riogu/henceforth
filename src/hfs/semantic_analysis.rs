@@ -90,7 +90,7 @@ impl<'a> Analyzer<'a> {
             Statement::If { cond, body, else_stmt } => todo!(),
             Statement::While { cond, body } => {
                 todo!();
-                self.analyze_stmt(*cond);
+                self.analyze_expr(*cond);
                 self.analyze_stmt(*body);
             }
             Statement::StackBlock(_) => todo!(),

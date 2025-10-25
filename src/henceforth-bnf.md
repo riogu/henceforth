@@ -1,41 +1,38 @@
 <program> ::= <top_level_node>*
 
-<top_level_node> ::= <function_decl>
+<top_level_node> ::= <var_decl>
+                   | <function_decl>
+                   | <statement>
 
-<function_decl> ::= "fn" <identifier> ":" <signature> "{" <scope_block> "}"
+<var_decl> ::= "let" <identifier> ":" <type> ";"
+
+<function_decl> ::= "fn" <identifier> ":" <signature> "{" <block_scope> "}"
 
 <signature> ::= "(" <type_list>? ")" "->" "(" <type_list>? ")"
 
 <type_list> ::= <type> ("," <type>)*
 
-<type> ::= "i32"
-
-<scope_block> ::= (<var_decl> | <statement>)*
-
-<var_decl> ::= "let" <identifier> ":" <type> ";"
+<type> ::= "i32" | "f32" | "bool" | "string"
 
 <statement> ::= <if_stmt>
-              | <stack_block>
               | <while_stmt>
-              | <assignment>
+              | <stack_block>
+              | <block_scope>
               | <return_stmt>
               | <break_stmt>
               | <continue_stmt>
               | ";"
 
-<if_stmt> ::= "if" <stack_block> "{" <scope_block> "}" <else_stmt>?
+<if_stmt> ::= "if" <stack_block> "{" <block_scope> "}" <else_stmt>?
 
-<else_stmt> ::= "else" "if" <stack_block> "{" <scope_block> "}" <else_stmt>?
-              | "else" "{" <scope_block> "}"
+<else_stmt> ::= "else" "if" <stack_block> "{" <block_scope> "}" <else_stmt>?
+              | "else" "{" <block_scope> "}"
 
-<while_stmt> ::= "while" <stack_block> "{" <scope_block> "}"
+<while_stmt> ::= "while" <stack_block> "{" <block_scope> "}"
 
-<stack_block> ::= "@" "(" <expression_list> ")"
+<stack_block> ::= "@" "(" <expression>* ")"
 
-<expression_list> ::= <expression> (<expression>)*
-
-<assignment> ::= "&=" <identifier> ";"
-               | ":=" <identifier> ";"
+<block_scope> ::= "{" <top_level_node>* "}"
 
 <return_stmt> ::= "return" ";"
 
@@ -46,29 +43,32 @@
 <expression> ::= <operation>
                | <identifier>
                | <literal>
+               | <function_call>
+               | <assignment>
+
+<assignment> ::= "&=" <identifier>
+               | ":=" <identifier>
+
+<function_call> ::= <identifier> "@" "(" <expression>* ")"
 
 <operation> ::= <binary_op>
               | <unary_op>
               | <stack_op>
 
-<binary_op> ::= "+"
-              | "-"
-              | "*"
-              | "/"
-              | ">"
-              | "<"
-              | "=="
-              | "&&"
-              | "||"
+<binary_op> ::= "+" | "-" | "*" | "/" | ">" | "<" | "==" | "&&" | "||"
 
-<unary_op> ::= "!"
+<unary_op> ::= "!" | "~"
 
-<stack_op> ::= "dup"
-             | "pop"
-             | "depth"
+<stack_op> ::= "dup" | "pop" | "swap" | "depth"
 
-<literal> ::= <number>
+<literal> ::= <number> | <float> | <boolean> | <string>
 
 <identifier> ::= [a-zA-Z_][a-zA-Z0-9_]*
 
 <number> ::= [0-9]+
+
+<float> ::= [0-9]+ "." [0-9]+
+
+<boolean> ::= "true" | "false"
+
+<string> ::= '"' [^"]* '"'

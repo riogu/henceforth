@@ -1,23 +1,4 @@
 use crate::token::*;
-pub enum Type {
-    Int,
-    String,
-    Bool,
-    Float,
-    // Struct(Identifier),
-}
-impl Type {
-    pub fn to_token(&self) -> TokenKind {
-        match self {
-            Type::Int => TokenKind::Int,
-            Type::String => TokenKind::String,
-            Type::Bool => TokenKind::Bool,
-            Type::Float => TokenKind::Float,
-        }
-    }
-}
-pub trait Typed { fn get_type(&self) -> Type; }
-pub trait Analyze { fn analyze(&self); }
 // ============================================================================
 // Type-safe ID types
 // ============================================================================
@@ -28,42 +9,7 @@ pub trait Analyze { fn analyze(&self); }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)] pub struct StmtId(usize);
 
 // ============================================================================
-// Unified NodeId for common token API
-// ============================================================================
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum NodeId {
-    Expr(ExprId),
-    Stmt(StmtId),
-    Var(VarId),
-    Function(FuncId),
-}
-
-impl From<ExprId> for NodeId {
-    fn from(id: ExprId) -> Self {
-        NodeId::Expr(id)
-    }
-}
-
-impl From<StmtId> for NodeId {
-    fn from(id: StmtId) -> Self {
-        NodeId::Stmt(id)
-    }
-}
-
-impl From<VarId> for NodeId {
-    fn from(id: VarId) -> Self {
-        NodeId::Var(id)
-    }
-}
-
-impl From<FuncId> for NodeId {
-    fn from(id: FuncId) -> Self {
-        NodeId::Function(id)
-    }
-}
-
-// ============================================================================
-// AST Node Structures (no tokens, no lifetimes!)
+// AST Node Structures
 // ============================================================================
 
 #[derive(Debug)]
@@ -117,7 +63,14 @@ pub struct FunctionDeclaration {
 }
 
 // ============================================================================
-// Statements (not shared)
+// Statements 
+
+#[derive(Debug)]
+pub enum ElseStmt {
+    ElseIf(StmtId),  // Points to an IfStmt
+    Else(StmtId),    // Points to a BlockScope
+}
+
 #[derive(Debug)]
 pub enum Statement {
     If {
@@ -137,17 +90,6 @@ pub enum Statement {
     Empty,
 }
 
-#[derive(Debug)]
-pub enum ElseStmt {
-    ElseIf(StmtId),  // Points to an IfStmt
-    Else(StmtId),    // Points to a BlockScope
-}
-#[derive(Debug)]
-pub struct IfStmt {
-    cond: StmtId, // is a StackBlock
-    body: StmtId, // is a BlockScope
-    else_stmt: Option<ElseStmt>, // is ElseIf/Else
-}
 
 // ============================================================================
 
@@ -175,7 +117,7 @@ impl<'a> AstArena<'a> {
     }
 
     // Allocation methods (now take tokens separately)
-    pub fn alloc_expr(&mut self, expr: Expression, token: Token<'a>) -> ExprId {
+    pub fn push_expr(&mut self, expr: Expression, token: Token<'a>) -> ExprId {
         let id = ExprId(self.exprs.len());
         self.exprs.push(expr);
         self.expr_tokens.push(token);
@@ -248,3 +190,59 @@ impl<'a> AstArena<'a> {
         }
     }
 }
+
+// ============================================================================
+// Unified NodeId for common token API
+// ============================================================================
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum NodeId {
+    Expr(ExprId),
+    Stmt(StmtId),
+    Var(VarId),
+    Function(FuncId),
+}
+
+impl From<ExprId> for NodeId {
+    fn from(id: ExprId) -> Self {
+        NodeId::Expr(id)
+    }
+}
+
+impl From<StmtId> for NodeId {
+    fn from(id: StmtId) -> Self {
+        NodeId::Stmt(id)
+    }
+}
+
+impl From<VarId> for NodeId {
+    fn from(id: VarId) -> Self {
+        NodeId::Var(id)
+    }
+}
+
+impl From<FuncId> for NodeId {
+    fn from(id: FuncId) -> Self {
+        NodeId::Function(id)
+    }
+}
+// -----------------------------------------------------------
+// Types
+pub enum Type {
+    Int,
+    String,
+    Bool,
+    Float,
+    // Struct(Identifier),
+}
+impl Type {
+    pub fn to_token(&self) -> TokenKind {
+        match self {
+            Type::Int => TokenKind::Int,
+            Type::String => TokenKind::String,
+            Type::Bool => TokenKind::Bool,
+            Type::Float => TokenKind::Float,
+        }
+    }
+}
+pub trait Typed { fn get_type(&self) -> Type; }
+pub trait Analyze { fn analyze(&self); }

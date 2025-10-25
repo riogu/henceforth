@@ -17,6 +17,14 @@ impl<'a> Parser<'a> {
             Some(_) | None => panic!("expected '{:?}'", token_kind),
         }
     }
+
+    fn expect_identifier(&mut self) -> (String, Token<'a>) {
+        let token = self.tokens.next().expect("unexpected end of input");
+        match &token.kind {
+            TokenKind::Identifier(name) => (name.clone(), token),
+            _ => panic!("expected identifier, got {:?}", token.kind),
+        }
+    }
 }
 
 impl<'a> Parser<'a> {
@@ -26,11 +34,11 @@ impl<'a> Parser<'a> {
         todo!()
     }
     fn variable_declaration(&mut self) -> VarId {
-        let id_token = self.expect(TokenKind::Identifier(String::new()));
+        let (name, token) = self.expect_identifier();
         self.expect(TokenKind::Colon);
-        let type_token = self.expect(TokenKind::Identifier(String::new()));
+        let type_token = self.expect_identifier();
         self.expect(TokenKind::Comma);
-        todo!()
+        self.arena.push_var(VarDeclaration { name }, token)
     }
 }
 
@@ -76,32 +84,27 @@ impl<'a> Parser<'a> {
 
     // <if_stmt> ::= "if" <stack_block> "{" <block_scope> "}" <else_stmt>?
     fn if_statement(&mut self) -> StmtId {
-        self.expect(TokenKind::If);
-        self.expect(TokenKind::At);
-        self.expect(TokenKind::LeftParen);
-        let stack_block = self.stack_block();
-
-        self.expect(TokenKind::LeftBrace);
-        self.block_scope();
-
-        todo!()
-        // Statement::If(IfStmt{})
+        let token = self.expect(TokenKind::If);
+        let cond = self.stack_block();
+        let body = self.block_scope();
+        let else_stmt = None;
+        self.arena.push_stmt(Statement::If { cond, body, else_stmt}, token)
     }
 
     // <while_stmt> ::= "while" <stack_block> "{" <scope_block> "}"
     fn while_statement(&mut self) -> StmtId {
-        self.expect(TokenKind::While);
-        self.stack_block();
-
-        let statements: Vec<TopLevelId>;
-        self.block_scope();
-        todo!()
+        let token = self.expect(TokenKind::While);
+        let cond = self.stack_block();
+        let body = self.block_scope();
+        self.arena.push_stmt(Statement::While { cond, body }, token)
     }
 
     // <stack_block> ::= "@" "(" <expression_list> ")"
     fn stack_block(&mut self) -> StmtId {
-        self.expect(TokenKind::At);
-        let statements: Vec<TopLevelId>;
+        let token = self.expect(TokenKind::At);
+        self.expect(TokenKind::LeftParen);
+
+        let statements = Vec::<ExprId>::new();
 
         while let Some(token) = self.tokens.peek() {
             match &token.kind {
@@ -110,12 +113,12 @@ impl<'a> Parser<'a> {
             };
         }
         self.expect(TokenKind::RightBrace);
-        todo!();
+        self.arena.push_stmt(Statement::StackBlock(statements), token)
     }
     // <scope_block> ::= (<var_decl> | <statement>)*
     fn block_scope(&mut self) -> StmtId {
-        self.expect(TokenKind::LeftBrace);
-        let expressions: Vec<Expression>;
+        let token = self.expect(TokenKind::LeftBrace);
+        let top_level_ids = Vec::<TopLevelId>::new();
 
         while let Some(token) = self.tokens.peek() {
             match &token.kind {
@@ -126,7 +129,7 @@ impl<'a> Parser<'a> {
             };
         }
         self.expect(TokenKind::RightParen);
-        todo!()
+        self.arena.push_stmt(Statement::BlockScope(top_level_ids), token)
     }
     fn operation(&mut self) -> ExprId{
         match self.tokens.next().expect("unexpected end of input while parsing statement").kind {

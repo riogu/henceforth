@@ -21,6 +21,7 @@
               | <return_stmt>
               | <break_stmt>
               | <continue_stmt>
+              | <assignment_stmt>
               | ";"
 
 <if_stmt> ::= "if" <stack_block> "{" <block_scope> "}" <else_stmt>?
@@ -30,7 +31,7 @@
 
 <while_stmt> ::= "while" <stack_block> "{" <block_scope> "}"
 
-<stack_block> ::= "@" "(" <expression>* ")"
+<stack_block> ::= "@" "(" <stack_expression>* ")"
 
 <block_scope> ::= "{" <top_level_node>* "}"
 
@@ -40,19 +41,18 @@
 
 <continue_stmt> ::= "continue" ";"
 
-<expression> ::= <operation>
-               | <identifier>
-               | <literal>
-               | <function_call>
-               | <assignment>
+<assignment_stmt> ::= "&=" <identifier>
+                    | ":=" <identifier>
 
-<assignment> ::= "&=" <identifier>
-               | ":=" <identifier>
+<stack_expression> ::= <stack_operation>
+                     | <identifier>
+                     | <literal>
+                     | <function_call>
 
-<function_call> ::= <identifier> "@" "(" <expression>* ")"
+<function_call> ::= <identifier> "@" "(" <stack_expression>* ")"
 
-<operation> ::= <binary_op>
-              | <unary_op>
+<stack_operation> ::= <binary_op>
+                    | <unary_op>
 
 <binary_op> ::= "+" | "-" | "*" | "/" | ">" | "<" | "==" | "&&" | "||"
 

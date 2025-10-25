@@ -19,8 +19,6 @@ impl Typed for Expression {
     fn get_type(&self) -> Type {
         match self {
             Expression::Operation(operation) => todo!(),
-            Expression::CopyAssignment(lhs, rhs) => todo!(),
-            Expression::MoveAssignment(lhs, rhs) => todo!(),
             Expression::Identifier(identifier) => todo!(),
             Expression::Literal(literal) => todo!(),
             Expression::FunctionCall(function_id, args) => todo!(),
@@ -38,6 +36,7 @@ impl Typed for Statement {
             Statement::While{cond, body} => todo!(),
             Statement::Break => todo!(),
             Statement::Continue => todo!(),
+            Statement::Assignment { value, identifier } => todo!(),
             Statement::Empty => todo!(),
         }
     }

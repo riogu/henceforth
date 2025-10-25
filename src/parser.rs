@@ -34,16 +34,15 @@ impl<'a> Parser<'a> {
     }
 }
 
+// Declarations
 impl<'a> Parser<'a> {
-    // declarations
-
 
     // <function_decl> ::= "fn" <identifier> ":" <signature> "{" <block_scope> "}"
     fn function_declaration(&mut self) -> FuncId {
         let (name, token) = self.expect_identifier();
-        let (param_types, return_types) = self.signature();
+        let (param_types, return_types) = self.function_signature();
         let body = self.block_scope();
-        self.arena.push_function(FunctionDeclaration { name, param_types, return_types, body }, token)
+        self.arena.alloc_function(FunctionDeclaration { name, param_types, return_types, body }, token)
     }
     // <var_decl> ::= "let" <identifier> ":" <type> ";"
     fn variable_declaration(&mut self) -> VarId {
@@ -51,18 +50,30 @@ impl<'a> Parser<'a> {
         self.expect(TokenKind::Colon);
         let hfs_type = self.expect_type();
         self.expect(TokenKind::Comma);
-        self.arena.push_var(VarDeclaration { name , hfs_type }, token)
+        self.arena.alloc_var(VarDeclaration { name , hfs_type }, token)
     }
     // <signature> ::= "(" <type_list>? ")" "->" "(" <type_list>? ")"
-    fn signature(&mut self) -> (Vec<Type>, Vec<Type>) {
+    fn function_signature(&mut self) -> (Vec<Type>, Vec<Type>) {
         self.expect(TokenKind::Colon);
         let param_types = self.type_list();
-        self.expect(TokenKind::Minus); self.expect(TokenKind::Greater);
+
+        self.expect(TokenKind::Minus);
+        self.expect(TokenKind::Greater);
         let return_types = self.type_list();
+
         (param_types, return_types)
     }
     fn type_list(&mut self) -> Vec<Type> {
-        todo!()
+        self.expect(TokenKind::LeftParen);
+        let mut types = Vec::<Type>::new();
+        loop {
+            match self.tokens.next().expect("unexpected end of input") {
+                token if token.kind == TokenKind::RightParen => break,
+                token if token.is_type() => types.push(token.to_type()),
+                token @ _ => panic!("expected type, found {:?}", token.kind),
+            };
+        }
+        types
     }
 }
 
@@ -75,35 +86,33 @@ impl<'a> Parser<'a> {
             tokens: tokens.into_iter().peekable(),
             arena: AstArena::new(),
         };
+        let mut top_level = Vec::<TopLevelId>::new();
         while let Some(token) = parser.tokens.peek() {
             match &token.kind {
-                TokenKind::Let => TopLevelId::VariableDecl(parser.variable_declaration()),
-                TokenKind::Fn => TopLevelId::FunctionDecl(parser.function_declaration()),
+                TokenKind::Let => top_level.push(TopLevelId::VariableDecl(parser.variable_declaration())),
+                TokenKind::Fn  => top_level.push(TopLevelId::FunctionDecl(parser.function_declaration())),
                 _ => panic!("expected variable or function declaration"),
             };
         }
-        todo!()
+        top_level
     }
 
-    // <statement> ::= <if_stmt> | <stack_block> | <while_stmt> | <assignment>
-    //               | <return_stmt> | <break_stmt> | <continue_stmt> | ";"
+    // <statement> ::= <if_stmt> | <stack_block> | <while_stmt> | <return_stmt> 
+    //               | <break_stmt> | <continue_stmt> | <assignment_stmt> | ";" 
     fn statement(&mut self) -> StmtId {
         let token = self.tokens.next().expect("unexpected end of input while parsing statement");
-        let stmt = match token.kind {
+        match token.kind {
             TokenKind::If        => self.if_statement(),
             TokenKind::At        => self.stack_block(),
             TokenKind::LeftBrace => self.block_scope(),
             TokenKind::While     => self.while_statement(),
-            TokenKind::Return    => {
-                self.expect(TokenKind::Semicolon);
-                self.arena.push_stmt(Statement::Return, token)
-            }
-            TokenKind::Break     => self.arena.push_stmt(Statement::Break, token),
-            TokenKind::Continue  => self.arena.push_stmt(Statement::Continue, token),
-            TokenKind::Semicolon => self.arena.push_stmt(Statement::Empty, token),
+            TokenKind::Return    => { self.expect(TokenKind::Semicolon); self.arena.alloc_stmt(Statement::Return, token) }
+            TokenKind::Break     => self.arena.alloc_stmt(Statement::Break, token),
+            TokenKind::Continue  => self.arena.alloc_stmt(Statement::Continue, token),
+            TokenKind::MoveAssign | TokenKind::CopyAssign => self.assignment(),
+            TokenKind::Semicolon => self.arena.alloc_stmt(Statement::Empty, token),
             _ => panic!("expected statement"),
-        };
-        todo!()
+        }
     }
 
     // <if_stmt> ::= "if" <stack_block> "{" <block_scope> "}" <else_stmt>?
@@ -112,7 +121,7 @@ impl<'a> Parser<'a> {
         let cond = self.stack_block();
         let body = self.block_scope();
         let else_stmt = None;
-        self.arena.push_stmt(Statement::If { cond, body, else_stmt}, token)
+        self.arena.alloc_stmt(Statement::If { cond, body, else_stmt}, token)
     }
 
     // <while_stmt> ::= "while" <stack_block> "{" <scope_block> "}"
@@ -120,10 +129,10 @@ impl<'a> Parser<'a> {
         let token = self.expect(TokenKind::While);
         let cond = self.stack_block();
         let body = self.block_scope();
-        self.arena.push_stmt(Statement::While { cond, body }, token)
+        self.arena.alloc_stmt(Statement::While { cond, body }, token)
     }
 
-    // <stack_block> ::= "@" "(" <expression_list> ")"
+    // <stack_block> ::= "@" "(" <expression>* ")"
     fn stack_block(&mut self) -> StmtId {
         let token = self.expect(TokenKind::At);
         self.expect(TokenKind::LeftParen);
@@ -132,12 +141,12 @@ impl<'a> Parser<'a> {
 
         while let Some(token) = self.tokens.peek() {
             match &token.kind {
-                kind @ _ if kind.is_stack_operator() => self.operation(),
+                kind @ _ if kind.is_stack_operator() => self.stack_operation(),
                 _ => panic!("expected variable or function declaration"),
             };
         }
         self.expect(TokenKind::RightBrace);
-        self.arena.push_stmt(Statement::StackBlock(statements), token)
+        self.arena.alloc_stmt(Statement::StackBlock(statements), token)
     }
     // <scope_block> ::= (<var_decl> | <statement>)*
     fn block_scope(&mut self) -> StmtId {
@@ -153,13 +162,28 @@ impl<'a> Parser<'a> {
             };
         }
         self.expect(TokenKind::RightParen);
-        self.arena.push_stmt(Statement::BlockScope(top_level_ids), token)
+        self.arena.alloc_stmt(Statement::BlockScope(top_level_ids), token)
     }
 
-// <operation> ::= <binary_op> | <unary_op>
+// <stack_expression> ::= <stack_operation> | <identifier> | <literal> | <function_call>
+    fn stack_expression(&mut self) -> ExprId {
+        let kind = self.tokens.peek().expect("unexpected end of input while parsing statement").kind.clone();
+        match kind {
+            kind if kind.is_stack_operator() => self.stack_operation(),
+            TokenKind::Identifier(_) => {
+                let (name, token) = self.expect_identifier();
+                self.arena.push_expr(Expression::Identifier(Identifier::Unresolved(name)), token)
+            }
+            TokenKind::Literal(lit) => self.arena.push_expr(Expression::Literal(lit), self.tokens.next().unwrap()),
+            TokenKind::LeftParen    => self.function_call(),
+            _ => panic!("expected expression")
+        }
+
+    }
+// <stack_operation> ::= <binary_op> | <unary_op>
 // <binary_op> ::= "+" | "-" | "*" | "/" | ">" | "<" | "==" | "&&" | "||"
 // <unary_op>  ::= "!" | "~"
-    fn operation(&mut self) -> ExprId {
+    fn stack_operation(&mut self) -> ExprId {
         match self.tokens.next().expect("unexpected end of input while parsing statement").kind {
             TokenKind::Plus => todo!(),
             TokenKind::Minus => todo!(),
@@ -178,5 +202,25 @@ impl<'a> Parser<'a> {
             _ => todo!(),
         }
         todo!()
+    }
+    fn function_call(&mut self) -> ExprId {
+        todo!()
+    }
+
+    // <assignment> ::= "&=" <identifier> ";"
+    //                | ":=" <identifier> ";"
+    fn assignment(&mut self) -> StmtId {
+        let assign_tkn = self.tokens.next().unwrap();
+
+        let (name, token) = self.expect_identifier();
+
+        let value = if assign_tkn.kind == TokenKind::MoveAssign {
+            self.arena.pop_or_error(&format!("tried moving into '{}' from empty stack", name))
+        } else {
+            self.arena.last_or_error(&format!("tried copying into '{}' from empty stack", name))
+        };
+
+        let identifier = self.arena.push_expr(Expression::Identifier(Identifier::Unresolved(name)), token);
+        self.arena.alloc_stmt(Statement::Assignment{value, identifier}, assign_tkn)
     }
 }

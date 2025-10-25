@@ -1,4 +1,5 @@
 use crate::token::*;
+
 // ============================================================================
 // Type-safe ID types
 // ============================================================================
@@ -14,6 +15,7 @@ use crate::token::*;
 
 #[derive(Debug)]
 pub enum Identifier {
+    Unresolved(String),
     Var(VarId),
     Function(FuncId),
 }
@@ -33,8 +35,6 @@ pub enum Operation {
 #[derive(Debug)]
 pub enum Expression {
     Operation(Operation),
-    CopyAssignment(ExprId, ExprId),
-    MoveAssignment(ExprId, ExprId),
     Identifier(Identifier),
     Literal(Literal),
     FunctionCall(FuncId, Vec<ExprId>),
@@ -90,10 +90,34 @@ pub enum Statement {
     Break,
     Continue,
     Empty,
+    Assignment { value: ExprId, identifier: ExprId },
 }
 
 
-// ============================================================================
+// -----------------------------------------------------------
+// Types
+#[derive(Debug)]
+pub enum Type {
+    Int,
+    String,
+    Bool,
+    Float,
+    // Struct(Identifier),
+}
+impl Type {
+    pub fn to_token(&self) -> TokenKind {
+        match self {
+            Type::Int => TokenKind::Int,
+            Type::String => TokenKind::String,
+            Type::Bool => TokenKind::Bool,
+            Type::Float => TokenKind::Float,
+        }
+    }
+}
+pub trait Typed { fn get_type(&self) -> Type; }
+pub trait Analyze { fn analyze(&self); }
+
+
 
 // ============================================================================
 // Arena storage with token tracking
@@ -111,37 +135,51 @@ pub struct AstArena<'a> {
     stmt_tokens: Vec<Token<'a>>,
     var_tokens: Vec<Token<'a>>,
     function_tokens: Vec<Token<'a>>,
+
+    hfs_stack: Vec<ExprId>, // keeps track of the state of our stack
 }
 
+// had to move this here because i wanted to the arena's private members to be available to the parser
+// for better code structure (without making arena members public)
 impl<'a> AstArena<'a> {
     pub fn new() -> Self {
         Self::default()
     }
 
-    // Allocation methods (now take tokens separately)
-    pub fn push_expr(&mut self, expr: Expression, token: Token<'a>) -> ExprId {
+    // Stack methods (manage the hfs stack for operations)
+    pub fn pop_or_error(&mut self, msg: &str) -> ExprId { 
+        // should start using our own error structs instead
+        self.hfs_stack.pop().unwrap_or_else(|| panic!("{}", msg))
+    }
+    pub fn last_or_error(&mut self, msg: &str) -> ExprId { 
+        // should start using our own error structs instead
+        *self.hfs_stack.last().unwrap_or_else(|| panic!("{}", msg))
+    }
+    pub fn push_expr(&mut self, expr: Expression, token: Token<'a>)-> ExprId {
+        // allocates AND pushes to the stack 
         let id = ExprId(self.exprs.len());
         self.exprs.push(expr);
         self.expr_tokens.push(token);
+        self.hfs_stack.push(id);
         id
     }
 
-    pub fn push_stmt(&mut self, stmt: Statement, token: Token<'a>) -> StmtId {
+    // Allocation methods 
+    pub fn alloc_stmt(&mut self, stmt: Statement, token: Token<'a>) -> StmtId {
         let id = StmtId(self.stmts.len());
         self.stmts.push(stmt);
         self.stmt_tokens.push(token);
         id
     }
 
-
-    pub fn push_var(&mut self, var: VarDeclaration, token: Token<'a>) -> VarId {
+    pub fn alloc_var(&mut self, var: VarDeclaration, token: Token<'a>) -> VarId {
         let id = VarId(self.vars.len());
         self.vars.push(var);
         self.var_tokens.push(token);
         id
     }
 
-    pub fn push_function(&mut self, func: FunctionDeclaration, token: Token<'a>) -> FuncId {
+    pub fn alloc_function(&mut self, func: FunctionDeclaration, token: Token<'a>) -> FuncId {
         let id = FuncId(self.functions.len());
         self.functions.push(func);
         self.function_tokens.push(token);
@@ -227,25 +265,3 @@ impl From<FuncId> for NodeId {
         NodeId::Function(id)
     }
 }
-// -----------------------------------------------------------
-// Types
-#[derive(Debug)]
-pub enum Type {
-    Int,
-    String,
-    Bool,
-    Float,
-    // Struct(Identifier),
-}
-impl Type {
-    pub fn to_token(&self) -> TokenKind {
-        match self {
-            Type::Int => TokenKind::Int,
-            Type::String => TokenKind::String,
-            Type::Bool => TokenKind::Bool,
-            Type::Float => TokenKind::Float,
-        }
-    }
-}
-pub trait Typed { fn get_type(&self) -> Type; }
-pub trait Analyze { fn analyze(&self); }

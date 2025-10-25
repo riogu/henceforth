@@ -1,12 +1,14 @@
 ## Code examples
 ```c
 // Calculate factorial using stack operations
-fn factorial: (i32) -> (i32) {
-    let n: i32;
+fn factorial: (i32 i32 i32) -> (i32) {
+    let n: (i32 i32 i32);
     let result: i32;
-    
-    &= n;  // pop stack and assign to n
-    @(1) := result;  // copy top of stack to result
+    &= n.0;  // pop stack and assign to n
+    &= n.1;  // pop stack and assign to n
+    &= n.2;  // pop stack and assign to n
+    @(n); // would put all of n on the stack?
+    @((...)pop); // this would pop... i have no idea lol
     
     while @(n 1 >) {
         @(result n *) &= result;  // pop and assign

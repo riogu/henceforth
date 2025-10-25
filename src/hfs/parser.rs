@@ -1,5 +1,5 @@
-use crate::ast_node::*;
-use crate::token::*;
+use crate::hfs::ast_node::*;
+use crate::hfs::token::*;
 
 use std::iter::Peekable;
 use std::vec::IntoIter;
@@ -245,13 +245,17 @@ impl<'a> Parser<'a> {
     fn tuple_expression(&mut self) -> ExprId {
         let mut expressions = Vec::<ExprId>::new();
         let token = self.expect(TokenKind::LeftParen);
+        let variadic = self.tokens.peek().unwrap().kind == TokenKind::DotDotDot;
+        if variadic { // not sure what to do with this in the parsing step... ill just add a boolean
+            self.tokens.next();
+        };
         loop {
             match self.tokens.next().expect("unexpected end of input") {
                 token if token.kind == TokenKind::RightParen => break,
                 _ => expressions.push(self.stack_expression()),
             };
         }
-        self.arena.push_expr(Expression::Tuple(expressions), token)
+        self.arena.push_expr(Expression::Tuple{expressions, variadic}, token)
     }
 
     // <assignment> ::= "&=" <identifier> ";"

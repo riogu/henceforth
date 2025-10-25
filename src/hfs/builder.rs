@@ -1,6 +1,6 @@
 use crate::{
-    ast_node::Type,
-    token::{Literal, TokenKind},
+    hfs::Type,
+    hfs::token::{Literal, TokenKind},
 };
 
 pub enum Operation {

@@ -1,19 +1,22 @@
 #![allow(unused)]
 
-pub mod ast_node;
-pub mod builder;
-pub mod lexer;
-pub mod parser;
-pub mod semantic_analysis;
-pub mod token;
-pub mod types;
+mod hfs {
+    pub mod ast_node;
+    pub mod builder;
+    pub mod lexer;
+    pub mod parser;
+    pub mod semantic_analysis;
+    pub mod token;
+    pub use lexer::*;
+    pub use parser::*;
+    pub use ast_node::*;
+    pub use builder::*;
+    pub use semantic_analysis::*;
+    pub use token::*;
+}
 
+use clap::{Parser, arg};
 use std::path::PathBuf;
-
-use clap::{arg, Parser};
-use lexer::Lexer;
-
-use crate::lexer::File;
 
 #[derive(Parser, Debug, Clone)]
 #[command(author, version, about)]
@@ -25,11 +28,10 @@ struct Args {
 
 fn main() {
     let args = Args::parse();
-    let file = File::new(&args.source);
+    let file = hfs::File::new(&args.source);
     println!("{:?}", args);
     println!("{:?}", file);
-
-    let lexer = Lexer::new();
+    let lexer = hfs::Lexer::new();
     let tokens = lexer.tokenize(&file);
-    let top_level_nodes =  parser::Parser::parse_tokens(tokens);
+    let top_level_nodes = hfs::Parser::parse_tokens(tokens);
 }

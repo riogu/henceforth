@@ -1,4 +1,4 @@
-use crate::token::*;
+use crate::hfs::token::*;
 
 // ============================================================================
 // Type-safe ID types
@@ -44,8 +44,8 @@ pub enum Expression {
     Operation(Operation),
     Identifier(Identifier),
     Literal(Literal),
-    FunctionCall{tuple: ExprId, identifier: Identifier},
-    Tuple(Vec<ExprId>)
+    FunctionCall{ tuple: ExprId, identifier: Identifier },
+    Tuple { expressions: Vec<ExprId>, variadic: bool }
 }
 
 

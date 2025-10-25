@@ -1,7 +1,7 @@
-use crate::token::Literal;
-use crate::token::SourceInfo;
-use crate::token::Token;
-use crate::token::TokenKind;
+use crate::hfs::token::Literal;
+use crate::hfs::token::SourceInfo;
+use crate::hfs::token::Token;
+use crate::hfs::token::TokenKind;
 use std::{fs, path::PathBuf};
 
 #[derive(Debug)]
@@ -213,8 +213,8 @@ mod tests {
     use std::rc::Rc;
 
     use crate::{
-        ast_node::Type,
-        builder::{
+        hfs::ast_node::Type,
+        hfs::builder::{
             ControlFlowOps, FunctionOps, LoopOps, Operation, StackOps, TokenSequence, VariableOps,
         },
     };

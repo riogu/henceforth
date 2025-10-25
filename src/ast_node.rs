@@ -121,6 +121,8 @@ pub struct FunctionDeclaration {
 #[derive(Debug)]
 pub enum Statement {
     If(IfStmt),
+    ElseIf(StmtId), // is an IfStmt
+    Else(StmtId), // is a BlockScope
     StackBlock(StackBlock),
     BlockScope(BlockScope),
     While(WhileStmt),
@@ -141,16 +143,14 @@ pub struct StackBlock {
 }
 
 #[derive(Debug)]
-pub enum ElseStmt {
-    ElseIf(StmtId),
-    Else(StmtId), // is a BlockScope
+pub enum ElseStmtId {
 }
 
 #[derive(Debug)]
 pub struct IfStmt {
     pub cond: StmtId, // is a StackBlock
     pub body: StmtId, // is a BlockScope
-    pub else_stmt: Option<ElseStmt>,
+    pub else_stmt: Option<StmtId>,
 }
 
 #[derive(Debug)]

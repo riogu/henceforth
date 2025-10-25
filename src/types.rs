@@ -39,6 +39,8 @@ impl Typed for Statement {
             Statement::Break => todo!(),
             Statement::Continue => todo!(),
             Statement::Empty => todo!(),
+            Statement::ElseIf(stmt_id) => todo!(),
+            Statement::Else(stmt_id) => todo!(),
         }
     }
 }

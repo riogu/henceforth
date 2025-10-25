@@ -1,4 +1,23 @@
 use crate::token::*;
+pub enum Type {
+    Int,
+    String,
+    Bool,
+    Float,
+    // Struct(Identifier),
+}
+impl Type {
+    pub fn to_token(&self) -> TokenKind {
+        match self {
+            Type::Int => TokenKind::Int,
+            Type::String => TokenKind::String,
+            Type::Bool => TokenKind::Bool,
+            Type::Float => TokenKind::Float,
+        }
+    }
+}
+pub trait Typed { fn get_type(&self) -> Type; }
+pub trait Analyze { fn analyze(&self); }
 // ============================================================================
 // Type-safe ID types
 // ============================================================================
@@ -147,80 +166,172 @@ impl AstArena {
         self.functions.push(func);
         id
     }
-
-    // Access methods
-    pub fn expr(&self, id: ExprId) -> &Expression {
-        &self.exprs[id.0]
+    // Expression builders
+    pub fn add(&mut self, left: ExprId, right: ExprId) -> ExprId {
+        self.alloc_expr(Expression::Operation(Operation::Add(left, right)))
+    }
+    
+    pub fn subtract(&mut self, left: ExprId, right: ExprId) -> ExprId {
+        self.alloc_expr(Expression::Operation(Operation::Subtract(left, right)))
+    }
+    
+    pub fn multiply(&mut self, left: ExprId, right: ExprId) -> ExprId {
+        self.alloc_expr(Expression::Operation(Operation::Multiply(left, right)))
+    }
+    
+    pub fn divide(&mut self, left: ExprId, right: ExprId) -> ExprId {
+        self.alloc_expr(Expression::Operation(Operation::Divide(left, right)))
+    }
+    
+    pub fn negate(&mut self, expr: ExprId) -> ExprId {
+        self.alloc_expr(Expression::Operation(Operation::Negate(expr)))
+    }
+    
+    pub fn or(&mut self, left: ExprId, right: ExprId) -> ExprId {
+        self.alloc_expr(Expression::Operation(Operation::Or(left, right)))
+    }
+    
+    pub fn and(&mut self, left: ExprId, right: ExprId) -> ExprId {
+        self.alloc_expr(Expression::Operation(Operation::And(left, right)))
+    }
+    
+    pub fn not(&mut self, expr: ExprId) -> ExprId {
+        self.alloc_expr(Expression::Operation(Operation::Not(expr)))
+    }
+    
+    pub fn assignment(&mut self, target: ExprId, value: ExprId) -> ExprId {
+        self.alloc_expr(Expression::Assignment(target, value))
+    }
+    
+    pub fn identifier(&mut self, id: Identifier) -> ExprId {
+        self.alloc_expr(Expression::Identifier(id))
+    }
+    
+    pub fn literal(&mut self, lit: Literal) -> ExprId {
+        self.alloc_expr(Expression::Literal(lit))
+    }
+    
+    pub fn function_call(&mut self, func: FunctionId, args: Vec<ExprId>) -> ExprId {
+        self.alloc_expr(Expression::FunctionCall(func, args))
     }
 
-    pub fn expr_mut(&mut self, id: ExprId) -> &mut Expression {
-        &mut self.exprs[id.0]
+    // Statement builders
+    pub fn if_stmt(&mut self, cond: ExprId, body: ScopeId, else_stmt: Option<ElseStmt>) -> StmtId {
+        self.alloc_stmt(Statement::If(IfStmt { cond, body, else_stmt }))
+    }
+    
+    pub fn stack_block_stmt(&mut self, exprs: Vec<ExprId>) -> StmtId {
+        self.alloc_stmt(Statement::StackBlock(exprs))
+    }
+    
+    pub fn block_scope_stmt(&mut self, scope: ScopeId) -> StmtId {
+        self.alloc_stmt(Statement::BlockScope(scope))
+    }
+    
+    pub fn while_stmt(&mut self, cond: ExprId, body: Vec<StmtId>) -> StmtId {
+        self.alloc_stmt(Statement::While(cond, body))
+    }
+    
+    pub fn return_stmt(&mut self) -> StmtId {
+        self.alloc_stmt(Statement::Return)
+    }
+    
+    pub fn break_stmt(&mut self) -> StmtId {
+        self.alloc_stmt(Statement::Break)
+    }
+    
+    pub fn continue_stmt(&mut self) -> StmtId {
+        self.alloc_stmt(Statement::Continue)
+    }
+    
+    pub fn empty_stmt(&mut self) -> StmtId {
+        self.alloc_stmt(Statement::Empty)
     }
 
-    pub fn stmt(&self, id: StmtId) -> &Statement {
-        &self.stmts[id.0]
+    // Scope/Block builders
+    pub fn block_scope(&mut self, nodes: Vec<TopLevelNode>) -> ScopeId {
+        self.alloc_block_scope(BlockScope { nodes })
     }
 
-    pub fn stmt_mut(&mut self, id: StmtId) -> &mut Statement {
-        &mut self.stmts[id.0]
+    // Declaration builders
+    pub fn var_declaration(&mut self, name: String) -> VarId {
+        self.alloc_var(VarDeclaration { name })
     }
-
-    pub fn stack_block(&self, id: ScopeId) -> &BlockScope {
-        &self.block_scopes[id.0]
-    }
-
-    pub fn stack_block_mut(&mut self, id: ScopeId) -> &mut BlockScope {
-        &mut self.block_scopes[id.0]
-    }
-    pub fn block_scope(&self, id: ScopeId) -> &BlockScope {
-        &self.block_scopes[id.0]
-    }
-
-    pub fn block_scope_mut(&mut self, id: ScopeId) -> &mut BlockScope {
-        &mut self.block_scopes[id.0]
-    }
-
-    pub fn var(&self, id: VarId) -> &VarDeclaration {
-        &self.vars[id.0]
-    }
-
-    pub fn var_mut(&mut self, id: VarId) -> &mut VarDeclaration {
-        &mut self.vars[id.0]
-    }
-
-    pub fn function(&self, id: FunctionId) -> &FunctionDeclaration {
-        &self.functions[id.0]
-    }
-
-    pub fn function_mut(&mut self, id: FunctionId) -> &mut FunctionDeclaration {
-        &mut self.functions[id.0]
+    
+    pub fn function_declaration(&mut self, name: String, params: Vec<VarId>, body: ScopeId) -> FunctionId {
+        self.alloc_function(FunctionDeclaration { name, params, body })
     }
 }
+macro_rules! push {
+    // Expression::Operation variants
+    (Expression::Operation(Operation::Add($left:expr, $right:expr))) => {
+        self.arena.add($left, $right)
+    };
+    (Expression::Operation(Operation::Subtract($left:expr, $right:expr))) => {
+        self.arena.subtract($left, $right)
+    };
+    (Expression::Operation(Operation::Multiply($left:expr, $right:expr))) => {
+        self.arena.multiply($left, $right)
+    };
+    (Expression::Operation(Operation::Divide($left:expr, $right:expr))) => {
+        self.arena.divide($left, $right)
+    };
+    (Expression::Operation(Operation::Negate($expr:expr))) => {
+        self.arena.negate($expr)
+    };
+    (Expression::Operation(Operation::Or($left:expr, $right:expr))) => {
+        self.arena.or($left, $right)
+    };
+    (Expression::Operation(Operation::And($left:expr, $right:expr))) => {
+        self.arena.and($left, $right)
+    };
+    (Expression::Operation(Operation::Not($expr:expr))) => {
+        self.arena.not($expr)
+    };
 
-pub enum Type {
-    Int,
-    String,
-    Bool,
-    Float,
-    // Struct(Identifier),
-}
+    // Other Expression variants
+    (Expression::Assignment($target:expr, $value:expr)) => {
+        self.arena.assignment($target, $value)
+    };
+    (Expression::Identifier($id:expr)) => {
+        self.arena.identifier($id)
+    };
+    (Expression::Literal($lit:expr)) => {
+        self.arena.literal($lit)
+    };
+    (Expression::FunctionCall($func:expr, $args:expr)) => {
+        self.arena.function_call($func, $args)
+    };
+    (VarDeclaration($name:expr)) => {
+        self.arena.var_declaration($name)
+    };
+    (FunctionDeclaration($name:expr, $params:expr, $body:expr)) => {
+        self.arena.function_declaration($name, $params, $body)
+    };
 
-impl Type {
-    pub fn to_token(&self) -> TokenKind {
-        match self {
-            Type::Int => TokenKind::Int,
-            Type::String => TokenKind::String,
-            Type::Bool => TokenKind::Bool,
-            Type::Float => TokenKind::Float,
-        }
-    }
+    // Statement variants
+    (Statement::If($cond:expr, $body:expr, $else_stmt:expr)) => {
+        self.arena.if_stmt($cond, $body, $else_stmt)
+    };
+    (Statement::StackBlock($exprs:expr)) => {
+        self.arena.stack_block_stmt($exprs)
+    };
+    (Statement::BlockScope($scope:expr)) => {
+        self.arena.block_scope_stmt($scope)
+    };
+    (Statement::While($cond:expr, $body:expr)) => {
+        self.arena.while_stmt($cond, $body)
+    };
+    (Statement::Return) => {
+        self.arena.return_stmt()
+    };
+    (Statement::Break) => {
+        self.arena.break_stmt()
+    };
+    (Statement::Continue) => {
+        self.arena.continue_stmt()
+    };
+    (Statement::Empty) => {
+        self.arena.empty_stmt()
+    };
 }
-
-pub trait Typed {
-    fn get_type(&self) -> Type;
-}
-
-pub trait Analyze {
-    fn analyze(&self);
-}
-use std::collections::HashMap;

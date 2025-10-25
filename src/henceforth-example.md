@@ -1,5 +1,5 @@
 ## Code examples
-```cpp
+```c
 // Calculate factorial using stack operations
 fn factorial: (i32) -> (i32) {
     let n: i32;

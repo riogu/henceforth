@@ -67,7 +67,6 @@ pub enum TokenKind {
     And, // && or 'and'
     Or,  // || or 'or'
     Not, // ! or 'not'
-
     // Assignment
     CopyAssign, // &=
     MoveAssign, // :=
@@ -89,7 +88,6 @@ pub enum TokenKind {
 
     // Special
     Newline, // if significant whitespace
-    Eof,
 }
 
 impl From<Operation> for TokenKind {
@@ -166,7 +164,6 @@ impl fmt::Display for TokenKind {
             TokenKind::Colon => write!(f, ":"),
             TokenKind::Arrow => write!(f, "->"),
             TokenKind::Newline => write!(f, "\\n"),
-            TokenKind::Eof => write!(f, "EOF"),
             TokenKind::CopyAssign => write!(f, ":="),
             TokenKind::MoveAssign => write!(f, "&="),
             TokenKind::At => write!(f, "@"),
@@ -211,5 +208,74 @@ pub struct Token<'a> {
 impl<'a> Token<'a> {
     pub fn new(kind: TokenKind, source_info: SourceInfo<'a>) -> Self {
         Self { kind, source_info }
+    }
+    pub fn is_keyword(&self) -> bool {
+        match self.kind {
+            TokenKind::Let
+            | TokenKind::Fn
+            | TokenKind::If
+            | TokenKind::Else
+            | TokenKind::Elif
+            | TokenKind::While
+            | TokenKind::Break
+            | TokenKind::Continue
+            | TokenKind::Return => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_stack_operator(&self) -> bool {
+        match self.kind {
+            TokenKind::Plus
+            | TokenKind::Minus
+            | TokenKind::Star
+            | TokenKind::Slash
+            | TokenKind::Percent
+            | TokenKind::Equal
+            | TokenKind::NotEqual
+            | TokenKind::Less
+            | TokenKind::LessEqual
+            | TokenKind::Greater
+            | TokenKind::GreaterEqual
+            | TokenKind::And
+            | TokenKind::Or
+            | TokenKind::Not => true,
+            _ => false,
+        }
+    }
+}
+impl TokenKind {
+    pub fn is_keyword(&self) -> bool {
+        match self {
+            TokenKind::Let
+            | TokenKind::Fn
+            | TokenKind::If
+            | TokenKind::Else
+            | TokenKind::Elif
+            | TokenKind::While
+            | TokenKind::Break
+            | TokenKind::Continue
+            | TokenKind::Return => true,
+            _ => false,
+        }
+    }
+    pub fn is_stack_operator(&self) -> bool {
+        match self {
+            TokenKind::Plus
+            | TokenKind::Minus
+            | TokenKind::Star
+            | TokenKind::Slash
+            | TokenKind::Percent
+            | TokenKind::Equal
+            | TokenKind::NotEqual
+            | TokenKind::Less
+            | TokenKind::LessEqual
+            | TokenKind::Greater
+            | TokenKind::GreaterEqual
+            | TokenKind::And
+            | TokenKind::Or
+            | TokenKind::Not => true,
+            _ => false,
+        }
     }
 }

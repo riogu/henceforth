@@ -2,7 +2,7 @@
 
 <top_level_node> ::= <function_decl>
 
-<function_decl> ::= "fn" <identifier> ":" <signature> "{" <block_scope> "}"
+<function_decl> ::= "fn" <identifier> ":" <signature> "{" <scope_block> "}"
 
 <signature> ::= "(" <type_list>? ")" "->" "(" <type_list>? ")"
 
@@ -10,10 +10,7 @@
 
 <type> ::= "i32"
 
-<block_scope> ::= <scope_item>*
-
-<scope_item> ::= <var_decl>
-               | <statement>
+<scope_block> ::= (<var_decl> | <statement>)*
 
 <var_decl> ::= "let" <identifier> ":" <type> ";"
 
@@ -26,12 +23,12 @@
               | <continue_stmt>
               | ";"
 
-<if_stmt> ::= "if" <stack_block> "{" <block_scope> "}" <else_stmt>?
+<if_stmt> ::= "if" <stack_block> "{" <scope_block> "}" <else_stmt>?
 
-<else_stmt> ::= "else" "if" <stack_block> "{" <block_scope> "}" <else_stmt>?
-              | "else" "{" <block_scope> "}"
+<else_stmt> ::= "else" "if" <stack_block> "{" <scope_block> "}" <else_stmt>?
+              | "else" "{" <scope_block> "}"
 
-<while_stmt> ::= "while" <stack_block> "{" <block_scope> "}"
+<while_stmt> ::= "while" <stack_block> "{" <scope_block> "}"
 
 <stack_block> ::= "@" "(" <expression_list> ")"
 

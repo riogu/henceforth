@@ -7,6 +7,7 @@ pub mod parser;
 pub mod semantic_analysis;
 pub mod token;
 pub mod types;
+pub mod arena;
 
 use std::path::PathBuf;
 

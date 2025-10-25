@@ -32,6 +32,6 @@ fn main() {
     println!("{:?}", args);
     println!("{:?}", file);
     let tokens = hfs::Lexer::tokenize(&file);
-    let top_level_nodes = hfs::Parser::parse_tokens(tokens);
-    hfs::Analyzer::analyze(top_level_nodes);
+    let (top_level_nodes, ast_arena) = hfs::Parser::parse_tokens(tokens);
+    hfs::Analyzer::analyze(&top_level_nodes, file.path.to_str().unwrap().to_string(), ast_arena);
 }

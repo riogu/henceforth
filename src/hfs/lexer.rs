@@ -6,8 +6,8 @@ use std::{fs, path::PathBuf};
 
 #[derive(Debug)]
 pub struct File<'a> {
-    contents: Vec<String>,
-    path: &'a PathBuf,
+    pub contents: Vec<String>,
+    pub path: &'a PathBuf,
 }
 
 impl<'a> File<'a> {

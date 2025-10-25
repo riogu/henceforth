@@ -36,105 +36,84 @@ impl ScopeStack {
         }
     }
 }
-pub struct Analyzer {
-    top_level_nodes: Vec<TopLevelId>,
+pub struct Analyzer<'a> {
     scope_stack: ScopeStack,
+    arena: AstArena<'a>,
 }
-impl Analyzer {
-    pub fn new(top_level_nodes: Vec<TopLevelId>, file_name: String) -> Analyzer {
-        Analyzer { top_level_nodes, scope_stack: ScopeStack::new(file_name) }
+impl<'a> Analyzer<'a> {
+    pub fn new(file_name: String, arena: AstArena<'a>) -> Analyzer<'a> {
+        Analyzer { scope_stack: ScopeStack::new(file_name), arena}
     }
-    pub fn analyze(top_level_nodes: Vec<TopLevelId>) {
-        todo!()
-    }
-}
-
-
-impl Analyze for Identifier {
-    fn analyze(&self) {
-        match self {
-            Identifier::Unresolved(s) => todo!("Resolve: {}", s),
-            Identifier::Variable(_) => {},
-            Identifier::Function(_) => {},
+    pub fn analyze(top_level_nodes: &[TopLevelId], file_name: String, arena: AstArena<'a>) {
+        let mut analyzer = Analyzer::new(file_name, arena);
+        for node in top_level_nodes {
+            analyzer.analyze_top_level(*node);
         }
     }
 }
 
-impl Analyze for Operation {
-    fn analyze(&self) {
-        match self {
-            Operation::Add(l, r) | Operation::Sub(l, r) | Operation::Mul(l, r) |
-            Operation::Div(l, r) | Operation::Mod(l, r) | Operation::Equal(l, r) |
-            Operation::NotEqual(l, r) | Operation::Less(l, r) | Operation::LessEqual(l, r) |
-            Operation::Greater(l, r) | Operation::GreaterEqual(l, r) | Operation::Or(l, r) |
-            Operation::And(l, r) => {
-                // TODO: analyze l and r
-            }
-            Operation::Negate(e) | Operation::Not(e) => {
-                // TODO: analyze e
-            }
+impl<'a> Analyzer<'a> {
+
+    fn analyze_top_level(&mut self, node: TopLevelId) {
+        match node {
+            TopLevelId::VariableDecl(var_id) => self.analyze_var_decl(var_id),
+            TopLevelId::FunctionDecl(func_id) => self.analyze_func_decl(func_id),
+            TopLevelId::Statement(stmt_id) => self.analyze_stmt(stmt_id),
         }
     }
-}
 
-impl Analyze for Expression {
-    fn analyze(&self) {
-        match self {
-            Expression::Operation(op) => op.analyze(),
-            Expression::Identifier(id) => id.analyze(),
-            Expression::Literal(_) => {},
-            Expression::FunctionCall { tuple, identifier } => {
-                identifier.analyze();
-                // TODO: analyze tuple
-            }
-            Expression::Tuple { expressions, variadic } => {
-                // TODO: analyze exprs
-            }
+    fn analyze_stmt(&mut self, stmt_id: StmtId) {
+        let stmt = self.arena.get_stmt(stmt_id);
+        match stmt {
+            Statement::If { cond, body, else_stmt } => todo!(),
+            Statement::While { cond, body } => todo!(),
+            Statement::StackBlock(_) => todo!(),
+            Statement::BlockScope(_) => todo!(),
+            Statement::Return => todo!(),
+            Statement::Break => todo!(),
+            Statement::Continue => todo!(),
+            Statement::Empty => {}
+            Statement::Assignment { value, identifier } => todo!(),
         }
     }
-}
 
-impl Analyze for VarDeclaration {
-    fn analyze(&self) {
+    fn analyze_expr(&mut self, expr_id: ExprId) {
+        let expr = self.arena.get_expr(expr_id);
+        match expr {
+            Expression::Operation(_) => todo!(),
+            Expression::Identifier(_) => todo!(),
+            Expression::Literal(_) => {}
+            Expression::FunctionCall { tuple, identifier } => todo!(),
+            Expression::Tuple { expressions, variadic } => todo!(),
+        }
+    }
+
+    fn analyze_var_decl(&mut self, var_id: VarId) {
+        let var = self.arena.get_var(var_id);
         // TODO: validate type
     }
-}
 
-impl Analyze for FunctionDeclaration {
-    fn analyze(&self) {
+    fn analyze_func_decl(&mut self, func_id: FuncId) {
+        let func = self.arena.get_func(func_id);
         // TODO: validate param/return types and analyze body
     }
-}
 
-impl Analyze for Statement {
-    fn analyze(&self) {
-        match self {
-            Statement::If { cond, body, else_stmt } => {
-                // TODO: analyze cond, body, else_stmt
-            }
-            Statement::While { cond, body } => {
-                // TODO: analyze cond, body
-            }
-            Statement::StackBlock(exprs) => {
-                // TODO: analyze exprs
-            }
-            Statement::BlockScope(items) => {
-                // TODO: analyze items
-            }
-            Statement::Return | Statement::Break | Statement::Continue | Statement::Empty => {},
-            Statement::Assignment { value, identifier } => {
-                // TODO: analyze value, identifier
-            }
+    fn analyze_identifier(&mut self, id: &Identifier) {
+        match id {
+            Identifier::Unresolved(name) => todo!(),
+            Identifier::Variable(_) => {}
+            Identifier::Function(_) => {}
         }
     }
-}
 
-impl Analyze for TopLevelId {
-    fn analyze(&self) {
-        match self {
-            TopLevelId::VariableDecl(_) => todo!("Analyze var decl"),
-            TopLevelId::FunctionDecl(_) => todo!("Analyze func decl"),
-            TopLevelId::Statement(_) => todo!("Analyze statement"),
+    fn analyze_operation(&mut self, op: &Operation) {
+        match op {
+            Operation::Add(l, r) | Operation::Sub(l, r) | Operation::Mul(l, r)
+            | Operation::Div(l, r) | Operation::Mod(l, r) | Operation::Equal(l, r)
+            | Operation::NotEqual(l, r) | Operation::Less(l, r) | Operation::LessEqual(l, r)
+            | Operation::Greater(l, r) | Operation::GreaterEqual(l, r) | Operation::Or(l, r)
+            | Operation::And(l, r) => todo!(),
+            Operation::Negate(_) | Operation::Not(_) => todo!(),
         }
     }
 }

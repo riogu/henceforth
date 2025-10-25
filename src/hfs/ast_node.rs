@@ -49,7 +49,7 @@ pub enum Expression {
 }
 
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TopLevelId {
     VariableDecl(VarId),
     FunctionDecl(FuncId),
@@ -125,9 +125,6 @@ impl Type {
     }
 }
 pub trait Typed { fn get_type(&self) -> Type; }
-pub trait Analyze { fn analyze(&self); }
-
-
 
 // ============================================================================
 // Arena storage with token tracking
@@ -216,7 +213,7 @@ impl<'a> AstArena<'a> {
         &self.vars[id.0]
     }
 
-    pub fn get_function(&self, id: FuncId) -> &FunctionDeclaration {
+    pub fn get_func(&self, id: FuncId) -> &FunctionDeclaration {
         &self.functions[id.0]
     }
 

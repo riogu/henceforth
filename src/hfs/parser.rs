@@ -81,7 +81,7 @@ impl<'a> Parser<'a> {
 // RD Parser for Henceforth (check 'henceforth-bnf.md')
 impl<'a> Parser<'a> {
     // <top_level_node> ::= <var_decl> | <function_decl> | <statement>
-    #[must_use] pub fn parse_tokens(tokens: Vec<Token>) -> Vec<TopLevelId> {
+    #[must_use] pub fn parse_tokens(tokens: Vec<Token>) -> (Vec<TopLevelId>, AstArena) {
         let mut parser = Parser {
             tokens: tokens.into_iter().peekable(),
             arena: AstArena::new(),
@@ -94,7 +94,7 @@ impl<'a> Parser<'a> {
                 _ => panic!("expected variable or function declaration"),
             };
         }
-        top_level
+        (top_level, parser.arena)
     }
 
     // <statement> ::= <if_stmt> | <stack_block> | <while_stmt> | <return_stmt> 

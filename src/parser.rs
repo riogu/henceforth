@@ -25,28 +25,52 @@ impl<'a> Parser<'a> {
             _ => panic!("expected identifier, got {:?}", token.kind),
         }
     }
+    fn expect_type(&mut self) -> Type {
+        let token = self.tokens.next().expect("unexpected end of input");
+        match &token.kind {
+            kind if kind.is_type() => kind.to_type(),
+            _ => panic!("expected type, got {:?}", token.kind),
+        }
+    }
 }
 
 impl<'a> Parser<'a> {
-
     // declarations
+
+
+    // <function_decl> ::= "fn" <identifier> ":" <signature> "{" <block_scope> "}"
     fn function_declaration(&mut self) -> FuncId {
-        todo!()
+        let (name, token) = self.expect_identifier();
+        let (param_types, return_types) = self.signature();
+        let body = self.block_scope();
+        self.arena.push_function(FunctionDeclaration { name, param_types, return_types, body }, token)
     }
+    // <var_decl> ::= "let" <identifier> ":" <type> ";"
     fn variable_declaration(&mut self) -> VarId {
         let (name, token) = self.expect_identifier();
         self.expect(TokenKind::Colon);
-        let type_token = self.expect_identifier();
+        let hfs_type = self.expect_type();
         self.expect(TokenKind::Comma);
-        self.arena.push_var(VarDeclaration { name }, token)
+        self.arena.push_var(VarDeclaration { name , hfs_type }, token)
+    }
+    // <signature> ::= "(" <type_list>? ")" "->" "(" <type_list>? ")"
+    fn signature(&mut self) -> (Vec<Type>, Vec<Type>) {
+        self.expect(TokenKind::Colon);
+        let param_types = self.type_list();
+        self.expect(TokenKind::Minus); self.expect(TokenKind::Greater);
+        let return_types = self.type_list();
+        (param_types, return_types)
+    }
+    fn type_list(&mut self) -> Vec<Type> {
+        todo!()
     }
 }
 
 
+// RD Parser for Henceforth (check 'henceforth-bnf.md')
 impl<'a> Parser<'a> {
-    // RD Parser for Henceforth (check 'henceforth-bnf.md')
-    #[must_use]
-    pub fn parse_tokens(tokens: Vec<Token>) -> Vec<TopLevelId> {
+    // <top_level_node> ::= <var_decl> | <function_decl> | <statement>
+    #[must_use] pub fn parse_tokens(tokens: Vec<Token>) -> Vec<TopLevelId> {
         let mut parser = Parser {
             tokens: tokens.into_iter().peekable(),
             arena: AstArena::new(),
@@ -131,7 +155,11 @@ impl<'a> Parser<'a> {
         self.expect(TokenKind::RightParen);
         self.arena.push_stmt(Statement::BlockScope(top_level_ids), token)
     }
-    fn operation(&mut self) -> ExprId{
+
+// <operation> ::= <binary_op> | <unary_op>
+// <binary_op> ::= "+" | "-" | "*" | "/" | ">" | "<" | "==" | "&&" | "||"
+// <unary_op>  ::= "!" | "~"
+    fn operation(&mut self) -> ExprId {
         match self.tokens.next().expect("unexpected end of input while parsing statement").kind {
             TokenKind::Plus => todo!(),
             TokenKind::Minus => todo!(),

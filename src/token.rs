@@ -177,7 +177,6 @@ impl fmt::Display for TokenKind {
     }
 }
 
-
 #[derive(Debug)]
 pub struct SourceInfo<'a> {
     line_number: usize,
@@ -211,6 +210,25 @@ pub struct Token<'a> {
 impl<'a> Token<'a> {
     pub fn new(kind: TokenKind, source_info: SourceInfo<'a>) -> Self {
         Self { kind, source_info }
+    }
+
+    pub fn to_type(&self) -> Type {
+        match self.kind {
+            TokenKind::Int => Type::Int,
+            TokenKind::String => Type::String,
+            TokenKind::Bool => Type::Bool,
+            TokenKind::Float => Type::Float,
+            TokenKind::Identifier(_) => {
+                panic!("[internal hfs error]: this is not how you convert identifiers to types")
+            }
+            _ => panic!("[internal hfs error]: expected token that has a type, got {:?}", self.kind),
+        }
+    }
+    pub fn is_type(&self) -> bool {
+        match self.kind {
+            TokenKind::Int | TokenKind::String | TokenKind::Bool | TokenKind::Float => true,
+            _ => false,
+        }
     }
     pub fn is_keyword(&self) -> bool {
         match self.kind {
@@ -248,6 +266,24 @@ impl<'a> Token<'a> {
     }
 }
 impl TokenKind {
+    pub fn to_type(&self) -> Type {
+        match self {
+            TokenKind::Int => Type::Int,
+            TokenKind::String => Type::String,
+            TokenKind::Bool => Type::Bool,
+            TokenKind::Float => Type::Float,
+            TokenKind::Identifier(_) => {
+                panic!("[internal hfs error]: this is not how you convert identifiers to types")
+            }
+            _ => panic!("[internal hfs error]: expected token that has a type, got {:?}", self),
+        }
+    }
+    pub fn is_type(&self) -> bool {
+        match self {
+            TokenKind::Int | TokenKind::String | TokenKind::Bool | TokenKind::Float => true,
+            _ => false,
+        }
+    }
     pub fn is_keyword(&self) -> bool {
         match self {
             TokenKind::Let

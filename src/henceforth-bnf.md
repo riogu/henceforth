@@ -53,13 +53,10 @@
 
 <operation> ::= <binary_op>
               | <unary_op>
-              | <stack_op>
 
 <binary_op> ::= "+" | "-" | "*" | "/" | ">" | "<" | "==" | "&&" | "||"
 
 <unary_op> ::= "!" | "~"
-
-<stack_op> ::= "dup" | "pop" | "swap" | "depth"
 
 <literal> ::= <number> | <float> | <boolean> | <string>
 

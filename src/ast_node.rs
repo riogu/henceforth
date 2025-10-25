@@ -53,12 +53,14 @@ pub enum TopLevelId {
 #[derive(Debug)]
 pub struct VarDeclaration {
     pub name: String,
+    pub hfs_type: Type,
 }
 
 #[derive(Debug)]
 pub struct FunctionDeclaration {
     pub name: String,
-    pub params: Vec<VarId>,
+    pub param_types: Vec<Type>,
+    pub return_types: Vec<Type>,
     pub body: StmtId,
 }
 
@@ -227,6 +229,7 @@ impl From<FuncId> for NodeId {
 }
 // -----------------------------------------------------------
 // Types
+#[derive(Debug)]
 pub enum Type {
     Int,
     String,

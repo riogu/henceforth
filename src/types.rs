@@ -3,14 +3,14 @@ use crate::ast_node::*;
 impl Typed for Operation {
     fn get_type(&self) -> Type {
         match self {
-            Operation::Add(_, lhs, rhs) => todo!(),
-            Operation::Subtract(_, lhs, rhs) => todo!(),
-            Operation::Multiply(_, lhs, rhs) => todo!(),
-            Operation::Divide(_, lhs, rhs) => todo!(),
-            Operation::Negate(_, expr) => todo!(),
-            Operation::Or(_, lhs, rhs) => todo!(),
-            Operation::And(_, lhs, rhs) => todo!(),
-            Operation::Not(_, expr) => todo!(),
+            Operation::Add(lhs, rhs) => todo!(),
+            Operation::Subtract(lhs, rhs) => todo!(),
+            Operation::Multiply(lhs, rhs) => todo!(),
+            Operation::Divide(lhs, rhs) => todo!(),
+            Operation::Negate(expr) => todo!(),
+            Operation::Or(lhs, rhs) => todo!(),
+            Operation::And(lhs, rhs) => todo!(),
+            Operation::Not(expr) => todo!(),
         }
     }
 }
@@ -18,11 +18,12 @@ impl Typed for Operation {
 impl Typed for Expression {
     fn get_type(&self) -> Type {
         match self {
-            Expression::Operation(_, operation) => todo!(),
-            Expression::Assignment(_, lhs, rhs) => todo!(),
-            Expression::Identifier(_, identifier) => todo!(),
-            Expression::Literal(_, literal) => todo!(),
-            Expression::FunctionCall(_, function_id, args) => todo!(),
+            Expression::Operation(operation) => todo!(),
+            Expression::CopyAssignment(lhs, rhs) => todo!(),
+            Expression::MoveAssignment(lhs, rhs) => todo!(),
+            Expression::Identifier(identifier) => todo!(),
+            Expression::Literal(literal) => todo!(),
+            Expression::FunctionCall(function_id, args) => todo!(),
         }
     }
 }
@@ -31,23 +32,23 @@ impl Typed for Statement {
     fn get_type(&self) -> Type {
         match self {
             Statement::If(if_stmt) => todo!(),
-            Statement::Return(token) => todo!(),
+            Statement::Return => todo!(),
             Statement::StackBlock(stack_block) => todo!(),
             Statement::BlockScope(block_scope) => todo!(),
             Statement::While(while_stmt) => todo!(),
-            Statement::Break(token) => todo!(),
-            Statement::Continue(token) => todo!(),
-            Statement::Empty(token) => todo!(),
+            Statement::Break => todo!(),
+            Statement::Continue => todo!(),
+            Statement::Empty => todo!(),
         }
     }
 }
 
-impl Typed for TopLevelNode {
+impl Typed for TopLevelId {
     fn get_type(&self) -> Type {
         match self {
-            TopLevelNode::VariableDecl(var_id) => todo!(),
-            TopLevelNode::FunctionDecl(fn_id) => todo!(),
-            TopLevelNode::Statement(stmt_id) => todo!(),
+            TopLevelId::VariableDecl(var_id) => todo!(),
+            TopLevelId::FunctionDecl(fn_id) => todo!(),
+            TopLevelId::Statement(stmt_id) => todo!(),
         }
     }
 }

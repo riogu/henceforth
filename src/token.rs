@@ -177,6 +177,8 @@ impl fmt::Display for TokenKind {
     }
 }
 
+
+#[derive(Debug)]
 pub struct SourceInfo<'a> {
     line_number: usize,
     line_offset: usize,

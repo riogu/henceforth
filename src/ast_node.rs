@@ -23,119 +23,159 @@ pub trait Analyze { fn analyze(&self); }
 // ============================================================================
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)] pub struct VarId(usize);
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)] pub struct FunctionId(usize);
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)] pub struct FuncId(usize);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)] pub struct ExprId(usize);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)] pub struct StmtId(usize);
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)] pub struct ScopeId(usize);
+
 // ============================================================================
-// AST Node Structures
+// Unified NodeId for common token API
+// ============================================================================
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum NodeId {
+    Expr(ExprId),
+    Stmt(StmtId),
+    Var(VarId),
+    Function(FuncId),
+}
+
+impl From<ExprId> for NodeId {
+    fn from(id: ExprId) -> Self {
+        NodeId::Expr(id)
+    }
+}
+
+impl From<StmtId> for NodeId {
+    fn from(id: StmtId) -> Self {
+        NodeId::Stmt(id)
+    }
+}
+
+impl From<VarId> for NodeId {
+    fn from(id: VarId) -> Self {
+        NodeId::Var(id)
+    }
+}
+
+impl From<FuncId> for NodeId {
+    fn from(id: FuncId) -> Self {
+        NodeId::Function(id)
+    }
+}
+
+// ============================================================================
+// AST Node Structures (no tokens, no lifetimes!)
 // ============================================================================
 
 #[derive(Debug)]
 pub enum Identifier {
     Var(VarId),
-    Function(FunctionId),
+    Function(FuncId),
 }
 
 #[derive(Debug)]
-pub enum Operation<'a> {
-    Add(Token<'a>, ExprId, ExprId),
-    Subtract(Token<'a>, ExprId, ExprId),
-    Multiply(Token<'a>, ExprId, ExprId),
-    Divide(Token<'a>, ExprId, ExprId),
-    Negate(Token<'a>, ExprId),
-    Or(Token<'a>, ExprId, ExprId),
-    And(Token<'a>, ExprId, ExprId),
-    Not(Token<'a>, ExprId),
+pub enum Operation {
+    Add(ExprId, ExprId),
+    Subtract(ExprId, ExprId),
+    Multiply(ExprId, ExprId),
+    Divide(ExprId, ExprId),
+    Negate(ExprId),
+    Or(ExprId, ExprId),
+    And(ExprId, ExprId),
+    Not(ExprId),
 }
 
 #[derive(Debug)]
-pub enum Expression<'a> {
-    Operation(Token<'a>, Operation<'a>),
-    Assignment(Token<'a>, ExprId, ExprId), 
-    Identifier(Token<'a>, Identifier),
-    Literal(Token<'a>, Literal),
-    FunctionCall(Token<'a>, FunctionId, Vec<ExprId>),
+pub enum Expression {
+    Operation(Operation),
+    CopyAssignment(ExprId, ExprId),
+    MoveAssignment(ExprId, ExprId),
+    Identifier(Identifier),
+    Literal(Literal),
+    FunctionCall(FuncId, Vec<ExprId>),
 }
 
-#[derive(Debug)]
-pub enum Statement<'a> {
-    If(IfStmt<'a>),
-    StackBlock(StackBlock<'a>),
-    BlockScope(BlockScope<'a>),
-    While(WhileStmt<'a>),
-    Return(Token<'a>),
-    Break(Token<'a>),
-    Continue(Token<'a>),
-    Empty(Token<'a>),
-}
 
 #[derive(Debug)]
-pub enum TopLevelNode {
+pub enum TopLevelId {
     VariableDecl(VarId),
-    FunctionDecl(FunctionId),
+    FunctionDecl(FuncId),
     Statement(StmtId),
 }
 
+// ============================================================================
+// Declarations (shared)
 #[derive(Debug)]
-pub struct VarDeclaration<'a> {
-    pub token: Token<'a>,
+pub struct VarDeclaration {
     pub name: String,
 }
 
 #[derive(Debug)]
-pub struct FunctionDeclaration<'a> {
-    pub token: Token<'a>,
+pub struct FunctionDeclaration {
     pub name: String,
     pub params: Vec<VarId>,
-    pub body: ScopeId,
+    pub body: StmtId,
+}
+
+// ============================================================================
+// Statements (not shared)
+#[derive(Debug)]
+pub enum Statement {
+    If(IfStmt),
+    StackBlock(StackBlock),
+    BlockScope(BlockScope),
+    While(WhileStmt),
+    Return,
+    Break,
+    Continue,
+    Empty,
 }
 
 #[derive(Debug)]
-pub struct BlockScope<'a> {
-    pub token: Token<'a>,
-    pub nodes: Vec<TopLevelNode>,
+pub struct BlockScope {
+    pub nodes: Vec<TopLevelId>,
 }
 
 #[derive(Debug)]
-pub struct StackBlock<'a> {
-    pub token: Token<'a>,
+pub struct StackBlock {
     pub nodes: Vec<ExprId>,
 }
 
 #[derive(Debug)]
-pub enum ElseStmt<'a> {
-    ElseIf(StmtId), // Points to an IfStmt
-    Else(Token<'a>, ExprId),
+pub enum ElseStmt {
+    ElseIf(StmtId),
+    Else(StmtId), // is a BlockScope
 }
 
 #[derive(Debug)]
-pub struct IfStmt<'a> {
-    pub token: Token<'a>,
-    pub cond: ExprId,
-    pub body: ScopeId,
-    pub else_stmt: Option<ElseStmt<'a>>,
+pub struct IfStmt {
+    pub cond: StmtId, // is a StackBlock
+    pub body: StmtId, // is a BlockScope
+    pub else_stmt: Option<ElseStmt>,
 }
 
 #[derive(Debug)]
-pub struct WhileStmt<'a> {
-    pub token: Token<'a>,
-    pub cond: ExprId,
-    pub body: Vec<ExprId>,
+pub struct WhileStmt {
+    pub cond: StmtId, // is a StackBlock
+    pub body: StmtId, // is a BlockScope
 }
+// ============================================================================
 
 // ============================================================================
-// Arena storage for all AST nodes
-
+// Arena storage with token tracking
+// ============================================================================
 #[derive(Debug, Default)]
-// ============================================================================
 pub struct AstArena<'a> {
-    exprs: Vec<Expression<'a>>,
-    stmts: Vec<Statement<'a>>,
-    block_scopes: Vec<BlockScope<'a>>,
-    stack_blocks: Vec<StackBlock<'a>>,
-    vars: Vec<VarDeclaration<'a>>,
-    functions: Vec<FunctionDeclaration<'a>>,
+    // AST nodes
+    exprs: Vec<Expression>,
+    stmts: Vec<Statement>,
+    vars: Vec<VarDeclaration>,
+    functions: Vec<FunctionDeclaration>,
+
+    // Token storage (parallel arrays)
+    expr_tokens: Vec<Token<'a>>,
+    stmt_tokens: Vec<Token<'a>>,
+    var_tokens: Vec<Token<'a>>,
+    function_tokens: Vec<Token<'a>>,
 }
 
 impl<'a> AstArena<'a> {
@@ -143,57 +183,77 @@ impl<'a> AstArena<'a> {
         Self::default()
     }
 
-    // Allocation methods
-    pub fn alloc_expr(&mut self, expr: Expression<'a>) -> ExprId {
+    // Allocation methods (now take tokens separately)
+    pub fn alloc_expr(&mut self, expr: Expression, token: Token<'a>) -> ExprId {
         let id = ExprId(self.exprs.len());
         self.exprs.push(expr);
+        self.expr_tokens.push(token);
         id
     }
 
-    pub fn alloc_stmt(&mut self, stmt: Statement<'a>) -> StmtId {
+    pub fn push_stmt(&mut self, stmt: Statement, token: Token<'a>) -> StmtId {
         let id = StmtId(self.stmts.len());
         self.stmts.push(stmt);
+        self.stmt_tokens.push(token);
         id
     }
 
-    pub fn alloc_block_scope(&mut self, scope: BlockScope<'a>) -> ScopeId {
-        let id = ScopeId(self.block_scopes.len());
-        self.block_scopes.push(scope);
-        id
-    }
 
-    pub fn alloc_var(&mut self, var: VarDeclaration<'a>) -> VarId {
+    pub fn push_var(&mut self, var: VarDeclaration, token: Token<'a>) -> VarId {
         let id = VarId(self.vars.len());
         self.vars.push(var);
+        self.var_tokens.push(token);
         id
     }
 
-    pub fn alloc_function(&mut self, func: FunctionDeclaration<'a>) -> FunctionId {
-        let id = FunctionId(self.functions.len());
+    pub fn push_function(&mut self, func: FunctionDeclaration, token: Token<'a>) -> FuncId {
+        let id = FuncId(self.functions.len());
         self.functions.push(func);
+        self.function_tokens.push(token);
         id
     }
+
     // Accessor methods
     pub fn get_expr(&self, id: ExprId) -> &Expression {
         &self.exprs[id.0]
     }
-    
+
     pub fn get_stmt(&self, id: StmtId) -> &Statement {
         &self.stmts[id.0]
     }
-    
-    pub fn get_block_scope(&self, id: ScopeId) -> &BlockScope {
-        &self.block_scopes[id.0]
-    }
-    
-    pub fn get_stack_block(&self, id: ScopeId) -> &StackBlock {
-        &self.stack_blocks[id.0]
-    }
+
     pub fn get_var(&self, id: VarId) -> &VarDeclaration {
         &self.vars[id.0]
     }
-    
-    pub fn get_function(&self, id: FunctionId) -> &FunctionDeclaration {
+
+    pub fn get_function(&self, id: FuncId) -> &FunctionDeclaration {
         &self.functions[id.0]
+    }
+
+    // Token accessor methods
+    pub fn get_expr_token(&self, id: ExprId) -> &Token<'a> {
+        &self.expr_tokens[id.0]
+    }
+
+    pub fn get_stmt_token(&self, id: StmtId) -> &Token<'a> {
+        &self.stmt_tokens[id.0]
+    }
+
+    pub fn get_var_token(&self, id: VarId) -> &Token<'a> {
+        &self.var_tokens[id.0]
+    }
+
+    pub fn get_function_token(&self, id: FuncId) -> &Token<'a> {
+        &self.function_tokens[id.0]
+    }
+
+    // Unified token API using NodeId
+    pub fn get_token(&self, node_id: NodeId) -> &Token<'a> {
+        match node_id {
+            NodeId::Expr(id) => self.get_expr_token(id),
+            NodeId::Stmt(id) => self.get_stmt_token(id),
+            NodeId::Var(id) => self.get_var_token(id),
+            NodeId::Function(id) => self.get_function_token(id),
+        }
     }
 }

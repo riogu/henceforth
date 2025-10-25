@@ -22,10 +22,10 @@ impl<'a> Parser<'a> {
 impl<'a> Parser<'a> {
 
     // declarations
-    fn function_declaration(&mut self) -> TopLevelNode {
+    fn function_declaration(&mut self) -> FuncId {
         todo!()
     }
-    fn variable_declaration(&mut self) -> TopLevelNode {
+    fn variable_declaration(&mut self) -> VarId {
         let id_token = self.expect(TokenKind::Identifier(String::new()));
         self.expect(TokenKind::Colon);
         let type_token = self.expect(TokenKind::Identifier(String::new()));
@@ -38,15 +38,15 @@ impl<'a> Parser<'a> {
 impl<'a> Parser<'a> {
     // RD Parser for Henceforth (check 'henceforth-bnf.md')
     #[must_use]
-    pub fn parse_tokens(tokens: Vec<Token>) -> Vec<TopLevelNode> {
+    pub fn parse_tokens(tokens: Vec<Token>) -> Vec<TopLevelId> {
         let mut parser = Parser {
             tokens: tokens.into_iter().peekable(),
             arena: AstArena::new(),
         };
         while let Some(token) = parser.tokens.peek() {
             match &token.kind {
-                TokenKind::Let => parser.variable_declaration(),
-                TokenKind::Fn => parser.function_declaration(),
+                TokenKind::Let => TopLevelId::VariableDecl(parser.variable_declaration()),
+                TokenKind::Fn => TopLevelId::FunctionDecl(parser.function_declaration()),
                 _ => panic!("expected variable or function declaration"),
             };
         }
@@ -55,25 +55,27 @@ impl<'a> Parser<'a> {
 
     // <statement> ::= <if_stmt> | <stack_block> | <while_stmt> | <assignment>
     //               | <return_stmt> | <break_stmt> | <continue_stmt> | ";"
-    fn statement(&mut self) -> TopLevelNode {
-        match self.tokens.next().expect("unexpected end of input while parsing statement").kind {
-            TokenKind::If => Statement::If(self.if_statement()),
-            TokenKind::At => self.stack_block(),
+    fn statement(&mut self) -> StmtId {
+        let token = self.tokens.next().expect("unexpected end of input while parsing statement");
+        let stmt = match token.kind {
+            TokenKind::If        => self.if_statement(),
+            TokenKind::At        => self.stack_block(),
             TokenKind::LeftBrace => self.block_scope(),
-            TokenKind::While => self.while_statement(),
-            TokenKind::Return => {
-                self.expect(TokenKind::Semicolon); todo!()
-                // push!(self.arena, TopLevelNode::Statement(Statement::Return))
+            TokenKind::While     => self.while_statement(),
+            TokenKind::Return    => {
+                self.expect(TokenKind::Semicolon);
+                self.arena.push_stmt(Statement::Return, token)
             }
-            TokenKind::Break => push!(self.arena, Statement::Return),
-            TokenKind::Continue => push!(self.arena, Statement::Continue),
-            TokenKind::Semicolon => push!(self.arena, Statement::Empty),
+            TokenKind::Break     => self.arena.push_stmt(Statement::Break, token),
+            TokenKind::Continue  => self.arena.push_stmt(Statement::Continue, token),
+            TokenKind::Semicolon => self.arena.push_stmt(Statement::Empty, token),
             _ => panic!("expected statement"),
-        }
+        };
+        todo!()
     }
 
     // <if_stmt> ::= "if" <stack_block> "{" <block_scope> "}" <else_stmt>?
-    fn if_statement(&mut self) -> TopLevelNode {
+    fn if_statement(&mut self) -> StmtId {
         self.expect(TokenKind::If);
         self.expect(TokenKind::At);
         self.expect(TokenKind::LeftParen);
@@ -87,25 +89,23 @@ impl<'a> Parser<'a> {
     }
 
     // <while_stmt> ::= "while" <stack_block> "{" <scope_block> "}"
-    fn while_statement(&mut self) -> TopLevelNode {
+    fn while_statement(&mut self) -> StmtId {
         self.expect(TokenKind::While);
         self.stack_block();
 
-        let statements: Vec<TopLevelNode>;
+        let statements: Vec<TopLevelId>;
         self.block_scope();
         todo!()
     }
 
     // <stack_block> ::= "@" "(" <expression_list> ")"
-    fn stack_block(&mut self) -> TopLevelNode {
+    fn stack_block(&mut self) -> StmtId {
         self.expect(TokenKind::At);
-        let statements: Vec<TopLevelNode>;
+        let statements: Vec<TopLevelId>;
 
         while let Some(token) = self.tokens.peek() {
             match &token.kind {
-                TokenKind::Let => self.variable_declaration(),
-                TokenKind::Fn => self.function_declaration(),
-                kind @ _ if kind.is_stack_operator() => todo!(),
+                kind @ _ if kind.is_stack_operator() => self.operation(),
                 _ => panic!("expected variable or function declaration"),
             };
         }
@@ -113,22 +113,22 @@ impl<'a> Parser<'a> {
         todo!();
     }
     // <scope_block> ::= (<var_decl> | <statement>)*
-    fn block_scope(&mut self) -> TopLevelNode {
+    fn block_scope(&mut self) -> StmtId {
         self.expect(TokenKind::LeftBrace);
         let expressions: Vec<Expression>;
 
         while let Some(token) = self.tokens.peek() {
             match &token.kind {
-                TokenKind::Let => self.variable_declaration(),
-                TokenKind::Fn => self.function_declaration(),
-                TokenKind::At => self.stack_block(),
+                TokenKind::Let => TopLevelId::VariableDecl(self.variable_declaration()),
+                TokenKind::Fn  => TopLevelId::FunctionDecl(self.function_declaration()),
+                TokenKind::At  => TopLevelId::Statement(self.stack_block()),
                 _ => panic!("expected variable or function declaration"),
             };
         }
         self.expect(TokenKind::RightParen);
         todo!()
     }
-    fn operation(&mut self) {
+    fn operation(&mut self) -> ExprId{
         match self.tokens.next().expect("unexpected end of input while parsing statement").kind {
             TokenKind::Plus => todo!(),
             TokenKind::Minus => todo!(),

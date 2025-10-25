@@ -74,7 +74,7 @@ pub enum Statement {
 pub enum TopLevelNode {
     VariableDecl(VarId),
     FunctionDecl(FunctionId),
-    Statement(Statement),
+    Statement(StmtId),
 }
 
 #[derive(Debug)]
@@ -262,76 +262,79 @@ impl AstArena {
         self.alloc_function(FunctionDeclaration { name, params, body })
     }
 }
-macro_rules! push {
-    // Expression::Operation variants
-    (Expression::Operation(Operation::Add($left:expr, $right:expr))) => {
-        self.arena.add($left, $right)
+// Export this one
+#[macro_export]
+macro_rules! push_to {
+    ($arena:expr, Expression::Operation(Operation::Add($left:expr, $right:expr))) => {
+        $arena.add($left, $right)
     };
-    (Expression::Operation(Operation::Subtract($left:expr, $right:expr))) => {
-        self.arena.subtract($left, $right)
+    ($arena:expr, Expression::Operation(Operation::Subtract($left:expr, $right:expr))) => {
+        $arena.subtract($left, $right)
     };
-    (Expression::Operation(Operation::Multiply($left:expr, $right:expr))) => {
-        self.arena.multiply($left, $right)
+    ($arena:expr, Expression::Operation(Operation::Multiply($left:expr, $right:expr))) => {
+        $arena.multiply($left, $right)
     };
-    (Expression::Operation(Operation::Divide($left:expr, $right:expr))) => {
-        self.arena.divide($left, $right)
+    ($arena:expr, Expression::Operation(Operation::Divide($left:expr, $right:expr))) => {
+        $arena.divide($left, $right)
     };
-    (Expression::Operation(Operation::Negate($expr:expr))) => {
-        self.arena.negate($expr)
+    ($arena:expr, Expression::Operation(Operation::Negate($expr:expr))) => {
+        $arena.negate($expr)
     };
-    (Expression::Operation(Operation::Or($left:expr, $right:expr))) => {
-        self.arena.or($left, $right)
+    ($arena:expr, Expression::Operation(Operation::Or($left:expr, $right:expr))) => {
+        $arena.or($left, $right)
     };
-    (Expression::Operation(Operation::And($left:expr, $right:expr))) => {
-        self.arena.and($left, $right)
+    ($arena:expr, Expression::Operation(Operation::And($left:expr, $right:expr))) => {
+        $arena.and($left, $right)
     };
-    (Expression::Operation(Operation::Not($expr:expr))) => {
-        self.arena.not($expr)
+    ($arena:expr, Expression::Operation(Operation::Not($expr:expr))) => {
+        $arena.not($expr)
     };
-
-    // Other Expression variants
-    (Expression::Assignment($target:expr, $value:expr)) => {
-        self.arena.assignment($target, $value)
+    ($arena:expr, Expression::Assignment($target:expr, $value:expr)) => {
+        $arena.assignment($target, $value)
     };
-    (Expression::Identifier($id:expr)) => {
-        self.arena.identifier($id)
+    ($arena:expr, Expression::Identifier($id:expr)) => {
+        $arena.identifier($id)
     };
-    (Expression::Literal($lit:expr)) => {
-        self.arena.literal($lit)
+    ($arena:expr, Expression::Literal($lit:expr)) => {
+        $arena.literal($lit)
     };
-    (Expression::FunctionCall($func:expr, $args:expr)) => {
-        self.arena.function_call($func, $args)
+    ($arena:expr, Expression::FunctionCall($func:expr, $args:expr)) => {
+        $arena.function_call($func, $args)
     };
-    (VarDeclaration($name:expr)) => {
-        self.arena.var_declaration($name)
+    ($arena:expr, Statement::If($cond:expr, $body:expr, $else_stmt:expr)) => {
+        $arena.if_stmt($cond, $body, $else_stmt)
     };
-    (FunctionDeclaration($name:expr, $params:expr, $body:expr)) => {
-        self.arena.function_declaration($name, $params, $body)
+    ($arena:expr, Statement::StackBlock($exprs:expr)) => {
+        $arena.stack_block_stmt($exprs)
     };
-
-    // Statement variants
-    (Statement::If($cond:expr, $body:expr, $else_stmt:expr)) => {
-        self.arena.if_stmt($cond, $body, $else_stmt)
+    ($arena:expr, Statement::BlockScope($scope:expr)) => {
+        $arena.block_scope_stmt($scope)
     };
-    (Statement::StackBlock($exprs:expr)) => {
-        self.arena.stack_block_stmt($exprs)
+    ($arena:expr, Statement::While($cond:expr, $body:expr)) => {
+        $arena.while_stmt($cond, $body)
     };
-    (Statement::BlockScope($scope:expr)) => {
-        self.arena.block_scope_stmt($scope)
+    ($arena:expr, Statement::Return) => {
+        $arena.return_stmt()
     };
-    (Statement::While($cond:expr, $body:expr)) => {
-        self.arena.while_stmt($cond, $body)
+    ($arena:expr, Statement::Break) => {
+        $arena.break_stmt()
     };
-    (Statement::Return) => {
-        self.arena.return_stmt()
+    ($arena:expr, Statement::Continue) => {
+        $arena.continue_stmt()
     };
-    (Statement::Break) => {
-        self.arena.break_stmt()
+    ($arena:expr, Statement::Empty) => {
+        $arena.empty_stmt()
     };
-    (Statement::Continue) => {
-        self.arena.continue_stmt()
+    ($arena:expr, VarDeclaration { name: $name:expr }) => {
+        $arena.var_declaration($name)
     };
-    (Statement::Empty) => {
-        self.arena.empty_stmt()
+    ($arena:expr, FunctionDeclaration { name: $name:expr, params: $params:expr, body: $body:expr }) => {
+        $arena.function_declaration($name, $params, $body)
+    };
+    ($arena:expr, VarDeclaration($name:expr)) => {
+        $arena.var_declaration($name)
+    };
+    ($arena:expr, FunctionDeclaration($name:expr, $params:expr, $body:expr)) => {
+        $arena.function_declaration($name, $params, $body)
     };
 }

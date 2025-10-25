@@ -1,4 +1,5 @@
 use crate::ast_node::*;
+use crate::push_to;
 use crate::token::*;
 
 use std::iter::Peekable;
@@ -7,6 +8,7 @@ use std::vec::IntoIter;
 pub struct Parser<'a> {
     nodes: Vec<TopLevelNode>,
     tokens: Peekable<IntoIter<Token<'a>>>, // Own the tokens, iterate by value
+    arena: AstArena,
 }
 
 impl<'a> Parser<'a> {
@@ -24,6 +26,7 @@ impl<'a> Parser<'a> {
 }
 
 impl<'a> Parser<'a> {
+
     // declarations
     fn function_declaration(&mut self) -> TopLevelNode {
         todo!()
@@ -37,6 +40,7 @@ impl<'a> Parser<'a> {
     }
 }
 
+
 impl<'a> Parser<'a> {
     // RD Parser for Henceforth (check 'henceforth-bnf.md')
     #[must_use]
@@ -44,6 +48,7 @@ impl<'a> Parser<'a> {
         let mut parser = Parser {
             nodes: Vec::new(),
             tokens: tokens.into_iter().peekable(),
+            arena: AstArena::new(),
         };
         while let Some(token) = parser.tokens.peek() {
             match &token.kind {
@@ -58,15 +63,23 @@ impl<'a> Parser<'a> {
     // <statement> ::= <if_stmt> | <stack_block> | <while_stmt> | <assignment>
     //               | <return_stmt> | <break_stmt> | <continue_stmt> | ";"
     fn statement(&mut self) -> TopLevelNode {
+        macro_rules! push {
+            ($($tt:tt)*) => {
+                push_to!(self.arena, $($tt)*)
+            };
+        }
         match self.tokens.next().expect("unexpected end of input while parsing statement").kind {
             TokenKind::If => self.if_statement(),
             TokenKind::At => self.stack_block(),
             TokenKind::LeftBrace => self.block_scope(),
             TokenKind::While => self.while_statement(),
-            TokenKind::Return => { self.expect(TokenKind::Semicolon); TopLevelNode::Statement(Statement::Return) }
-            TokenKind::Break => TopLevelNode::Statement(Statement::Return),
-            TokenKind::Continue => TopLevelNode::Statement(Statement::Continue),
-            TokenKind::Semicolon => TopLevelNode::Statement(Statement::Empty),
+            TokenKind::Return => {
+                self.expect(TokenKind::Semicolon);
+                push!(Statement::Return)
+            }
+            TokenKind::Break => push!(Statement::Return),
+            TokenKind::Continue => push!(Statement::Continue),
+            TokenKind::Semicolon => push!(Statement::Empty),
             _ => panic!("expected statement"),
         }
     }

@@ -120,8 +120,26 @@ impl<'a> Parser<'a> {
         let token = self.expect(TokenKind::If);
         let cond = self.stack_block();
         let body = self.block_scope();
-        let else_stmt = None;
+        let else_stmt = self.else_statement();
         self.arena.alloc_stmt(Statement::If { cond, body, else_stmt}, token)
+    }
+
+    // <else_stmt> ::= "else" "if" <stack_block>  <block_scope> <else_stmt>?
+    //               | "else" <block_scope>
+    fn else_statement(&mut self) -> Option<ElseStmt> {
+        let token = self.tokens.peek().expect("unexpected end of input while parsing statement");
+        match token.kind {
+            TokenKind::Else => {
+                self.tokens.next();
+                let token = self.tokens.peek().expect("unexpected end of input while parsing statement");
+                if token.kind == TokenKind::If {
+                    Some(ElseStmt::ElseIf(self.if_statement()))
+                } else {
+                    Some(ElseStmt::Else(self.block_scope()))
+                }
+            }
+            _ => None
+        }
     }
 
     // <while_stmt> ::= "while" <stack_block> "{" <scope_block> "}"
@@ -132,39 +150,37 @@ impl<'a> Parser<'a> {
         self.arena.alloc_stmt(Statement::While { cond, body }, token)
     }
 
-    // <stack_block> ::= "@" "(" <expression>* ")"
-    fn stack_block(&mut self) -> StmtId {
-        let token = self.expect(TokenKind::At);
-        self.expect(TokenKind::LeftParen);
-
-        let statements = Vec::<ExprId>::new();
-
-        while let Some(token) = self.tokens.peek() {
-            match &token.kind {
-                kind @ _ if kind.is_stack_operator() => self.stack_operation(),
-                _ => panic!("expected variable or function declaration"),
-            };
-        }
-        self.expect(TokenKind::RightBrace);
-        self.arena.alloc_stmt(Statement::StackBlock(statements), token)
-    }
-    // <scope_block> ::= (<var_decl> | <statement>)*
+    // <block_scope> ::= "{" <top_level_node>* "}"
     fn block_scope(&mut self) -> StmtId {
+        let mut top_level_ids = Vec::<TopLevelId>::new();
         let token = self.expect(TokenKind::LeftBrace);
-        let top_level_ids = Vec::<TopLevelId>::new();
-
-        while let Some(token) = self.tokens.peek() {
-            match &token.kind {
-                TokenKind::Let => TopLevelId::VariableDecl(self.variable_declaration()),
-                TokenKind::Fn  => TopLevelId::FunctionDecl(self.function_declaration()),
-                TokenKind::At  => TopLevelId::Statement(self.stack_block()),
+        loop {
+            match self.tokens.next().expect("unexpected end of input").kind {
+                kind if kind == TokenKind::RightBrace => break,
+                TokenKind::Let => top_level_ids.push(TopLevelId::VariableDecl(self.variable_declaration())),
+                TokenKind::Fn  => top_level_ids.push(TopLevelId::FunctionDecl(self.function_declaration())),
+                TokenKind::At  => top_level_ids.push(TopLevelId::Statement(self.stack_block())),
                 _ => panic!("expected variable or function declaration"),
             };
         }
-        self.expect(TokenKind::RightParen);
         self.arena.alloc_stmt(Statement::BlockScope(top_level_ids), token)
     }
 
+    // <stack_block> ::= "@" "(" <expression>* ")"
+    fn stack_block(&mut self) -> StmtId {
+        let token = self.expect(TokenKind::At);
+
+        let mut expressions = Vec::<ExprId>::new();
+
+        self.expect(TokenKind::LeftParen);
+        loop {
+            match self.tokens.next().expect("unexpected end of input") {
+                token if token.kind == TokenKind::RightParen => break,
+                _ => expressions.push(self.stack_expression()),
+            };
+        }
+        self.arena.alloc_stmt(Statement::StackBlock(expressions), token)
+    }
 // <stack_expression> ::= <stack_operation> | <identifier> | <literal> | <function_call>
     fn stack_expression(&mut self) -> ExprId {
         let kind = self.tokens.peek().expect("unexpected end of input while parsing statement").kind.clone();
@@ -184,27 +200,58 @@ impl<'a> Parser<'a> {
 // <binary_op> ::= "+" | "-" | "*" | "/" | ">" | "<" | "==" | "&&" | "||"
 // <unary_op>  ::= "!" | "~"
     fn stack_operation(&mut self) -> ExprId {
-        match self.tokens.next().expect("unexpected end of input while parsing statement").kind {
-            TokenKind::Plus => todo!(),
-            TokenKind::Minus => todo!(),
-            TokenKind::Star => todo!(),
-            TokenKind::Slash => todo!(),
-            TokenKind::Percent => todo!(),
-            TokenKind::Equal => todo!(),
-            TokenKind::NotEqual => todo!(),
-            TokenKind::Less => todo!(),
-            TokenKind::LessEqual => todo!(),
-            TokenKind::Greater => todo!(),
-            TokenKind::GreaterEqual => todo!(),
-            TokenKind::And => todo!(),
-            TokenKind::Or => todo!(),
-            TokenKind::Not => todo!(),
-            _ => todo!(),
+        let token = self.tokens.next().expect("unexpected end of input while parsing statement");
+        let kind = token.kind.clone();
+        match kind {
+            kind if kind.is_binary_operator() => {
+                let (lhs, rhs) = self.arena.pop2_or_error(&format!(
+                    "expected at least 2 values in stack for binary operator {}",
+                    kind
+                ));
+                match kind {
+                    TokenKind::Plus         => self.arena.push_expr(Expression::Operation(Operation::Add(lhs, rhs)), token),
+                    TokenKind::Minus        => self.arena.push_expr(Expression::Operation(Operation::Sub(lhs, rhs)), token),
+                    TokenKind::Star         => self.arena.push_expr(Expression::Operation(Operation::Mul(lhs, rhs)), token),
+                    TokenKind::Slash        => self.arena.push_expr(Expression::Operation(Operation::Div(lhs, rhs)), token),
+                    TokenKind::Percent      => self.arena.push_expr(Expression::Operation(Operation::Mod(lhs, rhs)), token),
+                    TokenKind::Equal        => self.arena.push_expr(Expression::Operation(Operation::Equal(lhs, rhs)), token),
+                    TokenKind::NotEqual     => self.arena.push_expr(Expression::Operation(Operation::NotEqual(lhs, rhs)), token),
+                    TokenKind::Less         => self.arena.push_expr(Expression::Operation(Operation::Less(lhs, rhs)), token),
+                    TokenKind::LessEqual    => self.arena.push_expr(Expression::Operation(Operation::LessEqual(lhs, rhs)), token),
+                    TokenKind::Greater      => self.arena.push_expr(Expression::Operation(Operation::Greater(lhs, rhs)), token),
+                    TokenKind::GreaterEqual => self.arena.push_expr(Expression::Operation(Operation::GreaterEqual(lhs, rhs)), token),
+                    TokenKind::And          => self.arena.push_expr(Expression::Operation(Operation::And(lhs, rhs)), token),
+                    TokenKind::Or           => self.arena.push_expr(Expression::Operation(Operation::Or(lhs, rhs)), token),
+                    _ => unreachable!()
+                }
+            }
+            TokenKind::Not => {
+                let expr = self.arena.pop_or_error("expected at least 1 value in stack for '-' unary operator.");
+                self.arena.push_expr(Expression::Operation(Operation::Negate(expr)), token)
+            }
+            _ => panic!("expected stack operator")
         }
-        todo!()
     }
+
+    // <function_call> ::= <tuple_expression> <identifier>
     fn function_call(&mut self) -> ExprId {
-        todo!()
+        let tuple = self.tuple_expression(); // for now we build a tuple explicitly
+        // later we want to allow tuples anywhere and functions consume a tuple from the stack
+        let (identifier, token) = self.expect_identifier();
+        self.arena.push_expr(Expression::FunctionCall { tuple, identifier: Identifier::Unresolved(identifier) }, token)
+    }
+
+    // <tuple_expression> ::= "(" <stack_expression>* ")"
+    fn tuple_expression(&mut self) -> ExprId {
+        let mut expressions = Vec::<ExprId>::new();
+        let token = self.expect(TokenKind::LeftParen);
+        loop {
+            match self.tokens.next().expect("unexpected end of input") {
+                token if token.kind == TokenKind::RightParen => break,
+                _ => expressions.push(self.stack_expression()),
+            };
+        }
+        self.arena.push_expr(Expression::Tuple(expressions), token)
     }
 
     // <assignment> ::= "&=" <identifier> ";"

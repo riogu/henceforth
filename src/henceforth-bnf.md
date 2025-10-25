@@ -6,7 +6,7 @@
 
 <var_decl> ::= "let" <identifier> ":" <type> ";"
 
-<function_decl> ::= "fn" <identifier> ":" <signature> "{" <block_scope> "}"
+<function_decl> ::= "fn" <identifier> ":" <signature> <block_scope> 
 
 <signature> ::= "(" <type_list>? ")" "->" "(" <type_list>? ")"
 
@@ -24,12 +24,12 @@
               | <assignment_stmt>
               | ";"
 
-<if_stmt> ::= "if" <stack_block> "{" <block_scope> "}" <else_stmt>?
+<if_stmt> ::= "if" <stack_block> <block_scope> <else_stmt>?
 
-<else_stmt> ::= "else" "if" <stack_block> "{" <block_scope> "}" <else_stmt>?
-              | "else" "{" <block_scope> "}"
+<else_stmt> ::= "else" "if" <stack_block>  <block_scope> <else_stmt>?
+              | "else" <block_scope> 
 
-<while_stmt> ::= "while" <stack_block> "{" <block_scope> "}"
+<while_stmt> ::= "while" <stack_block>  <block_scope> 
 
 <stack_block> ::= "@" "(" <stack_expression>* ")"
 
@@ -49,7 +49,11 @@
                      | <literal>
                      | <function_call>
 
-<function_call> ::= <identifier> "@" "(" <stack_expression>* ")"
+<function_call> ::= <tuple_expression> <identifier>
+
+<tuple_expression> ::= "(" <stack_expression>* ")"
+
+<tuple_type> ::= "(" <type_list> ")"
 
 <stack_operation> ::= <binary_op>
                     | <unary_op>

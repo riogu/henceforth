@@ -16,16 +16,23 @@ use crate::token::*;
 #[derive(Debug)]
 pub enum Identifier {
     Unresolved(String),
-    Var(VarId),
+    Variable(VarId),
     Function(FuncId),
 }
 
 #[derive(Debug)]
 pub enum Operation {
     Add(ExprId, ExprId),
-    Subtract(ExprId, ExprId),
-    Multiply(ExprId, ExprId),
-    Divide(ExprId, ExprId),
+    Sub(ExprId, ExprId),
+    Mul(ExprId, ExprId),
+    Div(ExprId, ExprId),
+    Mod(ExprId, ExprId),
+    Equal(ExprId, ExprId),
+    NotEqual(ExprId, ExprId),
+    Less(ExprId, ExprId),
+    LessEqual(ExprId, ExprId),
+    Greater(ExprId, ExprId),
+    GreaterEqual(ExprId, ExprId),
     Negate(ExprId),
     Or(ExprId, ExprId),
     And(ExprId, ExprId),
@@ -37,7 +44,8 @@ pub enum Expression {
     Operation(Operation),
     Identifier(Identifier),
     Literal(Literal),
-    FunctionCall(FuncId, Vec<ExprId>),
+    FunctionCall{tuple: ExprId, identifier: Identifier},
+    Tuple(Vec<ExprId>)
 }
 
 
@@ -102,7 +110,7 @@ pub enum Type {
     String,
     Bool,
     Float,
-    // Struct(Identifier),
+    Tuple,
 }
 impl Type {
     pub fn to_token(&self) -> TokenKind {
@@ -111,6 +119,8 @@ impl Type {
             Type::String => TokenKind::String,
             Type::Bool => TokenKind::Bool,
             Type::Float => TokenKind::Float,
+            Type::Float => TokenKind::Float,
+            Type::Tuple => TokenKind::LeftParen,
         }
     }
 }
@@ -162,6 +172,13 @@ impl<'a> AstArena<'a> {
         self.expr_tokens.push(token);
         self.hfs_stack.push(id);
         id
+    }
+    pub fn pop2_or_error(&mut self, msg: &str) -> (ExprId, ExprId) { 
+        // should start using our own error structs instead
+        (
+            self.hfs_stack.pop().unwrap_or_else(|| panic!("{}", msg)),
+            self.hfs_stack.pop().unwrap_or_else(|| panic!("{}", msg)),
+        )
     }
 
     // Allocation methods 

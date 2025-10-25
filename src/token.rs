@@ -118,6 +118,7 @@ impl From<Type> for TokenKind {
             Type::String => TokenKind::String,
             Type::Bool => TokenKind::Bool,
             Type::Float => TokenKind::Float,
+            Type::Tuple => TokenKind::LeftParen,
         }
     }
 }
@@ -264,6 +265,25 @@ impl<'a> Token<'a> {
             _ => false,
         }
     }
+
+    pub fn is_binary_operator(&self) -> bool {
+        match self.kind {
+            TokenKind::Plus
+            | TokenKind::Minus
+            | TokenKind::Star
+            | TokenKind::Slash
+            | TokenKind::Percent
+            | TokenKind::Equal
+            | TokenKind::NotEqual
+            | TokenKind::Less
+            | TokenKind::LessEqual
+            | TokenKind::Greater
+            | TokenKind::GreaterEqual
+            | TokenKind::And
+            | TokenKind::Or => true,
+            _ => false,
+        }
+    }
 }
 impl TokenKind {
     pub fn to_type(&self) -> Type {
@@ -314,6 +334,24 @@ impl TokenKind {
             | TokenKind::And
             | TokenKind::Or
             | TokenKind::Not => true,
+            _ => false,
+        }
+    }
+    pub fn is_binary_operator(&self) -> bool {
+        match self {
+            TokenKind::Plus
+            | TokenKind::Minus
+            | TokenKind::Star
+            | TokenKind::Slash
+            | TokenKind::Percent
+            | TokenKind::Equal
+            | TokenKind::NotEqual
+            | TokenKind::Less
+            | TokenKind::LessEqual
+            | TokenKind::Greater
+            | TokenKind::GreaterEqual
+            | TokenKind::And
+            | TokenKind::Or => true,
             _ => false,
         }
     }

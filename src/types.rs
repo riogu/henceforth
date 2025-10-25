@@ -4,13 +4,20 @@ impl Typed for Operation {
     fn get_type(&self) -> Type {
         match self {
             Operation::Add(lhs, rhs) => todo!(),
-            Operation::Subtract(lhs, rhs) => todo!(),
-            Operation::Multiply(lhs, rhs) => todo!(),
-            Operation::Divide(lhs, rhs) => todo!(),
+            Operation::Sub(lhs, rhs) => todo!(),
+            Operation::Mul(lhs, rhs) => todo!(),
+            Operation::Div(lhs, rhs) => todo!(),
+            Operation::Mod(expr_id, expr_id1) => todo!(),
             Operation::Negate(expr) => todo!(),
             Operation::Or(lhs, rhs) => todo!(),
             Operation::And(lhs, rhs) => todo!(),
             Operation::Not(expr) => todo!(),
+            Operation::Equal(expr_id, expr_id1) => todo!(),
+            Operation::Less(expr_id, expr_id1) => todo!(),
+            Operation::LessEqual(expr_id, expr_id1) => todo!(),
+            Operation::Greater(expr_id, expr_id1) => todo!(),
+            Operation::GreaterEqual(expr_id, expr_id1) => todo!(),
+            Operation::NotEqual(expr_id, expr_id1) => todo!(),
         }
     }
 }
@@ -21,7 +28,8 @@ impl Typed for Expression {
             Expression::Operation(operation) => todo!(),
             Expression::Identifier(identifier) => todo!(),
             Expression::Literal(literal) => todo!(),
-            Expression::FunctionCall(function_id, args) => todo!(),
+            Expression::FunctionCall{tuple, identifier} => todo!(),
+            Expression::Tuple(expr_ids) => todo!(),
         }
     }
 }

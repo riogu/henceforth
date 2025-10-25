@@ -1,14 +1,13 @@
 ## Code examples
-```c
+```cpp
+import hfs;
 // Calculate factorial using stack operations
-fn factorial: (i32 i32 i32) -> (i32) {
-    let n: (i32 i32 i32);
+fn factorial: (i32) -> (i32) {
+    let n: i32;
     let result: i32;
-    &= n.0;  // pop stack and assign to n
-    &= n.1;  // pop stack and assign to n
-    &= n.2;  // pop stack and assign to n
-    @(n); // would put all of n on the stack?
-    @((...)pop); // this would pop... i have no idea lol
+    
+    &= n;  // pop stack and assign to n
+    @(1) := result;  // copy top of stack to result
     
     while @(n 1 >) {
         @(result n *) &= result;  // pop and assign
@@ -28,10 +27,10 @@ fn push_range: (i32 i32) -> (i32 i32 i32 i32 i32) {
     
     @(start)
     while @(dup end <) {
-        @(1 + dup)  
+        @(1 + hfs::dup)  
                    
     }
-    @(pop);
+    @(hfs::pop);
 }
 
 // Main program: calculate sum of factorials from 1 to 5
@@ -41,10 +40,10 @@ fn main: () -> (i32) {
     
     @(0)
     := sum;  // copy to sum
-    @(1 5) push_range;
+    @((1 5)push_range);
     
     // Stack now has: 1 2 3 4 5
-    while @(@depth 0 >) {
+    while @(hfs::depth 0 >) {
         &= temp;  // pop and assign
         @(temp) factorial;
         @(sum +) &= sum;  // pop and assign

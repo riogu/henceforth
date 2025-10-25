@@ -120,12 +120,17 @@ pub struct FunctionDeclaration {
 // Statements (not shared)
 #[derive(Debug)]
 pub enum Statement {
-    If(IfStmt),
-    ElseIf(StmtId), // is an IfStmt
-    Else(StmtId), // is a BlockScope
-    StackBlock(StackBlock),
-    BlockScope(BlockScope),
-    While(WhileStmt),
+    If {
+        cond: StmtId, // points to StackBlock
+        body: StmtId, // points to BlockScope
+        else_stmt: Option<ElseStmt>,
+    },
+    While {
+        cond: StmtId, // points to StackBlock
+        body: StmtId, // points to BlockScope
+    },
+    StackBlock(Vec<ExprId>),
+    BlockScope(Vec<TopLevelId>),
     Return,
     Break,
     Continue,
@@ -133,31 +138,17 @@ pub enum Statement {
 }
 
 #[derive(Debug)]
-pub struct BlockScope {
-    pub nodes: Vec<TopLevelId>,
+pub enum ElseStmt {
+    ElseIf(StmtId),  // Points to an IfStmt
+    Else(StmtId),    // Points to a BlockScope
 }
-
-#[derive(Debug)]
-pub struct StackBlock {
-    pub nodes: Vec<ExprId>,
-}
-
-#[derive(Debug)]
-pub enum ElseStmtId {
-}
-
 #[derive(Debug)]
 pub struct IfStmt {
-    pub cond: StmtId, // is a StackBlock
-    pub body: StmtId, // is a BlockScope
-    pub else_stmt: Option<StmtId>,
+    cond: StmtId, // is a StackBlock
+    body: StmtId, // is a BlockScope
+    else_stmt: Option<ElseStmt>, // is ElseIf/Else
 }
 
-#[derive(Debug)]
-pub struct WhileStmt {
-    pub cond: StmtId, // is a StackBlock
-    pub body: StmtId, // is a BlockScope
-}
 // ============================================================================
 
 // ============================================================================

@@ -31,16 +31,14 @@ impl Typed for Expression {
 impl Typed for Statement {
     fn get_type(&self) -> Type {
         match self {
-            Statement::If(if_stmt) => todo!(),
+            Statement::If{cond, body, else_stmt} => todo!(),
             Statement::Return => todo!(),
             Statement::StackBlock(stack_block) => todo!(),
             Statement::BlockScope(block_scope) => todo!(),
-            Statement::While(while_stmt) => todo!(),
+            Statement::While{cond, body} => todo!(),
             Statement::Break => todo!(),
             Statement::Continue => todo!(),
             Statement::Empty => todo!(),
-            Statement::ElseIf(stmt_id) => todo!(),
-            Statement::Else(stmt_id) => todo!(),
         }
     }
 }

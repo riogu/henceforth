@@ -95,21 +95,21 @@ impl<'a> AstArena<'a> {
     }
 }
 //---------------------------------------------------------------------------
-pub struct Analyzer<'a> {
+pub struct TypeAnalyzer<'a> {
     scope_stack: ScopeStack,
     arena: AstArena<'a>,
 }
-impl<'a> Analyzer<'a> {
-    pub fn new(file_name: String, mut arena: AstArena<'a>) -> Analyzer<'a> {
+impl<'a> TypeAnalyzer<'a> {
+    pub fn new(file_name: String, mut arena: AstArena<'a>) -> TypeAnalyzer<'a> {
         arena.pop_hfs_stack();
-        Analyzer {
+        TypeAnalyzer {
             scope_stack: ScopeStack::new(file_name),
             arena,
         }
     }
 }
 // separate analysis like solving identifiers and type checking
-impl<'a> Analyzer<'a> {
+impl<'a> TypeAnalyzer<'a> {
     fn analyze_identifier(&mut self, id: &Identifier) {
         // resolve identifiers, also push them to the stack
         match id {
@@ -133,9 +133,9 @@ impl<'a> Analyzer<'a> {
 // our goal is just to make sure types match all across the code, and solve identifiers
 // which means we manage a stack of types across analysis, since we dont actually care about the
 // values at all, we just care about the types themselves matching
-impl<'a> Analyzer<'a> {
+impl<'a> TypeAnalyzer<'a> {
     pub fn analyze(top_level_nodes: &[TopLevelId], file_name: String, arena: AstArena<'a>) {
-        let mut analyzer = Analyzer::new(file_name, arena);
+        let mut analyzer = TypeAnalyzer::new(file_name, arena);
         for node in top_level_nodes {
             analyzer.analyze_top_level(*node);
         }

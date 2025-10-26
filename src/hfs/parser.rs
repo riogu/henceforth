@@ -118,15 +118,11 @@ impl<'a> Parser<'a> {
                 self.expect(TokenKind::Semicolon);
                 self.arena .alloc_unresolved_stmt(UnresolvedStatement::Return, token)
             }
-            TokenKind::Break => self
-                .arena
-                .alloc_unresolved_stmt(UnresolvedStatement::Break, token),
-            TokenKind::Continue => self
-                .arena
-                .alloc_unresolved_stmt(UnresolvedStatement::Continue, token),
+            TokenKind::Break      => self.arena.alloc_unresolved_stmt(UnresolvedStatement::Break, token),
+            TokenKind::Continue   => self.arena.alloc_unresolved_stmt(UnresolvedStatement::Continue, token),
             TokenKind::CopyAssign => self.assignment(false),
             TokenKind::MoveAssign => self.assignment(true),
-            TokenKind::Semicolon => self.arena.alloc_unresolved_stmt(UnresolvedStatement::Empty, token),
+            TokenKind::Semicolon  => self.arena.alloc_unresolved_stmt(UnresolvedStatement::Empty, token),
             _ => panic!("expected statement"),
         }
     }

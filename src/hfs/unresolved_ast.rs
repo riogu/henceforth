@@ -8,10 +8,8 @@ use crate::hfs::ast::Type;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UnresolvedOperation {
     // Binary
-    Add, Sub, Mul, Div, Mod,
-    Equal, NotEqual,
-    Less, LessEqual, Greater, GreaterEqual,
-    Or, And,
+    Add, Sub, Mul, Div, Mod,  Or, And,
+    Equal, NotEqual, Less, LessEqual, Greater, GreaterEqual,
     // Unary
     Not,
 }
@@ -143,5 +141,18 @@ impl<'a> UnresolvedAstArena<'a> {
         self.unresolved_function_tokens.push(token);
         id
     }
-}
 
+    // Immutable accessor methods
+    pub fn get_unresolved_expr(&self, id: UnresolvedExprId) -> &UnresolvedExpression {
+        &self.unresolved_exprs[id.0]
+    }
+    pub fn get_unresolved_stmt(&self, id: UnresolvedStmtId) -> &UnresolvedStatement {
+        &self.unresolved_stmts[id.0]
+    }
+    pub fn get_unresolved_var(&self, id: UnresolvedVarId) -> &UnresolvedVarDeclaration {
+        &self.unresolved_vars[id.0]
+    }
+    pub fn get_unresolved_func(&self, id: UnresolvedFuncId) -> &UnresolvedFunctionDeclaration {
+        &self.unresolved_functions[id.0]
+    }
+}

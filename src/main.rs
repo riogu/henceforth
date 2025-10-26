@@ -9,8 +9,8 @@ mod hfs {
     pub mod semantic_analysis;
     pub mod token;
     pub mod types;
-    pub mod stack_parser;
-    pub use stack_parser::*;
+    pub mod stack_analyzer;
+    pub use stack_analyzer::*;
     pub use ast::*;
     pub use unresolved_ast::*;
     pub use builder::*;
@@ -38,6 +38,7 @@ fn main() {
     println!("{:?}", args);
     println!("{:?}", file);
     let tokens = hfs::Lexer::tokenize(&file);
-    let (top_level_nodes, ast_arena) = hfs::Parser::parse_tokens(tokens);
-    hfs::Analyzer::analyze(&top_level_nodes, file.path.to_str().unwrap().to_string(), ast_arena);
+    let (unresolved_top_level_nodes, unresolved_ast_arena) = hfs::Parser::parse_tokens(tokens);
+    let (top_level_nodes, ast_arena) = hfs::StackAnalyzer::resolve(unresolved_top_level_nodes, unresolved_ast_arena);
+    hfs::TypeAnalyzer::analyze(&top_level_nodes, file.path.to_str().unwrap().to_string(), ast_arena);
 }

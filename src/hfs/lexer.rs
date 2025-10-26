@@ -206,7 +206,7 @@ mod tests {
     use std::rc::Rc;
 
     use crate::{
-        hfs::ast_node::Type,
+        hfs::ast::Type,
         hfs::builder::{
             ControlFlowOps, FunctionOps, LoopOps, Operation, StackOps, TokenSequence, VariableOps,
         },

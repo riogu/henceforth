@@ -1,4 +1,4 @@
-use crate::hfs::ast_node::*;
+use crate::hfs::ast::*;
 
 impl<'a> AstArena<'a> {
     pub fn get_type_of_operation(&self, op: &Operation) -> Type {
@@ -43,7 +43,7 @@ impl<'a> AstArena<'a> {
             Statement::While { cond, body } => todo!(),
             Statement::Break => todo!(),
             Statement::Continue => todo!(),
-            Statement::Assignment { value, identifier } => todo!(),
+            Statement::Assignment { value, identifier, is_move } => todo!(),
             Statement::Empty => todo!(),
         }
     }

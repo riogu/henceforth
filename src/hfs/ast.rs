@@ -19,7 +19,6 @@ pub enum Identifier {
     Variable(VarId),
     Function(FuncId),
 }
-
 #[derive(Debug)]
 pub enum Operation {
     Add(ExprId, ExprId),
@@ -97,7 +96,7 @@ pub enum Statement {
     Break,
     Continue,
     Empty,
-    Assignment { value: ExprId, identifier: ExprId },
+    Assignment { value: ExprId, identifier: ExprId, is_move: bool },
 }
 
 

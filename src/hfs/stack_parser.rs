@@ -32,7 +32,45 @@ impl<'a> AstArena<'a> {
 }
 
 
+// ============================================================================
 // Stack Parser (2nd pass over the AST)
+// ============================================================================
 // this is used to finish up the AST we started in the first parser pass
-struct StackParser {
+pub struct StackParser<'a> {
+    unresolved: UnresolvedAstArena<'a>,
+    resolved: AstArena<'a>,
+}
+
+impl<'a> StackParser<'a> {
+    pub fn new(unresolved: UnresolvedAstArena<'a>) -> Self {
+        Self {
+            unresolved,
+            resolved: AstArena::new(),
+        }
+    }
+
+    pub fn resolve(mut self, top_level: Vec<UnresolvedTopLevelId>) -> (Vec<TopLevelId>, AstArena<'a>) {
+        let resolved_top_level = self.resolve_top_level(top_level);
+        (resolved_top_level, self.resolved)
+    }
+
+    fn resolve_top_level(&mut self, nodes: Vec<UnresolvedTopLevelId>) -> Vec<TopLevelId> {
+        // TODO: You'll implement this
+        todo!()
+    }
+
+    fn resolve_stmt(&mut self, id: UnresolvedStmtId) -> StmtId {
+        // TODO: You'll implement this
+        todo!()
+    }
+
+    fn resolve_expr(&mut self, id: UnresolvedExprId) -> ExprId {
+        // TODO: You'll implement this
+        todo!()
+    }
+
+    fn resolve_stack_block(&mut self, exprs: &[UnresolvedExprId]) -> StmtId {
+        // TODO: Process expressions and manage hfs_stack
+        todo!()
+    }
 }

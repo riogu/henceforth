@@ -1,4 +1,4 @@
-use crate::hfs::ast_node::*;
+use crate::hfs::ast::*;
 use crate::hfs::token::*;
 
 use std::iter::Peekable;
@@ -113,7 +113,8 @@ impl<'a> Parser<'a> {
             TokenKind::Return    => { self.expect(TokenKind::Semicolon); self.arena.alloc_stmt(Statement::Return, token) }
             TokenKind::Break     => self.arena.alloc_stmt(Statement::Break, token),
             TokenKind::Continue  => self.arena.alloc_stmt(Statement::Continue, token),
-            TokenKind::MoveAssign | TokenKind::CopyAssign => self.assignment(),
+            TokenKind::CopyAssign => self.assignment(false), 
+            TokenKind::MoveAssign => self.assignment(true),
             TokenKind::Semicolon => self.arena.alloc_stmt(Statement::Empty, token),
             _ => panic!("expected statement"),
         }
@@ -266,7 +267,7 @@ impl<'a> Parser<'a> {
 
     // <assignment> ::= "&=" <identifier> ";"
     //                | ":=" <identifier> ";"
-    fn assignment(&mut self) -> StmtId {
+    fn assignment(&mut self, is_move: bool) -> StmtId {
         let assign_tkn = self.tokens.next().unwrap();
 
         let (name, token) = self.expect_identifier();
@@ -278,6 +279,6 @@ impl<'a> Parser<'a> {
         };
 
         let identifier = self.arena.push_and_alloc_expr(Expression::Identifier(Identifier::Unresolved(name)), token);
-        self.arena.alloc_stmt(Statement::Assignment{value, identifier}, assign_tkn)
+        self.arena.alloc_stmt(Statement::Assignment{value, identifier, is_move}, assign_tkn)
     }
 }

@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use crate::hfs::ast_node::*;
+use crate::hfs::ast::*;
 use crate::hfs::types::*;
 
 #[derive(Debug, Clone, Copy)]
@@ -188,7 +188,7 @@ impl<'a> Analyzer<'a> {
             Statement::Return => todo!(),
             Statement::Break => todo!(),
             Statement::Continue => todo!(),
-            Statement::Assignment { value, identifier } => todo!(),
+            Statement::Assignment { value, identifier, is_move } => todo!(),
             Statement::Empty => {}
         }
     }

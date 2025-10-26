@@ -24,13 +24,6 @@ fn main: () -> (i32) {
     // so := var basically acts the same as consuming the stack directly with (...)var;
 }   // this way, our (...) operator is always the same, consistent operation.
     // it consumes the stack and pushes a tuple with what it consumed.
-// then, here func pushes many elements
-// makes the syntax of () more explicit
-fn func: (i32 i32 f32)-> str i32 i32 i32 {
-}
-// optionally maybe we can allow
-fn func: i32 i32 i32 -> i32 {} // but i dont like this
-
 
 // Calculate factorial using stack operations
 fn factorial: (i32) -> (i32) {

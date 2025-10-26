@@ -80,6 +80,7 @@ impl<'a> Parser<'a> {
     }
 }
 
+// TODO: remove stack management code from here and move to StackParser
 
 // RD Parser for Henceforth (check 'henceforth-bnf.md')
 impl<'a> Parser<'a> {

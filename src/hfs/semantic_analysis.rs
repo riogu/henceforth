@@ -3,7 +3,7 @@ use crate::hfs::ast_node::*;
 use crate::hfs::types::*;
 
 #[derive(Debug, Clone, Copy)]
-
+// Scopes, used for solving symbols
 pub enum ScopeKind {
     Global,
     Function, // func_name()::
@@ -17,7 +17,7 @@ struct Scope {
 }
 
 pub struct ScopeStack {
-    stack: Vec<Scope>,
+    scope_stack: Vec<Scope>,
     mangled_global_vars: HashMap<String, VarId>,
     mangled_locals: HashMap<String, VarId>,
     mangled_functions: HashMap<String, FuncId>,
@@ -26,26 +26,26 @@ pub struct ScopeStack {
 impl ScopeStack {
     pub fn new(file_name: String) -> Self {
         Self {
-            stack: vec![Scope { name: file_name + "%", kind: ScopeKind::Global, inner_count: 0, }],
+            scope_stack: vec![Scope { name: file_name + "%", kind: ScopeKind::Global, inner_count: 0, }],
             mangled_global_vars: HashMap::new(),
             mangled_locals: HashMap::new(),
             mangled_functions: HashMap::new(),
         }
     }
     pub fn push_function_and_scope(&mut self, name: &str, func_id: FuncId) {
-        let parent = self.stack.last_mut().expect("[internal hfs error] couldn't push function, scopes were set up wrong.");
+        let parent = self.scope_stack.last_mut().expect("[internal hfs error] couldn't push function, scopes were set up wrong.");
         let mangled_name = format!("{}{}::", parent.name, name);
-        self.stack.push(Scope { name: format!("{}()::", mangled_name), kind: ScopeKind::Function, inner_count: 0, });
+        self.scope_stack.push(Scope { name: format!("{}()::", mangled_name), kind: ScopeKind::Function, inner_count: 0, });
         self.mangled_functions.insert(mangled_name, func_id);
     }
     pub fn push_block(&mut self) {
-        let parent = self.stack.last_mut().expect("[internal hfs error] couldn't push block, scopes were set up wrong.");
+        let parent = self.scope_stack.last_mut().expect("[internal hfs error] couldn't push block, scopes were set up wrong.");
         let block_name = format!("{}{}::", parent.name, parent.inner_count);
         parent.inner_count += 1;
-        self.stack.push(Scope { name: block_name, kind: ScopeKind::Block, inner_count: 0 });
+        self.scope_stack.push(Scope { name: block_name, kind: ScopeKind::Block, inner_count: 0 });
     }
     pub fn push_variable(&mut self, name: &str, var_id: VarId) {
-        let curr_stack = self.stack.last().expect("[internal hfs error] scopes were set up wrong.");
+        let curr_stack = self.scope_stack.last().expect("[internal hfs error] scopes were set up wrong.");
         let mangled_name = format!("{}{}", curr_stack.name, name);
         match curr_stack.kind {
             ScopeKind::Global => self.mangled_global_vars.insert(mangled_name, var_id),
@@ -54,12 +54,47 @@ impl ScopeStack {
         };
     }
     pub fn pop(&mut self) {
-        if self.stack.len() > 1 {
-            self.stack.pop();
+        if self.scope_stack.len() > 1 {
+            self.scope_stack.pop();
         }
     }
 }
+// TODO: use these in semantic analysis for type solving.
+// its perfectly fine to type check and solve symbols in the same pass
+// the language is simple enough for this to be perfectly viable
 
+//---------------------------------------------------------------------------
+// Type stack methods (manage the type stack for type checking in semantic analysis)
+impl<'a> AstArena<'a> {
+
+    pub fn push_hfs_type(&mut self, hfs_type: Type) {
+        self.hfs_type_stack.push(hfs_type);
+    }
+    pub fn pop_hfs_type_stack(&mut self) -> Vec<Type> {
+        let temp = self.hfs_type_stack.clone();
+        self.hfs_type_stack.clear();
+        temp
+    }
+    pub fn pop_type_or_error(&mut self, msg: &str) -> Type { 
+        self.hfs_type_stack.pop().unwrap_or_else(|| panic!("{}", msg))
+    }
+    
+    pub fn last_type_or_error(&mut self, msg: &str) -> Type { 
+        self.hfs_type_stack.last().cloned().unwrap_or_else(|| panic!("{}", msg))
+    }
+    
+    pub fn pop2_types_or_error(&mut self, msg: &str) -> (Type, Type) { 
+        (
+            self.hfs_type_stack.pop().unwrap_or_else(|| panic!("{}", msg)),
+            self.hfs_type_stack.pop().unwrap_or_else(|| panic!("{}", msg)),
+        )
+    }
+    
+    pub fn peek_type(&self) -> Option<&Type> {
+        self.hfs_type_stack.last()
+    }
+}
+//---------------------------------------------------------------------------
 pub struct Analyzer<'a> {
     scope_stack: ScopeStack,
     arena: AstArena<'a>,
@@ -73,7 +108,6 @@ impl<'a> Analyzer<'a> {
         }
     }
 }
-
 // separate analysis like solving identifiers and type checking
 impl<'a> Analyzer<'a> {
     fn analyze_identifier(&mut self, id: &Identifier) {
@@ -96,6 +130,9 @@ impl<'a> Analyzer<'a> {
 
 }
 // main recursive analysis loop
+// our goal is just to make sure types match all across the code, and solve identifiers
+// which means we manage a stack of types across analysis, since we dont actually care about the
+// values at all, we just care about the types themselves matching
 impl<'a> Analyzer<'a> {
     pub fn analyze(top_level_nodes: &[TopLevelId], file_name: String, arena: AstArena<'a>) {
         let mut analyzer = Analyzer::new(file_name, arena);
@@ -112,15 +149,14 @@ impl<'a> Analyzer<'a> {
         }
     }
     fn analyze_func_decl(&mut self, func_id: FuncId) {
-        let (name, body, param_type, return_type) = {
+        // we dont need to analyze anything in the types since there is no user types
+        // so we dont have to solve any symbols at all here (need this later if we add user types)
+        let (name, body) = {
             let func = self.arena.get_func(func_id);
-            (&func.name, func.body, func.param_type.clone(), func.return_type.clone())
+            (&func.name, func.body)
         }; // gotta drop the borrow else rust gets angry
         self.scope_stack.push_function_and_scope(&name, func_id); 
-        self.analyze_type(param_type);
         self.analyze_stmt(body); // will push a bunch of stuff to the stack
-        self.analyze_type(return_type); // will now compare against that stack
-
         self.scope_stack.pop();
     }
 

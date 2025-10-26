@@ -26,24 +26,27 @@ impl<'a> Parser<'a> {
             _ => panic!("expected identifier, got {:?}", token.kind),
         }
     }
-    fn expect_type(&mut self) -> Type {
-        let kind = self.tokens.peek().expect("unexpected end of input").kind.clone();
-        match &kind {
+    fn expect_type(&mut self) -> TypeId {
+        let token = self.tokens.peek().expect("unexpected end of input").clone();
+        match &token.kind {
             kind if kind.is_type() => {
                 self.tokens.next();
-                kind.to_type()
+                self.arena.to_type(token)
             }
-            TokenKind::LeftParen => Type::Tuple(self.type_list()),
-            _ => panic!("expected type, got {:?}", kind),
+            TokenKind::LeftParen => {
+                let hfs_type = Type::Tuple(self.type_list());
+                self.arena.alloc_type(hfs_type, token)
+            }
+            kind => panic!("expected type, got {:?}", kind),
         }
     }
-    fn type_list(&mut self) -> Vec<Type> {
+    fn type_list(&mut self) -> Vec<TypeId> {
         self.expect(TokenKind::LeftParen);
-        let mut types = Vec::<Type>::new();
+        let mut types = Vec::<TypeId>::new();
         loop {
             match self.tokens.next().expect("unexpected end of input") {
                 token if token.kind == TokenKind::RightParen => break,
-                token if token.is_type() => types.push(token.to_type()),
+                token if token.is_type() => types.push(self.arena.to_type(token)),
                 token => panic!("expected type, found {:?}", token.kind),
             };
         }
@@ -72,7 +75,7 @@ impl<'a> Parser<'a> {
         self.arena.alloc_unresolved_var(UnresolvedVarDeclaration { name , hfs_type }, token)
     }
     // <signature> ::= "(" <type_list>? ")" "->" "(" <type_list>? ")"
-    fn function_signature(&mut self) -> (Type, Type) {
+    fn function_signature(&mut self) -> (TypeId, TypeId) {
         self.expect(TokenKind::Colon);
         let param_types = self.expect_type(); // tuple or single type
 

@@ -1,5 +1,5 @@
 use crate::hfs::token::*;
-use crate::hfs::ast::Type;
+use crate::hfs::ast::*;
 
 // ============================================================================
 // First-pass AST (no stack resolution)
@@ -67,14 +67,14 @@ pub enum UnresolvedElseStmt {
 #[derive(Debug, Clone)]
 pub struct UnresolvedVarDeclaration {
     pub name: String,
-    pub hfs_type: Type,
+    pub hfs_type: TypeId,
 }
 
 #[derive(Debug, Clone)]
 pub struct UnresolvedFunctionDeclaration {
     pub name: String,
-    pub param_type: Type,
-    pub return_type: Type,
+    pub param_type: TypeId,
+    pub return_type: TypeId,
     pub body: UnresolvedStmtId, // Uses unresolved ID
 }
 
@@ -101,58 +101,108 @@ pub struct UnresolvedAstArena<'a> {
     pub(crate) unresolved_stmts: Vec<UnresolvedStatement>,
     pub(crate) unresolved_vars: Vec<UnresolvedVarDeclaration>,
     pub(crate) unresolved_functions: Vec<UnresolvedFunctionDeclaration>,
-
+    pub(crate) types: Vec<Type>,
+    
     // Token storage
     pub(crate) unresolved_expr_tokens: Vec<Token<'a>>,
     pub(crate) unresolved_stmt_tokens: Vec<Token<'a>>,
     pub(crate) unresolved_var_tokens: Vec<Token<'a>>,
     pub(crate) unresolved_function_tokens: Vec<Token<'a>>,
+    pub(crate) type_tokens: Vec<Token<'a>>,
 }
 
 impl<'a> UnresolvedAstArena<'a> {
     pub fn new() -> Self {
         Self::default()
     }
-
+    
     pub fn alloc_unresolved_expr(&mut self, expr: UnresolvedExpression, token: Token<'a>) -> UnresolvedExprId {
         let id = UnresolvedExprId(self.unresolved_exprs.len());
         self.unresolved_exprs.push(expr);
         self.unresolved_expr_tokens.push(token);
         id
     }
-
+    
     pub fn alloc_unresolved_stmt(&mut self, stmt: UnresolvedStatement, token: Token<'a>) -> UnresolvedStmtId {
         let id = UnresolvedStmtId(self.unresolved_stmts.len());
         self.unresolved_stmts.push(stmt);
         self.unresolved_stmt_tokens.push(token);
         id
     }
-
+    
     pub fn alloc_unresolved_var(&mut self, var: UnresolvedVarDeclaration, token: Token<'a>) -> UnresolvedVarId {
         let id = UnresolvedVarId(self.unresolved_vars.len());
         self.unresolved_vars.push(var);
         self.unresolved_var_tokens.push(token);
         id
     }
-
+    
     pub fn alloc_unresolved_function(&mut self, func: UnresolvedFunctionDeclaration, token: Token<'a>) -> UnresolvedFuncId {
         let id = UnresolvedFuncId(self.unresolved_functions.len());
         self.unresolved_functions.push(func);
         self.unresolved_function_tokens.push(token);
         id
     }
-
+    
+    pub fn alloc_type(&mut self, hfs_type: Type, token: Token<'a>) -> TypeId {
+        let id = TypeId(self.types.len());
+        self.types.push(hfs_type);
+        self.type_tokens.push(token);
+        id
+    }
+    
     // Immutable accessor methods
     pub fn get_unresolved_expr(&self, id: UnresolvedExprId) -> &UnresolvedExpression {
         &self.unresolved_exprs[id.0]
     }
+    
     pub fn get_unresolved_stmt(&self, id: UnresolvedStmtId) -> &UnresolvedStatement {
         &self.unresolved_stmts[id.0]
     }
+    
     pub fn get_unresolved_var(&self, id: UnresolvedVarId) -> &UnresolvedVarDeclaration {
         &self.unresolved_vars[id.0]
     }
+    
     pub fn get_unresolved_func(&self, id: UnresolvedFuncId) -> &UnresolvedFunctionDeclaration {
         &self.unresolved_functions[id.0]
+    }
+    
+    pub fn get_type(&self, id: TypeId) -> &Type {
+        &self.types[id.0]
+    }
+   
+    // Token accessor methods
+    pub fn get_unresolved_expr_token(&self, id: UnresolvedExprId) -> Token<'a> {
+        self.unresolved_expr_tokens[id.0].clone()
+    }
+    
+    pub fn get_unresolved_stmt_token(&self, id: UnresolvedStmtId) -> Token<'a> {
+        self.unresolved_stmt_tokens[id.0].clone()
+    }
+    
+    pub fn get_unresolved_var_token(&self, id: UnresolvedVarId) -> Token<'a> {
+        self.unresolved_var_tokens[id.0].clone()
+    }
+    
+    pub fn get_unresolved_func_token(&self, id: UnresolvedFuncId) -> Token<'a> {
+        self.unresolved_function_tokens[id.0].clone()
+    }
+    
+    pub fn get_type_token(&self, id: TypeId) -> Token<'a> {
+        self.type_tokens[id.0].clone()
+    }
+
+    pub fn to_type(&mut self, token: Token<'a>) -> TypeId {
+        match token.kind {
+            TokenKind::Int => self.alloc_type(Type::Int, token),
+            TokenKind::String => self.alloc_type(Type::String, token),
+            TokenKind::Bool => self.alloc_type(Type::Bool, token),
+            TokenKind::Float => self.alloc_type(Type::Float, token),
+            TokenKind::Identifier(_) => {
+                panic!("[internal hfs error]: this is not how you convert identifiers to types")
+            }
+            _ => panic!("[internal hfs error]: expected token that has a type, got {:?}", token.kind),
+        }
     }
 }

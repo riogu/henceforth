@@ -9,30 +9,30 @@ use crate::hfs::types::*;
 // Type stack methods (manage the type stack for type checking in semantic analysis)
 impl<'a> AstArena<'a> {
 
-    pub fn push_hfs_type(&mut self, hfs_type: Type) {
+    pub fn push_hfs_type(&mut self, hfs_type: TypeId) {
         self.hfs_type_stack.push(hfs_type);
     }
-    pub fn pop_hfs_type_stack(&mut self) -> Vec<Type> {
+    pub fn pop_hfs_type_stack(&mut self) -> Vec<TypeId> {
         let temp = self.hfs_type_stack.clone();
         self.hfs_type_stack.clear();
         temp
     }
-    pub fn pop_type_or_error(&mut self, msg: &str) -> Type { 
+    pub fn pop_type_or_error(&mut self, msg: &str) -> TypeId { 
         self.hfs_type_stack.pop().unwrap_or_else(|| panic!("{}", msg))
     }
     
-    pub fn last_type_or_error(&mut self, msg: &str) -> Type { 
+    pub fn last_type_or_error(&mut self, msg: &str) -> TypeId { 
         self.hfs_type_stack.last().cloned().unwrap_or_else(|| panic!("{}", msg))
     }
     
-    pub fn pop2_types_or_error(&mut self, msg: &str) -> (Type, Type) { 
+    pub fn pop2_types_or_error(&mut self, msg: &str) -> (TypeId, TypeId) { 
         (
             self.hfs_type_stack.pop().unwrap_or_else(|| panic!("{}", msg)),
             self.hfs_type_stack.pop().unwrap_or_else(|| panic!("{}", msg)),
         )
     }
     
-    pub fn peek_type(&self) -> Option<&Type> {
+    pub fn peek_type(&self) -> Option<&TypeId> {
         self.hfs_type_stack.last()
     }
 }

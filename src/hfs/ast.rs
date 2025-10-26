@@ -8,6 +8,7 @@ use crate::hfs::token::*;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)] pub struct FuncId(pub usize);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)] pub struct ExprId(pub usize);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)] pub struct StmtId(pub usize);
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)] pub struct TypeId(pub usize);
 
 // ============================================================================
 // AST Node Structures
@@ -44,7 +45,7 @@ pub enum Expression {
     Literal(Literal),
     FunctionCall{ tuple: ExprId, identifier: Identifier },
     Tuple { expressions: Vec<ExprId>, variadic: bool },
-    Parameter(Type),
+    Parameter(TypeId),
 }
 
 
@@ -60,14 +61,14 @@ pub enum TopLevelId {
 #[derive(Debug)]
 pub struct VarDeclaration {
     pub name: String,
-    pub hfs_type: Type,
+    pub hfs_type: TypeId,
 }
 
 #[derive(Debug)]
 pub struct FunctionDeclaration {
     pub name: String,
-    pub param_type: Type,     // either a tuple or a single type
-    pub return_type: Type,    // either a tuple or a single type
+    pub param_type: TypeId,     // either a tuple or a single type
+    pub return_type: TypeId,    // either a tuple or a single type
     pub body: StmtId,
     pub params: Vec<ExprId>,  // Vec<Expression::Parameter>
 }
@@ -110,7 +111,7 @@ pub enum Type {
     String,
     Bool,
     Float,
-    Tuple(Vec<Type>),
+    Tuple(Vec<TypeId>),
 }
 impl Type {
     pub fn to_token(&self) -> TokenKind {
@@ -135,15 +136,17 @@ pub struct AstArena<'a> {
     pub(crate) stmts: Vec<Statement>,
     pub(crate) vars: Vec<VarDeclaration>,
     pub(crate) functions: Vec<FunctionDeclaration>,
+    pub(crate) types: Vec<Type>,
 
     // Token storage (parallel arrays)
     pub(crate) expr_tokens: Vec<Token<'a>>,
     pub(crate) stmt_tokens: Vec<Token<'a>>,
     pub(crate) var_tokens: Vec<Token<'a>>,
     pub(crate) function_tokens: Vec<Token<'a>>,
+    pub(crate) type_tokens: Vec<Token<'a>>,
 
     pub(crate) hfs_stack: Vec<ExprId>, // keeps track of the state of our stack
-    pub(crate) hfs_type_stack: Vec<Type>,  // keeps track of the state of our types,
+    pub(crate) hfs_type_stack: Vec<TypeId>,  // keeps track of the state of our types,
     // for semantic analysis
 }
 
@@ -154,28 +157,34 @@ impl<'a> AstArena<'a> {
         Self::default()
     }
     // Allocation methods 
-    pub fn alloc_expr(&mut self, expr: Expression)-> ExprId {
+    pub fn alloc_expr(&mut self, expr: Expression, token: Token<'a>) -> ExprId {
         // allocates AND pushes to the stack 
         let id = ExprId(self.exprs.len());
         self.exprs.push(expr);
         id
     }
 
-    pub fn alloc_stmt(&mut self, stmt: Statement) -> StmtId {
+    pub fn alloc_stmt(&mut self, stmt: Statement, token: Token<'a>) -> StmtId {
         let id = StmtId(self.stmts.len());
         self.stmts.push(stmt);
         id
     }
 
-    pub fn alloc_var(&mut self, var: VarDeclaration) -> VarId {
+    pub fn alloc_var(&mut self, var: VarDeclaration, token: Token<'a>) -> VarId {
         let id = VarId(self.vars.len());
         self.vars.push(var);
         id
     }
 
-    pub fn alloc_function(&mut self, func: FunctionDeclaration) -> FuncId {
+    pub fn alloc_function(&mut self, func: FunctionDeclaration, token: Token<'a>) -> FuncId {
         let id = FuncId(self.functions.len());
         self.functions.push(func);
+        id
+    }
+
+    pub fn alloc_type(&mut self, hfs_type: Type, token: Token<'a>) -> TypeId {
+        let id = TypeId(self.types.len());
+        self.types.push(hfs_type);
         id
     }
     // this is necessary to allow recursive functions
@@ -195,6 +204,9 @@ impl<'a> AstArena<'a> {
     }
     pub fn get_func(&self, id: FuncId) -> &FunctionDeclaration {
         &self.functions[id.0]
+    }
+    pub fn get_type(&self, id: TypeId) -> &Type {
+        &self.types[id.0]
     }
 
     // Mutable accessor methods
@@ -228,48 +240,5 @@ impl<'a> AstArena<'a> {
         &self.function_tokens[id.0]
     }
 
-    // Unified token API using NodeId
-    pub fn get_token(&self, node_id: NodeId) -> &Token<'a> {
-        match node_id {
-            NodeId::Expr(id) => self.get_expr_token(id),
-            NodeId::Stmt(id) => self.get_stmt_token(id),
-            NodeId::Var(id) => self.get_var_token(id),
-            NodeId::Function(id) => self.get_function_token(id),
-        }
-    }
 }
 
-// ============================================================================
-// Unified NodeId for common token API
-// ============================================================================
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum NodeId {
-    Expr(ExprId),
-    Stmt(StmtId),
-    Var(VarId),
-    Function(FuncId),
-}
-
-impl From<ExprId> for NodeId {
-    fn from(id: ExprId) -> Self {
-        NodeId::Expr(id)
-    }
-}
-
-impl From<StmtId> for NodeId {
-    fn from(id: StmtId) -> Self {
-        NodeId::Stmt(id)
-    }
-}
-
-impl From<VarId> for NodeId {
-    fn from(id: VarId) -> Self {
-        NodeId::Var(id)
-    }
-}
-
-impl From<FuncId> for NodeId {
-    fn from(id: FuncId) -> Self {
-        NodeId::Function(id)
-    }
-}

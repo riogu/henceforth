@@ -32,8 +32,8 @@ impl<'a> AstArena<'a> {
     pub fn push_to_hfs_stack(&mut self, expr_id: ExprId) {
         self.hfs_stack.push(expr_id)
     }
-    pub fn alloc_and_push_to_hfs_stack(&mut self, expr: Expression)-> ExprId {
-        let id = self.alloc_expr(expr);
+    pub fn alloc_and_push_to_hfs_stack(&mut self, expr: Expression, token: Token<'a>) -> ExprId {
+        let id = self.alloc_expr(expr, token);
         self.hfs_stack.push(id);
         id
     }
@@ -62,14 +62,7 @@ impl<'a> StackAnalyzer<'a> {
 
     pub fn resolve(top_level: Vec<UnresolvedTopLevelId>, unresolved: UnresolvedAstArena<'a>, file_name: String) -> (Vec<TopLevelId>, AstArena<'a>) {
         let mut stack_parser = StackAnalyzer::new(unresolved, file_name);
-
         let resolved_top_level = stack_parser.resolve_top_level(top_level);
-        // Move token vectors directly - indices will match since we process in order
-        stack_parser.arena.expr_tokens      = stack_parser.unresolved_arena.unresolved_expr_tokens;
-        stack_parser.arena.stmt_tokens      = stack_parser.unresolved_arena.unresolved_stmt_tokens;
-        stack_parser.arena.var_tokens       = stack_parser.unresolved_arena.unresolved_var_tokens;
-        stack_parser.arena.function_tokens  = stack_parser.unresolved_arena.unresolved_function_tokens;
-
         (resolved_top_level, stack_parser.arena)
     }
 
@@ -88,21 +81,30 @@ impl<'a> StackAnalyzer<'a> {
 
 
     fn resolve_var_decl(&mut self, id: UnresolvedVarId) -> VarId {
-        // stays the same, just copy over
-        let unresolved_var = &self.unresolved_arena.get_unresolved_var(id);
-        let var_id = self.arena.alloc_var(VarDeclaration { name: unresolved_var.name.clone(), hfs_type: unresolved_var.hfs_type.clone() });
+        let unresolved_var = self.unresolved_arena.get_unresolved_var(id);
+        let token = self.unresolved_arena.get_unresolved_var_token(id);
+        
+        let var_id = self.arena.alloc_var(
+            VarDeclaration { 
+                name: unresolved_var.name.clone(), 
+                hfs_type: unresolved_var.hfs_type.clone() 
+            },
+            token
+        );
         self.scope_resolution_stack.push_variable(&unresolved_var.name, var_id);
         var_id
     }
 
     fn resolve_func_decl(&mut self, id: UnresolvedFuncId) -> FuncId {
+        let token = self.unresolved_arena.get_unresolved_func_token(id);
         let (name, param_type, return_type, unresolved_body, params) = {
             let unresolved_func = &self.unresolved_arena.get_unresolved_func(id);
             // deconstruct parameter tuple into Vec<Expression::Parameter>
             let mut params = Vec::<ExprId>::new();
-            if let Type::Tuple(param_types) = unresolved_func.param_type.clone() { 
+            if let Type::Tuple(param_types) = self.unresolved_arena.get_type(unresolved_func.param_type) {
                 for param_type in param_types { // function parameter type is always a tuple
-                    params.push(self.arena.alloc_and_push_to_hfs_stack(Expression::Parameter(param_type)))
+                    let token = self.unresolved_arena.get_type_token(*param_type);
+                    params.push(self.arena.alloc_and_push_to_hfs_stack(Expression::Parameter(*param_type), token))
                 }
             }
             (
@@ -121,7 +123,7 @@ impl<'a> StackAnalyzer<'a> {
             body: self.arena.temporarily_get_next_stmt_id(),
             params, // we need to create our function BEFORE analyzing the body 
         }; // needed for recursive functions AND to match the correct token
-        let func_id = self.arena.alloc_function(func);
+        let func_id = self.arena.alloc_function(func, token);
 
         //------------------------------------------------------------
         // we push scopes so the body can solve identifiers
@@ -133,7 +135,9 @@ impl<'a> StackAnalyzer<'a> {
     }
 
     fn resolve_stmt(&mut self, id: UnresolvedStmtId) -> StmtId {
+        let token = self.unresolved_arena.get_unresolved_stmt_token(id);
         let unresolved_stmt = self.unresolved_arena.get_unresolved_stmt(id).clone();
+        
         match unresolved_stmt {
             UnresolvedStatement::If { body, else_stmt } => {
                 let cond = self.arena.last_or_error("expected boolean or operation on stack for if statement argument");
@@ -143,29 +147,25 @@ impl<'a> StackAnalyzer<'a> {
                     Some(UnresolvedElseStmt::ElseIf(stmt_id)) => Some(ElseStmt::ElseIf(self.resolve_stmt(stmt_id))),
                     None => None,
                 };
-                self.arena.alloc_stmt(Statement::If { cond, body, else_stmt })
+                self.arena.alloc_stmt(Statement::If { cond, body, else_stmt }, token)
             }
             UnresolvedStatement::While { body } => {
                 let cond = self.arena.last_or_error("expected boolean or operation on stack for while loop argument");
                 let body = self.resolve_stmt(body);
-                self.arena.alloc_stmt(Statement::While { cond, body})
+                self.arena.alloc_stmt(Statement::While { cond, body }, token)
             }
             UnresolvedStatement::StackBlock(unresolved_expr_ids) => {
                 let mut expr_ids = Vec::<ExprId>::new();
                 for expr_id in unresolved_expr_ids {
                     expr_ids.push(self.resolve_expr(expr_id));
                 }
-                self.arena.alloc_stmt(Statement::StackBlock(expr_ids))
+                self.arena.alloc_stmt(Statement::StackBlock(expr_ids), token)
             }
             UnresolvedStatement::BlockScope(unresolved_top_level_ids) => {
-
                 self.scope_resolution_stack.push_block_scope();
-
                 let top_level_ids = self.resolve_top_level(unresolved_top_level_ids);
-
                 self.scope_resolution_stack.pop();
-
-                self.arena.alloc_stmt(Statement::BlockScope(top_level_ids))
+                self.arena.alloc_stmt(Statement::BlockScope(top_level_ids), token)
             }
             UnresolvedStatement::Return => {
                 // stack must be valid here relative to return type
@@ -179,6 +179,7 @@ impl<'a> StackAnalyzer<'a> {
     }
 
     fn resolve_expr(&mut self, id: UnresolvedExprId) -> ExprId {
+        let token = self.unresolved_arena.get_unresolved_expr_token(id);
         match self.unresolved_arena.get_unresolved_expr(id) {
             UnresolvedExpression::Operation(unresolved_operation) => todo!(),
             UnresolvedExpression::Identifier(_) => todo!(),
@@ -186,7 +187,6 @@ impl<'a> StackAnalyzer<'a> {
             UnresolvedExpression::FunctionCall { identifier } => todo!(),
             UnresolvedExpression::Tuple { expressions, variadic } => todo!(),
         }
-        todo!()
     }
 
     fn resolve_operation(&mut self, op: &UnresolvedOperation) -> ExprId {
@@ -206,7 +206,6 @@ impl<'a> StackAnalyzer<'a> {
             UnresolvedOperation::GreaterEqual => todo!(),
             UnresolvedOperation::Not => todo!(),
         }
-        todo!()
     }
 
 }

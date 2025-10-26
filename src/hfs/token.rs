@@ -178,7 +178,7 @@ impl fmt::Display for TokenKind {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SourceInfo<'a> {
     line_number: usize,
     line_offset: usize,
@@ -202,7 +202,7 @@ impl<'a> SourceInfo<'a> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Token<'a> {
     pub kind: TokenKind,
     pub source_info: SourceInfo<'a>,
@@ -213,18 +213,6 @@ impl<'a> Token<'a> {
         Self { kind, source_info }
     }
 
-    pub fn to_type(&self) -> Type {
-        match self.kind {
-            TokenKind::Int => Type::Int,
-            TokenKind::String => Type::String,
-            TokenKind::Bool => Type::Bool,
-            TokenKind::Float => Type::Float,
-            TokenKind::Identifier(_) => {
-                panic!("[internal hfs error]: this is not how you convert identifiers to types")
-            }
-            _ => panic!("[internal hfs error]: expected token that has a type, got {:?}", self.kind),
-        }
-    }
     pub fn is_type(&self) -> bool {
         match self.kind {
             TokenKind::Int | TokenKind::String | TokenKind::Bool | TokenKind::Float => true,

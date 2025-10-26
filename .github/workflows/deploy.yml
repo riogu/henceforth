@@ -2,13 +2,16 @@ name: Deploy
 on:
   push:
     branches: [ main ]
-
 permissions:
-  contents: write
-
+  contents: read
+  pages: write
+  id-token: write
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
       
@@ -17,11 +20,24 @@ jobs:
         with:
           mdbook-version: 'latest'
       
-      - name: Build book
-        run: mdbook build docs
+      - name: Build Guide
+        run: cd docs/guide && mdbook build
       
-      - name: Deploy
-        uses: peaceiris/actions-gh-pages@v4
+      - name: Build Reference
+        run: cd docs/reference && mdbook build
+      
+      - name: Combine output
+        run: |
+          mkdir -p docs/output
+          cp -r docs/guide/book docs/output/guide
+          cp -r docs/reference/book docs/output/reference
+          cp docs/index.html docs/output/index.html
+      
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./docs/book
+          path: ./docs/output
+      
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

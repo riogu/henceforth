@@ -152,34 +152,30 @@ impl<'a> AstArena<'a> {
         Self::default()
     }
 
-    pub fn push_and_alloc_expr(&mut self, expr: Expression, token: Token<'a>)-> ExprId {
+    pub fn push_and_alloc_expr(&mut self, expr: Expression)-> ExprId {
         // allocates AND pushes to the stack 
         let id = ExprId(self.exprs.len());
         self.exprs.push(expr);
-        self.expr_tokens.push(token);
         self.hfs_stack.push(id);
         id
     }
 
     // Allocation methods 
-    pub fn alloc_stmt(&mut self, stmt: Statement, token: Token<'a>) -> StmtId {
+    pub fn alloc_stmt(&mut self, stmt: Statement) -> StmtId {
         let id = StmtId(self.stmts.len());
         self.stmts.push(stmt);
-        self.stmt_tokens.push(token);
         id
     }
 
-    pub fn alloc_var(&mut self, var: VarDeclaration, token: Token<'a>) -> VarId {
+    pub fn alloc_var(&mut self, var: VarDeclaration) -> VarId {
         let id = VarId(self.vars.len());
         self.vars.push(var);
-        self.var_tokens.push(token);
         id
     }
 
-    pub fn alloc_function(&mut self, func: FunctionDeclaration, token: Token<'a>) -> FuncId {
+    pub fn alloc_function(&mut self, func: FunctionDeclaration) -> FuncId {
         let id = FuncId(self.functions.len());
         self.functions.push(func);
-        self.function_tokens.push(token);
         id
     }
 

@@ -1,12 +1,12 @@
 use crate::hfs::token::*;
-use crate::hfs::ast::*;
+use crate::hfs::ast::Type;
 
 // ============================================================================
-// First-pass "dumb" AST (no stack resolution)
+// First-pass AST (no stack resolution)
 // ============================================================================
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum OperationKind {
+pub enum UnresolvedOperation {
     // Binary
     Add, Sub, Mul, Div, Mod,
     Equal, NotEqual,
@@ -16,19 +16,19 @@ pub enum OperationKind {
     Not,
 }
 
-impl OperationKind {
+impl UnresolvedOperation {
     pub fn is_binary(&self) -> bool {
-        !matches!(self, OperationKind::Not)
+        !matches!(self, UnresolvedOperation::Not)
     }
     
     pub fn is_unary(&self) -> bool {
-        matches!(self, OperationKind::Not)
+        matches!(self, UnresolvedOperation::Not)
     }
 }
 
 #[derive(Debug)]
 pub enum UnresolvedExpression {
-    Operation(OperationKind),
+    Operation(UnresolvedOperation),
     Identifier(String),
     Literal(Literal),
     FunctionCall { identifier: String }, // tuple comes from stack
@@ -65,21 +65,35 @@ pub enum UnresolvedElseStmt {
     Else(UnresolvedStmtId),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct UnresolvedExprId(pub usize);
+// Unresolved declarations (mirror the resolved ones but use UnresolvedStmtId)
+#[derive(Debug)]
+pub struct UnresolvedVarDeclaration {
+    pub name: String,
+    pub hfs_type: Type,
+}
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct UnresolvedStmtId(pub usize);
+#[derive(Debug)]
+pub struct UnresolvedFunctionDeclaration {
+    pub name: String,
+    pub param_type: Type,
+    pub return_type: Type,
+    pub body: UnresolvedStmtId, // Uses unresolved ID
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)] pub struct UnresolvedVarId(pub usize);
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)] pub struct UnresolvedFuncId(pub usize);
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)] pub struct UnresolvedExprId(pub usize);
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)] pub struct UnresolvedStmtId(pub usize);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum UnresolvedTopLevelId {
-    VariableDecl(VarId),
-    FunctionDecl(FuncId),
+    VariableDecl(UnresolvedVarId),
+    FunctionDecl(UnresolvedFuncId),
     Statement(UnresolvedStmtId),
 }
 
 // ============================================================================
-// First-pass Arena (parallel to AstArena)
+// First-pass Arena (completely separate from AstArena)
 // ============================================================================
 
 #[derive(Debug, Default)]
@@ -87,16 +101,14 @@ pub struct UnresolvedAstArena<'a> {
     // Unresolved AST nodes
     pub(crate) unresolved_exprs: Vec<UnresolvedExpression>,
     pub(crate) unresolved_stmts: Vec<UnresolvedStatement>,
-    
-    // Declarations are the same
-    pub(crate) vars: Vec<VarDeclaration>,
-    pub(crate) functions: Vec<FunctionDeclaration>,
+    pub(crate) unresolved_vars: Vec<UnresolvedVarDeclaration>,
+    pub(crate) unresolved_functions: Vec<UnresolvedFunctionDeclaration>,
 
     // Token storage
     pub(crate) unresolved_expr_tokens: Vec<Token<'a>>,
     pub(crate) unresolved_stmt_tokens: Vec<Token<'a>>,
-    pub(crate) var_tokens: Vec<Token<'a>>,
-    pub(crate) function_tokens: Vec<Token<'a>>,
+    pub(crate) unresolved_var_tokens: Vec<Token<'a>>,
+    pub(crate) unresolved_function_tokens: Vec<Token<'a>>,
 }
 
 impl<'a> UnresolvedAstArena<'a> {
@@ -118,17 +130,17 @@ impl<'a> UnresolvedAstArena<'a> {
         id
     }
 
-    pub fn alloc_var(&mut self, var: VarDeclaration, token: Token<'a>) -> VarId {
-        let id = VarId(self.vars.len());
-        self.vars.push(var);
-        self.var_tokens.push(token);
+    pub fn alloc_unresolved_var(&mut self, var: UnresolvedVarDeclaration, token: Token<'a>) -> UnresolvedVarId {
+        let id = UnresolvedVarId(self.unresolved_vars.len());
+        self.unresolved_vars.push(var);
+        self.unresolved_var_tokens.push(token);
         id
     }
 
-    pub fn alloc_function(&mut self, func: FunctionDeclaration, token: Token<'a>) -> FuncId {
-        let id = FuncId(self.functions.len());
-        self.functions.push(func);
-        self.function_tokens.push(token);
+    pub fn alloc_unresolved_function(&mut self, func: UnresolvedFunctionDeclaration, token: Token<'a>) -> UnresolvedFuncId {
+        let id = UnresolvedFuncId(self.unresolved_functions.len());
+        self.unresolved_functions.push(func);
+        self.unresolved_function_tokens.push(token);
         id
     }
 }

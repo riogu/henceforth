@@ -37,26 +37,25 @@ impl<'a> AstArena<'a> {
         self.hfs_stack.push(id);
         id
     }
-    pub fn validate_return_stack(&mut self, return_type: TypeId) -> Result<(), String> {
+    pub fn validate_return_stack(&mut self, return_type: TypeId) {
         let Type::Tuple(return_types) = self.get_type(return_type) else { panic!("[internal error] functions only return tuples at the moment.") };
         let expected_count = return_types.len();
         let actual_count = self.hfs_stack.len();
         if expected_count != actual_count {
-            return Err(format!("expected {} values on stack for return, found {}", expected_count, actual_count));
+            panic!("expected {} values on stack for return, found {}", expected_count, actual_count)
         }
         let back_of_stack = &self.hfs_stack[actual_count - expected_count..];
 
         for (&expr_id, &expected_type_id) in back_of_stack.iter().zip(return_types.iter()) {
             let actual_type_id = self.get_type_of_expr(expr_id);
             if self.get_type(actual_type_id) != self.get_type(expected_type_id) {
-                return Err(format!(
+                panic!(
                     "return type mismatch: expected '{:?}', found '{:?}'",
                     self.get_type(expected_type_id),
                     self.get_type(actual_type_id)
-                ));
+                )
             }
         }
-        Ok(())
     }
 
     // pub fn validate_func_call_args(&mut self, param_type: TypeId) -> bool {
@@ -210,7 +209,8 @@ impl<'a> StackAnalyzer<'a> {
                 self.arena.alloc_stmt(Statement::Return, token)
             }
             UnresolvedStatement::Break => {
-                if self.scope_resolution_stack.curr_scope_kind() != ScopeKind::WhileLoop {
+                if !self.scope_resolution_stack.is_in_while_loop_context() {
+                    panic!("")
                 }
                 self.arena.alloc_stmt(Statement::Break, token)
             }

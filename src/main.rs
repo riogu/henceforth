@@ -6,7 +6,7 @@ mod hfs {
     pub mod builder;
     pub mod lexer;
     pub mod parser;
-    pub mod semantic_analysis;
+    pub mod type_analyzer;
     pub mod token;
     pub mod types;
     pub mod stack_analyzer;
@@ -18,7 +18,7 @@ mod hfs {
     pub use builder::*;
     pub use lexer::*;
     pub use parser::*;
-    pub use semantic_analysis::*;
+    pub use type_analyzer::*;
     pub use token::*;
     pub use types::*;
 }

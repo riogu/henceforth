@@ -37,6 +37,13 @@ impl<'a> AstArena<'a> {
         self.hfs_stack.push(id);
         id
     }
+    pub fn validate_stack(return_type: TypeId) -> bool {
+
+        
+
+
+        todo!()
+    }
 }
 
 // ============================================================================
@@ -78,7 +85,6 @@ impl<'a> StackAnalyzer<'a> {
         }
         resolved_nodes
     }
-
 
     fn resolve_var_decl(&mut self, id: UnresolvedVarId) -> VarId {
         let unresolved_var = self.unresolved_arena.get_unresolved_var(id);
@@ -165,6 +171,7 @@ impl<'a> StackAnalyzer<'a> {
                 self.scope_resolution_stack.push_block_scope();
                 let top_level_ids = self.resolve_top_level(unresolved_top_level_ids);
                 self.scope_resolution_stack.pop();
+
                 self.arena.alloc_stmt(Statement::BlockScope(top_level_ids), token)
             }
             UnresolvedStatement::Return => {

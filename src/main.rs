@@ -7,12 +7,16 @@ mod hfs {
     pub mod parser;
     pub mod semantic_analysis;
     pub mod token;
-    pub use lexer::*;
-    pub use parser::*;
+    pub mod types;
+    pub mod hfs_stack;
+    pub use hfs_stack::*;
     pub use ast_node::*;
     pub use builder::*;
+    pub use lexer::*;
+    pub use parser::*;
     pub use semantic_analysis::*;
     pub use token::*;
+    pub use types::*;
 }
 
 use clap::{Parser, arg};

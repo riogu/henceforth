@@ -118,7 +118,7 @@ impl From<Type> for TokenKind {
             Type::String => TokenKind::String,
             Type::Bool => TokenKind::Bool,
             Type::Float => TokenKind::Float,
-            Type::Tuple => TokenKind::LeftParen,
+            Type::Tuple(_) => TokenKind::LeftParen,
         }
     }
 }

@@ -26,42 +26,15 @@ impl<'a> Parser<'a> {
         }
     }
     fn expect_type(&mut self) -> Type {
-        let token = self.tokens.next().expect("unexpected end of input");
-        match &token.kind {
-            kind if kind.is_type() => kind.to_type(),
-            _ => panic!("expected type, got {:?}", token.kind),
+        let kind = self.tokens.peek().expect("unexpected end of input").kind.clone();
+        match &kind {
+            kind if kind.is_type() => {
+                self.tokens.next();
+                kind.to_type()
+            }
+            TokenKind::LeftParen => Type::Tuple(self.type_list()),
+            _ => panic!("expected type, got {:?}", kind),
         }
-    }
-}
-
-// Declarations
-impl<'a> Parser<'a> {
-
-    // <function_decl> ::= "fn" <identifier> ":" <signature> "{" <block_scope> "}"
-    fn function_declaration(&mut self) -> FuncId {
-        let (name, token) = self.expect_identifier();
-        let (param_types, return_types) = self.function_signature();
-        let body = self.block_scope();
-        self.arena.alloc_function(FunctionDeclaration { name, param_types, return_types, body }, token)
-    }
-    // <var_decl> ::= "let" <identifier> ":" <type> ";"
-    fn variable_declaration(&mut self) -> VarId {
-        let (name, token) = self.expect_identifier();
-        self.expect(TokenKind::Colon);
-        let hfs_type = self.expect_type();
-        self.expect(TokenKind::Comma);
-        self.arena.alloc_var(VarDeclaration { name , hfs_type }, token)
-    }
-    // <signature> ::= "(" <type_list>? ")" "->" "(" <type_list>? ")"
-    fn function_signature(&mut self) -> (Vec<Type>, Vec<Type>) {
-        self.expect(TokenKind::Colon);
-        let param_types = self.type_list();
-
-        self.expect(TokenKind::Minus);
-        self.expect(TokenKind::Greater);
-        let return_types = self.type_list();
-
-        (param_types, return_types)
     }
     fn type_list(&mut self) -> Vec<Type> {
         self.expect(TokenKind::LeftParen);
@@ -74,6 +47,36 @@ impl<'a> Parser<'a> {
             };
         }
         types
+    }
+}
+
+// Declarations
+impl<'a> Parser<'a> {
+    // <function_decl> ::= "fn" <identifier> ":" <signature> "{" <block_scope> "}"
+    fn function_declaration(&mut self) -> FuncId {
+        let (name, token) = self.expect_identifier();
+        let (param_types, return_types) = self.function_signature();
+        let body = self.block_scope();
+        self.arena.alloc_function(FunctionDeclaration { name, param_type: param_types, return_type: return_types, body }, token)
+    }
+    // <var_decl> ::= "let" <identifier> ":" <type> ";"
+    fn variable_declaration(&mut self) -> VarId {
+        let (name, token) = self.expect_identifier();
+        self.expect(TokenKind::Colon);
+        let hfs_type = self.expect_type();
+        self.expect(TokenKind::Comma);
+        self.arena.alloc_var(VarDeclaration { name , hfs_type }, token)
+    }
+    // <signature> ::= "(" <type_list>? ")" "->" "(" <type_list>? ")"
+    fn function_signature(&mut self) -> (Type, Type) {
+        self.expect(TokenKind::Colon);
+        let param_types = self.expect_type(); // tuple or single type
+
+        self.expect(TokenKind::Minus);
+        self.expect(TokenKind::Greater);
+        let return_types = self.expect_type();
+
+        (param_types, return_types)
     }
 }
 
@@ -190,9 +193,9 @@ impl<'a> Parser<'a> {
             kind if kind.is_stack_operator() => self.stack_operation(),
             TokenKind::Identifier(_) => {
                 let (name, token) = self.expect_identifier();
-                self.arena.push_expr(Expression::Identifier(Identifier::Unresolved(name)), token)
+                self.arena.push_and_alloc_expr(Expression::Identifier(Identifier::Unresolved(name)), token)
             }
-            TokenKind::Literal(lit) => self.arena.push_expr(Expression::Literal(lit), self.tokens.next().unwrap()),
+            TokenKind::Literal(lit) => self.arena.push_and_alloc_expr(Expression::Literal(lit), self.tokens.next().unwrap()),
             TokenKind::LeftParen    => self.function_call(),
             _ => panic!("expected expression")
         }
@@ -211,25 +214,25 @@ impl<'a> Parser<'a> {
                     kind
                 ));
                 match kind {
-                    TokenKind::Plus         => self.arena.push_expr(Expression::Operation(Operation::Add(lhs, rhs)), token),
-                    TokenKind::Minus        => self.arena.push_expr(Expression::Operation(Operation::Sub(lhs, rhs)), token),
-                    TokenKind::Star         => self.arena.push_expr(Expression::Operation(Operation::Mul(lhs, rhs)), token),
-                    TokenKind::Slash        => self.arena.push_expr(Expression::Operation(Operation::Div(lhs, rhs)), token),
-                    TokenKind::Percent      => self.arena.push_expr(Expression::Operation(Operation::Mod(lhs, rhs)), token),
-                    TokenKind::Equal        => self.arena.push_expr(Expression::Operation(Operation::Equal(lhs, rhs)), token),
-                    TokenKind::NotEqual     => self.arena.push_expr(Expression::Operation(Operation::NotEqual(lhs, rhs)), token),
-                    TokenKind::Less         => self.arena.push_expr(Expression::Operation(Operation::Less(lhs, rhs)), token),
-                    TokenKind::LessEqual    => self.arena.push_expr(Expression::Operation(Operation::LessEqual(lhs, rhs)), token),
-                    TokenKind::Greater      => self.arena.push_expr(Expression::Operation(Operation::Greater(lhs, rhs)), token),
-                    TokenKind::GreaterEqual => self.arena.push_expr(Expression::Operation(Operation::GreaterEqual(lhs, rhs)), token),
-                    TokenKind::And          => self.arena.push_expr(Expression::Operation(Operation::And(lhs, rhs)), token),
-                    TokenKind::Or           => self.arena.push_expr(Expression::Operation(Operation::Or(lhs, rhs)), token),
+                    TokenKind::Plus         => self.arena.push_and_alloc_expr(Expression::Operation(Operation::Add(lhs, rhs)), token),
+                    TokenKind::Minus        => self.arena.push_and_alloc_expr(Expression::Operation(Operation::Sub(lhs, rhs)), token),
+                    TokenKind::Star         => self.arena.push_and_alloc_expr(Expression::Operation(Operation::Mul(lhs, rhs)), token),
+                    TokenKind::Slash        => self.arena.push_and_alloc_expr(Expression::Operation(Operation::Div(lhs, rhs)), token),
+                    TokenKind::Percent      => self.arena.push_and_alloc_expr(Expression::Operation(Operation::Mod(lhs, rhs)), token),
+                    TokenKind::Equal        => self.arena.push_and_alloc_expr(Expression::Operation(Operation::Equal(lhs, rhs)), token),
+                    TokenKind::NotEqual     => self.arena.push_and_alloc_expr(Expression::Operation(Operation::NotEqual(lhs, rhs)), token),
+                    TokenKind::Less         => self.arena.push_and_alloc_expr(Expression::Operation(Operation::Less(lhs, rhs)), token),
+                    TokenKind::LessEqual    => self.arena.push_and_alloc_expr(Expression::Operation(Operation::LessEqual(lhs, rhs)), token),
+                    TokenKind::Greater      => self.arena.push_and_alloc_expr(Expression::Operation(Operation::Greater(lhs, rhs)), token),
+                    TokenKind::GreaterEqual => self.arena.push_and_alloc_expr(Expression::Operation(Operation::GreaterEqual(lhs, rhs)), token),
+                    TokenKind::And          => self.arena.push_and_alloc_expr(Expression::Operation(Operation::And(lhs, rhs)), token),
+                    TokenKind::Or           => self.arena.push_and_alloc_expr(Expression::Operation(Operation::Or(lhs, rhs)), token),
                     _ => unreachable!()
                 }
             }
             TokenKind::Not => {
                 let expr = self.arena.pop_or_error("expected at least 1 value in stack for '-' unary operator.");
-                self.arena.push_expr(Expression::Operation(Operation::Not(expr)), token)
+                self.arena.push_and_alloc_expr(Expression::Operation(Operation::Not(expr)), token)
             }
             _ => panic!("expected stack operator")
         }
@@ -240,7 +243,7 @@ impl<'a> Parser<'a> {
         let tuple = self.tuple_expression(); // for now we build a tuple explicitly
         // later we want to allow tuples anywhere and functions consume a tuple from the stack
         let (identifier, token) = self.expect_identifier();
-        self.arena.push_expr(Expression::FunctionCall { tuple, identifier: Identifier::Unresolved(identifier) }, token)
+        self.arena.push_and_alloc_expr(Expression::FunctionCall { tuple, identifier: Identifier::Unresolved(identifier) }, token)
     }
 
     // <tuple_expression> ::= "(" <stack_expression>* ")"
@@ -257,7 +260,7 @@ impl<'a> Parser<'a> {
                 _ => expressions.push(self.stack_expression()),
             };
         }
-        self.arena.push_expr(Expression::Tuple{expressions, variadic}, token)
+        self.arena.push_and_alloc_expr(Expression::Tuple{expressions, variadic}, token)
     }
 
     // <assignment> ::= "&=" <identifier> ";"
@@ -273,7 +276,7 @@ impl<'a> Parser<'a> {
             self.arena.last_or_error(&format!("tried copying into '{}' from empty stack", name))
         };
 
-        let identifier = self.arena.push_expr(Expression::Identifier(Identifier::Unresolved(name)), token);
+        let identifier = self.arena.push_and_alloc_expr(Expression::Identifier(Identifier::Unresolved(name)), token);
         self.arena.alloc_stmt(Statement::Assignment{value, identifier}, assign_tkn)
     }
 }

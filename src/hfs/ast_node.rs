@@ -4,10 +4,10 @@ use crate::hfs::token::*;
 // Type-safe ID types
 // ============================================================================
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)] pub struct VarId(usize);
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)] pub struct FuncId(usize);
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)] pub struct ExprId(usize);
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)] pub struct StmtId(usize);
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)] pub struct VarId (pub usize);
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)] pub struct FuncId(pub usize);
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)] pub struct ExprId(pub usize);
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)] pub struct StmtId(pub usize);
 
 // ============================================================================
 // AST Node Structures
@@ -66,8 +66,8 @@ pub struct VarDeclaration {
 #[derive(Debug)]
 pub struct FunctionDeclaration {
     pub name: String,
-    pub param_types: Vec<Type>,
-    pub return_types: Vec<Type>,
+    pub param_type: Type, // either a tuple or a single type
+    pub return_type: Type, // either a tuple or a single type
     pub body: StmtId,
 }
 
@@ -103,13 +103,13 @@ pub enum Statement {
 
 // -----------------------------------------------------------
 // Types
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Type {
     Int,
     String,
     Bool,
     Float,
-    Tuple,
+    Tuple(Vec<Type>),
 }
 impl Type {
     pub fn to_token(&self) -> TokenKind {
@@ -119,11 +119,10 @@ impl Type {
             Type::Bool => TokenKind::Bool,
             Type::Float => TokenKind::Float,
             Type::Float => TokenKind::Float,
-            Type::Tuple => TokenKind::LeftParen,
+            Type::Tuple(_) => TokenKind::LeftParen,
         }
     }
 }
-pub trait Typed { fn get_type(&self) -> Type; }
 
 // ============================================================================
 // Arena storage with token tracking
@@ -131,18 +130,18 @@ pub trait Typed { fn get_type(&self) -> Type; }
 #[derive(Debug, Default)]
 pub struct AstArena<'a> {
     // AST nodes
-    exprs: Vec<Expression>,
-    stmts: Vec<Statement>,
-    vars: Vec<VarDeclaration>,
-    functions: Vec<FunctionDeclaration>,
+    pub(crate) exprs: Vec<Expression>,
+    pub(crate) stmts: Vec<Statement>,
+    pub(crate) vars: Vec<VarDeclaration>,
+    pub(crate) functions: Vec<FunctionDeclaration>,
 
     // Token storage (parallel arrays)
-    expr_tokens: Vec<Token<'a>>,
-    stmt_tokens: Vec<Token<'a>>,
-    var_tokens: Vec<Token<'a>>,
-    function_tokens: Vec<Token<'a>>,
+    pub(crate) expr_tokens: Vec<Token<'a>>,
+    pub(crate) stmt_tokens: Vec<Token<'a>>,
+    pub(crate) var_tokens: Vec<Token<'a>>,
+    pub(crate) function_tokens: Vec<Token<'a>>,
 
-    hfs_stack: Vec<ExprId>, // keeps track of the state of our stack
+    pub(crate) hfs_stack: Vec<ExprId>, // keeps track of the state of our stack
 }
 
 // had to move this here because i wanted to the arena's private members to be available to the parser
@@ -152,29 +151,13 @@ impl<'a> AstArena<'a> {
         Self::default()
     }
 
-    // Stack methods (manage the hfs stack for operations)
-    pub fn pop_or_error(&mut self, msg: &str) -> ExprId { 
-        // should start using our own error structs instead
-        self.hfs_stack.pop().unwrap_or_else(|| panic!("{}", msg))
-    }
-    pub fn last_or_error(&mut self, msg: &str) -> ExprId { 
-        // should start using our own error structs instead
-        *self.hfs_stack.last().unwrap_or_else(|| panic!("{}", msg))
-    }
-    pub fn push_expr(&mut self, expr: Expression, token: Token<'a>)-> ExprId {
+    pub fn push_and_alloc_expr(&mut self, expr: Expression, token: Token<'a>)-> ExprId {
         // allocates AND pushes to the stack 
         let id = ExprId(self.exprs.len());
         self.exprs.push(expr);
         self.expr_tokens.push(token);
         self.hfs_stack.push(id);
         id
-    }
-    pub fn pop2_or_error(&mut self, msg: &str) -> (ExprId, ExprId) { 
-        // should start using our own error structs instead
-        (
-            self.hfs_stack.pop().unwrap_or_else(|| panic!("{}", msg)),
-            self.hfs_stack.pop().unwrap_or_else(|| panic!("{}", msg)),
-        )
     }
 
     // Allocation methods 
@@ -199,21 +182,32 @@ impl<'a> AstArena<'a> {
         id
     }
 
-    // Accessor methods
-    pub fn get_expr(&mut self, id: ExprId) -> &Expression {
+    // Immutable accessor methods
+    pub fn get_expr(&self, id: ExprId) -> &Expression {
         &self.exprs[id.0]
     }
-
-    pub fn get_stmt(&mut self, id: StmtId) -> &Statement {
+    pub fn get_stmt(&self, id: StmtId) -> &Statement {
         &self.stmts[id.0]
     }
-
-    pub fn get_var(&mut self, id: VarId) -> &mut VarDeclaration {
-        &mut self.vars[id.0]
+    pub fn get_var(&self, id: VarId) -> &VarDeclaration {
+        &self.vars[id.0]
+    }
+    pub fn get_func(&self, id: FuncId) -> &FunctionDeclaration {
+        &self.functions[id.0]
     }
 
-    pub fn get_func(&mut self, id: FuncId) -> &FunctionDeclaration {
-        &self.functions[id.0]
+    // Mutable accessor methods
+    pub fn get_expr_mut(&mut self, id: ExprId) -> &mut Expression {
+        &mut self.exprs[id.0]
+    }
+    pub fn get_stmt_mut(&mut self, id: StmtId) -> &mut Statement {
+        &mut self.stmts[id.0]
+    }
+    pub fn get_var_mut(&mut self, id: VarId) -> &mut VarDeclaration {
+        &mut self.vars[id.0]
+    }
+    pub fn get_func_mut(&mut self, id: FuncId) -> &mut FunctionDeclaration {
+        &mut self.functions[id.0]
     }
 
     // Token accessor methods

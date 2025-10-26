@@ -1,6 +1,37 @@
 ## Code examples
 ```cpp
 import hfs;
+
+fn func: (i32 i32 f32) -> (str i32 i32 i32) {
+    // then, here func pushes a tuple.
+}
+
+fn main: () -> (i32) {
+    @(1 2 3);
+    @((...)func);
+    // i propose that (...) does the following:
+    // - checks the type of whatever comes after it
+    // - uses that information [in this case, (i32 i32 i23)] to turn the top of the stack
+    // into a tuple. that means that:
+    @(1 2 3 (...)); // is valid.
+    // after this, the stack is:
+    @((1 2 3)); // one tuple element
+    // this also means that:
+    let var: (i32 i32 i32);
+    @(1 2 3);
+    @( (...)var); // also works! which is good
+    := var; // would also work the same way (this operator is a convenient shorthand we provide
+    // so := var basically acts the same as consuming the stack directly with (...)var;
+}   // this way, our (...) operator is always the same, consistent operation.
+    // it consumes the stack and pushes a tuple with what it consumed.
+// then, here func pushes many elements
+// makes the syntax of () more explicit
+fn func: (i32 i32 f32)-> str i32 i32 i32 {
+}
+// optionally maybe we can allow
+fn func: i32 i32 i32 -> i32 {} // but i dont like this
+
+
 // Calculate factorial using stack operations
 fn factorial: (i32) -> (i32) {
     let n: i32;

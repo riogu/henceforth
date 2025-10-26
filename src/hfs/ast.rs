@@ -43,7 +43,8 @@ pub enum Expression {
     Identifier(Identifier),
     Literal(Literal),
     FunctionCall{ tuple: ExprId, identifier: Identifier },
-    Tuple { expressions: Vec<ExprId>, variadic: bool }
+    Tuple { expressions: Vec<ExprId>, variadic: bool },
+    Parameter(Type),
 }
 
 
@@ -65,9 +66,10 @@ pub struct VarDeclaration {
 #[derive(Debug)]
 pub struct FunctionDeclaration {
     pub name: String,
-    pub param_type: Type, // either a tuple or a single type
-    pub return_type: Type, // either a tuple or a single type
+    pub param_type: Type,     // either a tuple or a single type
+    pub return_type: Type,    // either a tuple or a single type
     pub body: StmtId,
+    pub params: Vec<ExprId>,  // Vec<Expression::Parameter>
 }
 
 // ============================================================================
@@ -151,16 +153,14 @@ impl<'a> AstArena<'a> {
     pub fn new() -> Self {
         Self::default()
     }
-
-    pub fn push_and_alloc_expr(&mut self, expr: Expression)-> ExprId {
+    // Allocation methods 
+    pub fn alloc_expr(&mut self, expr: Expression)-> ExprId {
         // allocates AND pushes to the stack 
         let id = ExprId(self.exprs.len());
         self.exprs.push(expr);
-        self.hfs_stack.push(id);
         id
     }
 
-    // Allocation methods 
     pub fn alloc_stmt(&mut self, stmt: Statement) -> StmtId {
         let id = StmtId(self.stmts.len());
         self.stmts.push(stmt);
@@ -177,6 +177,10 @@ impl<'a> AstArena<'a> {
         let id = FuncId(self.functions.len());
         self.functions.push(func);
         id
+    }
+    // this is necessary to allow recursive functions
+    pub fn temporarily_get_next_stmt_id(&mut self) -> StmtId {
+        StmtId(self.stmts.len())
     }
 
     // Immutable accessor methods

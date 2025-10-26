@@ -8,7 +8,7 @@ use crate::hfs::ast::Type;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UnresolvedOperation {
     // Binary
-    Add, Sub, Mul, Div, Mod,  Or, And,
+    Add, Sub, Mul, Div, Mod, Or, And,
     Equal, NotEqual, Less, LessEqual, Greater, GreaterEqual,
     // Unary
     Not,
@@ -24,7 +24,7 @@ impl UnresolvedOperation {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum UnresolvedExpression {
     Operation(UnresolvedOperation),
     Identifier(String),
@@ -33,7 +33,7 @@ pub enum UnresolvedExpression {
     Tuple { expressions: Vec<UnresolvedExprId>, variadic: bool }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum UnresolvedStatement {
     If {
         // cond comes from stack
@@ -57,20 +57,20 @@ pub enum UnresolvedStatement {
     },
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum UnresolvedElseStmt {
-    ElseIf(UnresolvedStmtId),
-    Else(UnresolvedStmtId),
+    ElseIf(UnresolvedStmtId), // Points to an UnresolvedIfStmt
+    Else(UnresolvedStmtId),   // Points to a UnresolvedBlockScope
 }
 
 // Unresolved declarations (mirror the resolved ones but use UnresolvedStmtId)
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct UnresolvedVarDeclaration {
     pub name: String,
     pub hfs_type: Type,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct UnresolvedFunctionDeclaration {
     pub name: String,
     pub param_type: Type,

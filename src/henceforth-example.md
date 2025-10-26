@@ -3,7 +3,10 @@
 import hfs;
 
 fn func: (i32 i32 f32) -> (str i32 i32 i32) {
-    // then, here func pushes a tuple.
+    let v0: i32; &= v0;
+    let v1: i32; &= v1;
+    let v2: i32; &= v2;
+    @(v0 v1 v2)
 }
 
 fn main: () -> (i32) {

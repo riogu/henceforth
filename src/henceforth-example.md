@@ -3,10 +3,16 @@
 import hfs;
 
 fn func: (i32 i32 f32) -> (str i32 i32 i32) {
-    let v0: i32; &= v0;
-    let v1: i32; &= v1;
-    let v2: i32; &= v2;
-    @(v0 v1 v2)
+    let var: i32; // file_name%func()::var
+    {
+        let var: i32; // file_name%func()::0::var
+        {
+            let var: i32; // file_name%func()::0::0::var
+        }
+        {
+            let var: i32; // file_name%func()::0::1::var
+        }
+    }
 }
 
 fn main: () -> (i32) {

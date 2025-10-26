@@ -1,5 +1,6 @@
 use crate::hfs::token::*;
 use crate::hfs::ast::*;
+use crate::hfs::ScopeKind;
 
 // ============================================================================
 // First-pass AST (no stack resolution)
@@ -33,6 +34,7 @@ pub enum UnresolvedExpression {
     Tuple { expressions: Vec<UnresolvedExprId>, variadic: bool }
 }
 
+
 #[derive(Debug, Clone)]
 pub enum UnresolvedStatement {
     If {
@@ -45,13 +47,13 @@ pub enum UnresolvedStatement {
         body: UnresolvedStmtId,
     },
     StackBlock(Vec<UnresolvedExprId>),
-    BlockScope(Vec<UnresolvedTopLevelId>),
+    BlockScope(Vec<UnresolvedTopLevelId>, ScopeKind),
     Return,
     Break,
     Continue,
     Empty,
     Assignment { 
-        identifier: String, // just the name
+        identifier: UnresolvedExprId, // just the name
         is_move: bool,      // true for &=, false for :=
         // value comes from stack
     },

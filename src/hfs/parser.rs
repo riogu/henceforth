@@ -1,6 +1,7 @@
 use crate::hfs::ast::*;
 use crate::hfs::unresolved_ast::*;
 use crate::hfs::token::*;
+use crate::hfs::ScopeKind;
 
 use std::iter::Peekable;
 use std::vec::IntoIter;
@@ -60,7 +61,7 @@ impl<'a> Parser<'a> {
     fn function_declaration(&mut self) -> UnresolvedFuncId {
         let (name, token) = self.expect_identifier();
         let (param_types, return_types) = self.function_signature();
-        let body = self.block_scope();
+        let body = self.block_scope(ScopeKind::Function);
         self.arena.alloc_unresolved_function(
             UnresolvedFunctionDeclaration { name, param_type: param_types, return_type: return_types, body, },
             token,
@@ -115,7 +116,7 @@ impl<'a> Parser<'a> {
         match token.kind {
             TokenKind::If        => self.if_statement(),
             TokenKind::At        => self.stack_block(),
-            TokenKind::LeftBrace => self.block_scope(),
+            TokenKind::LeftBrace => self.block_scope(ScopeKind::Block),
             TokenKind::While => self.while_statement(),
             TokenKind::Return => {
                 self.expect(TokenKind::Semicolon);
@@ -134,7 +135,7 @@ impl<'a> Parser<'a> {
     fn if_statement(&mut self) -> UnresolvedStmtId {
         let token = self.expect(TokenKind::If);
         self.stack_block();
-        let body = self.block_scope();
+        let body = self.block_scope(ScopeKind::IfStmt);
         let else_stmt = self.else_statement();
         self.arena.alloc_unresolved_stmt(UnresolvedStatement::If { body, else_stmt}, token)
     }
@@ -150,7 +151,7 @@ impl<'a> Parser<'a> {
                 if token.kind == TokenKind::If {
                   Some(UnresolvedElseStmt::ElseIf(self.if_statement()))
                 } else {
-                    Some(UnresolvedElseStmt::Else(self.block_scope()))
+                    Some(UnresolvedElseStmt::Else(self.block_scope(ScopeKind::ElseStmt)))
                 }
             }
             _ => None
@@ -161,12 +162,12 @@ impl<'a> Parser<'a> {
     fn while_statement(&mut self) -> UnresolvedStmtId {
         let token = self.expect(TokenKind::While);
         self.stack_block();
-        let body = self.block_scope();
+        let body = self.block_scope(ScopeKind::WhileLoop);
         self.arena.alloc_unresolved_stmt(UnresolvedStatement::While { body }, token)
     }
 
     // <block_scope> ::= "{" <top_level_node>* "}"
-    fn block_scope(&mut self) -> UnresolvedStmtId {
+    fn block_scope(&mut self, scope_kind: ScopeKind) -> UnresolvedStmtId {
         let mut top_level_ids = Vec::<UnresolvedTopLevelId>::new();
         let token = self.expect(TokenKind::LeftBrace);
         loop {
@@ -178,7 +179,7 @@ impl<'a> Parser<'a> {
                 _ => panic!("expected variable or function declaration"),
             };
         }
-        self.arena.alloc_unresolved_stmt(UnresolvedStatement::BlockScope(top_level_ids), token)
+        self.arena.alloc_unresolved_stmt(UnresolvedStatement::BlockScope(top_level_ids, scope_kind), token)
     }
 
     // <stack_block> ::= "@" "(" <expression>* ")"
@@ -273,7 +274,8 @@ impl<'a> Parser<'a> {
     fn assignment(&mut self, is_move: bool) -> UnresolvedStmtId {
         let assign_tkn = self.tokens.next().unwrap();
 
-        let (identifier, token) = self.expect_identifier();
+        let (name, token) = self.expect_identifier();
+        let identifier = self.arena.alloc_unresolved_expr(UnresolvedExpression::Identifier(name), token);
 
         self.arena.alloc_unresolved_stmt(UnresolvedStatement::Assignment{identifier, is_move}, assign_tkn)
     }

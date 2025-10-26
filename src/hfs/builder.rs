@@ -3,7 +3,7 @@ use crate::{
     hfs::token::{Literal, TokenKind},
 };
 
-pub enum Operation {
+pub enum BuilderOperation {
     Add,
     Subtract,
     Multiply,
@@ -38,7 +38,7 @@ pub trait StackOps {
     fn stack_block(self) -> Self;
     fn end_stack_block(self, semicolon: bool) -> Self;
     fn push_literal<T: Into<Literal>>(self, lit: T) -> Self;
-    fn push_operation(self, op: Operation) -> Self;
+    fn push_operation(self, op: BuilderOperation) -> Self;
     fn push_function<I>(self, name: &str, args: I, expected_args: usize) -> Self
     where
         I: IntoIterator,
@@ -197,7 +197,7 @@ impl StackOps for TokenSequence {
         self.push(TokenKind::Literal(lit.into()))
     }
 
-    fn push_operation(mut self, op: Operation) -> Self {
+    fn push_operation(mut self, op: BuilderOperation) -> Self {
         self.push(op.into())
     }
 

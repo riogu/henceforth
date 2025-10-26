@@ -16,7 +16,6 @@ use crate::hfs::token::*;
 
 #[derive(Debug)]
 pub enum Identifier {
-    Unresolved(String),
     Variable(VarId),
     Function(FuncId),
 }

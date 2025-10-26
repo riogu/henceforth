@@ -1,9 +1,7 @@
 use std::collections::HashMap;
 use crate::hfs::ast::*;
 use crate::hfs::types::*;
-// TODO: use these in semantic analysis for type solving.
-// its perfectly fine to type check and solve symbols in the same pass
-// the language is simple enough for this to be perfectly viable
+// TODO: reuse this file for interpreting the AST
 
 //---------------------------------------------------------------------------
 // Type stack methods (manage the type stack for type checking in semantic analysis)
@@ -42,7 +40,7 @@ pub struct TypeAnalyzer<'a> {
 }
 impl<'a> TypeAnalyzer<'a> {
     pub fn new(mut arena: AstArena<'a>) -> TypeAnalyzer<'a> {
-        arena.pop_hfs_stack();
+        arena.pop_entire_hfs_stack();
         TypeAnalyzer {
             arena,
         }
@@ -53,7 +51,6 @@ impl<'a> TypeAnalyzer<'a> {
     fn analyze_identifier(&mut self, id: &Identifier) {
         // resolve identifiers, also push them to the stack
         match id {
-            Identifier::Unresolved(name) => todo!(),
             Identifier::Variable(_) => {}
             Identifier::Function(_) => {}
         }
@@ -132,7 +129,7 @@ impl<'a> TypeAnalyzer<'a> {
             Expression::Identifier(_) => todo!(),
             Expression::Literal(_) => {}
             Expression::FunctionCall { tuple, identifier } => {
-                let parent_hfs_stack = self.arena.pop_hfs_stack(); // stack resets after function call
+                let parent_hfs_stack = self.arena.pop_entire_hfs_stack(); // stack resets after function call
                 todo!()
             }
             Expression::Tuple { expressions, variadic } => todo!(),

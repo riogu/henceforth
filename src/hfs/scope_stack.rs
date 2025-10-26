@@ -38,16 +38,22 @@ impl ScopeStack {
     }
     pub fn push_function_and_scope(&mut self, name: &str, func_id: FuncId, ret_type: TypeId) {
         let parent = self.scope_stack.last_mut().expect("[internal hfs error] couldn't push function, scopes were set up wrong.");
-        let mangled_name = format!("{}{}::", parent.name, name);
-        self.scope_stack.push(Scope { name: format!("{}()::", mangled_name), kind: ScopeKind::Function, inner_count: 0, });
+        let mangled_name = format!("{}{}()", parent.name, name);
+        self.scope_stack.push(Scope { name: format!("{}::", mangled_name), kind: ScopeKind::Function, inner_count: 0, });
         self.mangled_functions.insert(mangled_name, func_id);
         self.curr_func_return_type = ret_type;
     }
-    pub fn push_block_scope(&mut self) {
-        let parent = self.scope_stack.last_mut().expect("[internal hfs error] couldn't push block, scopes were set up wrong.");
-        let block_name = format!("{}{}::", parent.name, parent.inner_count);
+    pub fn push_scope(&mut self, scope_kind: ScopeKind) {
+        if scope_kind == ScopeKind::Function {
+            panic!("[internal error] function scopes shouldn't be pushed with this method.");
+        }
+        let parent = self
+            .scope_stack
+            .last_mut()
+            .expect("[internal hfs error] couldn't push block, scopes were set up wrong.");
+        let scope_name = format!("{}{}::", parent.name, parent.inner_count);
         parent.inner_count += 1;
-        self.scope_stack.push(Scope { name: block_name, kind: ScopeKind::Block, inner_count: 0 });
+        self.scope_stack.push(Scope { name: scope_name, kind: scope_kind, inner_count: 0 });
     }
     pub fn push_variable(&mut self, name: &str, var_id: VarId) {
         let curr_stack = self.scope_stack.last().expect("[internal hfs error] scopes were set up wrong.");
@@ -80,5 +86,76 @@ impl ScopeStack {
             }
         }
         false // Not in any while loop
+    }
+    pub fn find_variable(&self, name: &str) -> Option<VarId> {
+        let mut current_scope_name = self.scope_stack.last().expect("[internal hfs error] no scope found").name.clone();
+        // Search from current scope up to function boundary
+        for scope in self.scope_stack.iter().rev() {
+            let mangled_name = format!("{}{}", current_scope_name, name);
+            // Try locals
+            if let Some(&var_id) = self.mangled_locals.get(&mangled_name) {
+                return Some(var_id);
+            }
+            // Stop at function boundary
+            if scope.kind == ScopeKind::Function {
+                break;
+            }
+            // Move up one scope level by removing the last "::" segment
+            if let Some(pos) = current_scope_name[..current_scope_name.len()-2].rfind("::") {
+                current_scope_name = current_scope_name[..pos+2].to_string();
+            } else {
+                break;
+            }
+        }
+        // After breaking at function boundary, still check globals
+        // Global variables have format: "file_name%variable_name"
+        let global_mangled_name = format!("{}{}", 
+            self.scope_stack[0].name,  // The global scope name (file_name%)
+            name
+        );
+        if let Some(&var_id) = self.mangled_global_vars.get(&global_mangled_name) {
+            return Some(var_id);
+        }
+        None
+    }
+    pub fn find_function(&self, name: &str) -> Option<FuncId> {
+        let mut current_scope_name = self.scope_stack.last().expect("[internal hfs error] no scope found").name.clone();
+        // Search from current scope up to function boundary
+        for scope in self.scope_stack.iter().rev() {
+            let mangled_name = format!("{}{}()", current_scope_name, name);
+            // Try to find function at this scope level
+            if let Some(&func_id) = self.mangled_functions.get(&mangled_name) {
+                return Some(func_id);
+            }
+            // Stop at function boundary (nested functions can't see parent's nested functions)
+            if scope.kind == ScopeKind::Function {
+                break;
+            }
+            // Move up one scope level by removing the last "::" segment
+            if let Some(pos) = current_scope_name[..current_scope_name.len()-2].rfind("::") {
+                current_scope_name = current_scope_name[..pos+2].to_string();
+            } else {
+                break;
+            }
+        }
+        // After breaking at function boundary, check global functions
+        // Global functions have format: "file_name%function_name()"
+        let global_mangled_name = format!("{}{}()", 
+            self.scope_stack[0].name,  // The global scope name (file_name%)
+            name
+        );
+        if let Some(&func_id) = self.mangled_functions.get(&global_mangled_name) {
+            return Some(func_id);
+        }
+        None
+    }
+    pub fn find_identifier(&self, name: &str) -> Identifier {
+        match self.find_variable(&name) {
+            None => match self.find_function(&name) {
+                Some(id) => Identifier::Function(id),
+                None => panic!("use of undeclared identifier '{}'", name),
+            },
+            Some(id) => Identifier::Variable(id),
+        }
     }
 }

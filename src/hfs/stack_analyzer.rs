@@ -8,7 +8,7 @@ use super::*;
 // the goal is to make Henceforth a compiled language, therefore we do multiple stack passes
 impl<'a> AstArena<'a> {
     // clears the stack and returns it to the user
-    pub fn pop_hfs_stack(&mut self) -> Vec<ExprId> {
+    pub fn pop_entire_hfs_stack(&mut self) -> Vec<ExprId> {
         let temp = self.hfs_stack.clone();
         self.hfs_stack.clear();
         temp
@@ -197,10 +197,16 @@ impl<'a> StackAnalyzer<'a> {
                 }
                 self.arena.alloc_stmt(Statement::StackBlock(expr_ids), token)
             }
-            UnresolvedStatement::BlockScope(unresolved_top_level_ids) => {
-                self.scope_resolution_stack.push_block_scope();
-                let top_level_ids = self.resolve_top_level(unresolved_top_level_ids);
-                self.scope_resolution_stack.pop();
+            UnresolvedStatement::BlockScope(unresolved_top_level_ids, scope_kind) => {
+                let top_level_ids = if scope_kind != ScopeKind::Function {
+                    // Functions should push their own scopes
+                    self.scope_resolution_stack.push_scope(scope_kind);
+                    let temp = self.resolve_top_level(unresolved_top_level_ids);
+                    self.scope_resolution_stack.pop();
+                    temp
+                } else {
+                    self.resolve_top_level(unresolved_top_level_ids)
+                };
 
                 self.arena.alloc_stmt(Statement::BlockScope(top_level_ids), token)
             }
@@ -210,45 +216,69 @@ impl<'a> StackAnalyzer<'a> {
             }
             UnresolvedStatement::Break => {
                 if !self.scope_resolution_stack.is_in_while_loop_context() {
-                    panic!("")
+                    panic!("found break statement outside while loop.")
                 }
                 self.arena.alloc_stmt(Statement::Break, token)
             }
             UnresolvedStatement::Continue => {
+                if !self.scope_resolution_stack.is_in_while_loop_context() {
+                    panic!("found continue statement outside while loop.")
+                }
                 self.arena.alloc_stmt(Statement::Continue, token)
             }
             UnresolvedStatement::Empty => self.arena.alloc_stmt(Statement::Empty, token),
-            UnresolvedStatement::Assignment { identifier, is_move } => todo!(),
+            UnresolvedStatement::Assignment { identifier, is_move } => {
+                let value = if is_move {
+                    self.arena.pop_or_error("expected value in stack for move assignment statement.")
+                } else {
+                    self.arena.last_or_error("expected value in stack for copy assignment statement.")
+                };
+                let identifier = self.resolve_expr(identifier);
+                self.arena.alloc_stmt(Statement::Assignment { value, identifier, is_move }, token)
+            }
         }
     }
 
     fn resolve_expr(&mut self, id: UnresolvedExprId) -> ExprId {
         let token = self.unresolved_arena.get_unresolved_expr_token(id);
-        match self.unresolved_arena.get_unresolved_expr(id) {
-            UnresolvedExpression::Operation(unresolved_operation) => todo!(),
-            UnresolvedExpression::Identifier(_) => todo!(),
+        match self.unresolved_arena.get_unresolved_expr(id).clone() {
+            UnresolvedExpression::Operation(unresolved_operation) => self.resolve_operation(&unresolved_operation, token),
+            UnresolvedExpression::Identifier(identifier) => {
+                let identifier = self.scope_resolution_stack.find_identifier(&identifier);
+                self.arena.alloc_expr(Expression::Identifier(identifier), token)
+            }
             UnresolvedExpression::Literal(literal) => todo!(),
             UnresolvedExpression::FunctionCall { identifier } => todo!(),
             UnresolvedExpression::Tuple { expressions, variadic } => todo!(),
         }
     }
 
-    fn resolve_operation(&mut self, op: &UnresolvedOperation) -> ExprId {
+    fn resolve_operation(&mut self, op: &UnresolvedOperation, token: Token<'a>) -> ExprId {
         match op {
-            UnresolvedOperation::Add => todo!(),
-            UnresolvedOperation::Sub => todo!(),
-            UnresolvedOperation::Mul => todo!(),
-            UnresolvedOperation::Div => todo!(),
-            UnresolvedOperation::Mod => todo!(),
-            UnresolvedOperation::Or => todo!(),
-            UnresolvedOperation::And => todo!(),
-            UnresolvedOperation::Equal => todo!(),
-            UnresolvedOperation::NotEqual => todo!(),
-            UnresolvedOperation::Less => todo!(),
-            UnresolvedOperation::LessEqual => todo!(),
-            UnresolvedOperation::Greater => todo!(),
-            UnresolvedOperation::GreaterEqual => todo!(),
-            UnresolvedOperation::Not => todo!(),
+            op if op.is_binary() => {
+                let (lhs_expr, rhs_expr) = self.arena.pop2_or_error(format!("expected at least 2 values in stack for binary operation '{:?}'", op).as_str());
+                match op {
+                    UnresolvedOperation::Add          => self.arena.alloc_expr(Expression::Operation(Operation::Add(lhs_expr, rhs_expr)), token),
+                    UnresolvedOperation::Sub          => self.arena.alloc_expr(Expression::Operation(Operation::Sub(lhs_expr, rhs_expr)), token),
+                    UnresolvedOperation::Mul          => self.arena.alloc_expr(Expression::Operation(Operation::Mul(lhs_expr, rhs_expr)), token),
+                    UnresolvedOperation::Div          => self.arena.alloc_expr(Expression::Operation(Operation::Div(lhs_expr, rhs_expr)), token),
+                    UnresolvedOperation::Mod          => self.arena.alloc_expr(Expression::Operation(Operation::Mod(lhs_expr, rhs_expr)), token),
+                    UnresolvedOperation::Or           => self.arena.alloc_expr(Expression::Operation(Operation::Or(lhs_expr, rhs_expr)), token),
+                    UnresolvedOperation::And          => self.arena.alloc_expr(Expression::Operation(Operation::And(lhs_expr, rhs_expr)), token),
+                    UnresolvedOperation::Equal        => self.arena.alloc_expr(Expression::Operation(Operation::Equal(lhs_expr, rhs_expr)), token),
+                    UnresolvedOperation::NotEqual     => self.arena.alloc_expr(Expression::Operation(Operation::NotEqual(lhs_expr, rhs_expr)), token),
+                    UnresolvedOperation::Less         => self.arena.alloc_expr(Expression::Operation(Operation::Less(lhs_expr, rhs_expr)), token),
+                    UnresolvedOperation::LessEqual    => self.arena.alloc_expr(Expression::Operation(Operation::LessEqual(lhs_expr, rhs_expr)), token),
+                    UnresolvedOperation::Greater      => self.arena.alloc_expr(Expression::Operation(Operation::Greater(lhs_expr, rhs_expr)), token),
+                    UnresolvedOperation::GreaterEqual => self.arena.alloc_expr(Expression::Operation(Operation::GreaterEqual(lhs_expr, rhs_expr)), token),
+                    _ => unreachable!()
+                }
+            }
+            UnresolvedOperation::Not => {
+                let expr = self.arena.pop_or_error(format!("expected at least 1 value in stack for unary operation '{:?}'", op).as_str());
+                self.arena.alloc_expr(Expression::Operation(Operation::Not(expr)), token)
+            }
+            _ => panic!("missing semantic analysis for unary operation '{:?}'", op)
         }
     }
 

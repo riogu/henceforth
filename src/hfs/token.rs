@@ -90,23 +90,23 @@ pub enum TokenKind {
     Newline, // if significant whitespace
 }
 
-impl From<Operation> for TokenKind {
-    fn from(value: Operation) -> Self {
+impl From<BuilderOperation> for TokenKind {
+    fn from(value: BuilderOperation) -> Self {
         match value {
-            Operation::Add => TokenKind::Plus,
-            Operation::Subtract => TokenKind::Minus,
-            Operation::Multiply => TokenKind::Star,
-            Operation::Divide => TokenKind::Slash,
-            Operation::Modulo => TokenKind::Percent,
-            Operation::Not => TokenKind::Not,
-            Operation::Or => TokenKind::Or,
-            Operation::And => TokenKind::And,
-            Operation::GreaterThan => TokenKind::Greater,
-            Operation::GreaterThanEq => TokenKind::GreaterEqual,
-            Operation::Equals => TokenKind::Equal,
-            Operation::NotEquals => TokenKind::NotEqual,
-            Operation::LessThan => TokenKind::Less,
-            Operation::LessThanEq => TokenKind::LessEqual,
+            BuilderOperation::Add => TokenKind::Plus,
+            BuilderOperation::Subtract => TokenKind::Minus,
+            BuilderOperation::Multiply => TokenKind::Star,
+            BuilderOperation::Divide => TokenKind::Slash,
+            BuilderOperation::Modulo => TokenKind::Percent,
+            BuilderOperation::Not => TokenKind::Not,
+            BuilderOperation::Or => TokenKind::Or,
+            BuilderOperation::And => TokenKind::And,
+            BuilderOperation::GreaterThan => TokenKind::Greater,
+            BuilderOperation::GreaterThanEq => TokenKind::GreaterEqual,
+            BuilderOperation::Equals => TokenKind::Equal,
+            BuilderOperation::NotEquals => TokenKind::NotEqual,
+            BuilderOperation::LessThan => TokenKind::Less,
+            BuilderOperation::LessThanEq => TokenKind::LessEqual,
         }
     }
 }
@@ -125,7 +125,7 @@ impl From<Type> for TokenKind {
 
 use std::fmt;
 
-use crate::{hfs::ast::Type, hfs::builder::Operation};
+use crate::{hfs::ast::Type, hfs::builder::BuilderOperation};
 
 impl fmt::Display for TokenKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

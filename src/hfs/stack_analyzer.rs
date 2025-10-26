@@ -37,13 +37,38 @@ impl<'a> AstArena<'a> {
         self.hfs_stack.push(id);
         id
     }
-    pub fn validate_stack(return_type: TypeId) -> bool {
+    pub fn validate_return_stack(&mut self, return_type: TypeId) -> Result<(), String> {
+        let Type::Tuple(return_types) = self.get_type(return_type) else { panic!("[internal error] functions only return tuples at the moment.") };
+        let expected_count = return_types.len();
+        let actual_count = self.hfs_stack.len();
+        if expected_count != actual_count {
+            return Err(format!("expected {} values on stack for return, found {}", expected_count, actual_count));
+        }
+        let back_of_stack = &self.hfs_stack[actual_count - expected_count..];
 
-        
-
-
-        todo!()
+        for (&expr_id, &expected_type_id) in back_of_stack.iter().zip(return_types.iter()) {
+            let actual_type_id = self.get_type_of_expr(expr_id);
+            if self.get_type(actual_type_id) != self.get_type(expected_type_id) {
+                return Err(format!(
+                    "return type mismatch: expected '{:?}', found '{:?}'",
+                    self.get_type(expected_type_id),
+                    self.get_type(actual_type_id)
+                ));
+            }
+        }
+        Ok(())
     }
+
+    // pub fn validate_func_call_args(&mut self, param_type: TypeId) -> bool {
+    //     if let Type::Tuple(param_types) = self.get_type(param_type) {
+    //         if param_types.len() != self.hfs_stack.len() {
+    //             return false;
+    //         }
+    //         for param_type in param_types { // function parameter type is always a tuple
+    //         }
+    //     }
+    //     todo!()
+    // }
 }
 
 // ============================================================================
@@ -129,14 +154,20 @@ impl<'a> StackAnalyzer<'a> {
             body: self.arena.temporarily_get_next_stmt_id(),
             params, // we need to create our function BEFORE analyzing the body 
         }; // needed for recursive functions AND to match the correct token
-        let func_id = self.arena.alloc_function(func, token);
-
         //------------------------------------------------------------
         // we push scopes so the body can solve identifiers
-        self.scope_resolution_stack.push_function_and_scope(&name, func_id); 
+        let func_id = self.push_function_and_scope_and_alloc(&name, func, token); 
         let body = self.resolve_stmt(unresolved_body);
         self.scope_resolution_stack.pop();
         //------------------------------------------------------------
+        self.arena.validate_return_stack(self.scope_resolution_stack.get_curr_func_return_type());
+        func_id
+    }
+    // this method should be used since it guarantees that we set up everything right
+    fn push_function_and_scope_and_alloc(&mut self, name: &str, func: FunctionDeclaration, token: Token<'a>) -> FuncId {
+        let ret_type = func.return_type.clone();
+        let func_id = self.arena.alloc_function(func, token);
+        self.scope_resolution_stack.push_function_and_scope(name, func_id, ret_type);
         func_id
     }
 
@@ -175,12 +206,18 @@ impl<'a> StackAnalyzer<'a> {
                 self.arena.alloc_stmt(Statement::BlockScope(top_level_ids), token)
             }
             UnresolvedStatement::Return => {
-                // stack must be valid here relative to return type
-                todo!()
+                self.arena.validate_return_stack(self.scope_resolution_stack.get_curr_func_return_type());
+                self.arena.alloc_stmt(Statement::Return, token)
             }
-            UnresolvedStatement::Break => todo!(),
-            UnresolvedStatement::Continue => todo!(),
-            UnresolvedStatement::Empty => todo!(),
+            UnresolvedStatement::Break => {
+                if self.scope_resolution_stack.curr_scope_kind() != ScopeKind::WhileLoop {
+                }
+                self.arena.alloc_stmt(Statement::Break, token)
+            }
+            UnresolvedStatement::Continue => {
+                self.arena.alloc_stmt(Statement::Continue, token)
+            }
+            UnresolvedStatement::Empty => self.arena.alloc_stmt(Statement::Empty, token),
             UnresolvedStatement::Assignment { identifier, is_move } => todo!(),
         }
     }

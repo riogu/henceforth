@@ -63,7 +63,8 @@ impl<'a> TypeAnalyzer<'a> {
     fn analyze_type(&mut self, hfs_type: Type) {
         let last_expr_id = self.arena.last_or_error("tried consuming stack but stack was empty.");
         let last_expr_type = self.arena.get_type_of_expr(last_expr_id);
-        if hfs_type != last_expr_type {
+        let last_expr_type = self.arena.get_type(last_expr_type);
+        if hfs_type != *last_expr_type {
             panic!("expected '{:?}' type on top of stack, found '{:?}' instead.", hfs_type, last_expr_type)
         }
     }

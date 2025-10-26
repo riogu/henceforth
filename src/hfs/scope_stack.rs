@@ -7,6 +7,9 @@ pub enum ScopeKind {
     Global,
     Function, // func_name()::
     Block,    // 0::, 1::, etc
+    WhileLoop,    // 0::, 1::, etc
+    IfStmt,       // 0::, 1::, etc
+    ElseStmt,     // 0::, 1::, etc
 }
 
 struct Scope {
@@ -20,6 +23,7 @@ pub struct ScopeStack {
     mangled_global_vars: HashMap<String, VarId>,
     mangled_locals: HashMap<String, VarId>,
     mangled_functions: HashMap<String, FuncId>,
+    curr_func_return_type: TypeId,
 }
 
 impl ScopeStack {
@@ -29,13 +33,15 @@ impl ScopeStack {
             mangled_global_vars: HashMap::new(),
             mangled_locals: HashMap::new(),
             mangled_functions: HashMap::new(),
+            curr_func_return_type: TypeId(0),
         }
     }
-    pub fn push_function_and_scope(&mut self, name: &str, func_id: FuncId) {
+    pub fn push_function_and_scope(&mut self, name: &str, func_id: FuncId, ret_type: TypeId) {
         let parent = self.scope_stack.last_mut().expect("[internal hfs error] couldn't push function, scopes were set up wrong.");
         let mangled_name = format!("{}{}::", parent.name, name);
         self.scope_stack.push(Scope { name: format!("{}()::", mangled_name), kind: ScopeKind::Function, inner_count: 0, });
         self.mangled_functions.insert(mangled_name, func_id);
+        self.curr_func_return_type = ret_type;
     }
     pub fn push_block_scope(&mut self) {
         let parent = self.scope_stack.last_mut().expect("[internal hfs error] couldn't push block, scopes were set up wrong.");
@@ -49,7 +55,9 @@ impl ScopeStack {
         match curr_stack.kind {
             ScopeKind::Global => self.mangled_global_vars.insert(mangled_name, var_id),
             ScopeKind::Function => self.mangled_locals.insert(mangled_name, var_id),
-            ScopeKind::Block => self.mangled_locals.insert(mangled_name, var_id),
+            ScopeKind::Block | ScopeKind::WhileLoop | ScopeKind::IfStmt | ScopeKind::ElseStmt => {
+                self.mangled_locals.insert(mangled_name, var_id)
+            }
         };
     }
     pub fn pop(&mut self) {
@@ -58,8 +66,19 @@ impl ScopeStack {
         }
     }
     pub fn curr_scope_kind(&mut self) -> ScopeKind {
-        self.scope_stack.last()
-                        .expect("[internal hfs error] couldn't push block, scopes were set up wrong.")
-                        .kind
+        self.scope_stack.last().expect("[internal hfs error] no scope found").kind
+    }
+    pub fn get_curr_func_return_type(&mut self)  -> TypeId {
+        self.curr_func_return_type
+    }
+    pub fn is_in_while_loop_context(&self) -> bool {
+        for scope in self.scope_stack.iter().rev() {
+            match scope.kind {
+                ScopeKind::WhileLoop => return true,
+                ScopeKind::Function => return false, // Stop at function boundary
+                _ => continue, // Keep searching
+            }
+        }
+        false // Not in any while loop
     }
 }

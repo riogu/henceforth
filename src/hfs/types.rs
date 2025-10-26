@@ -1,7 +1,7 @@
 use crate::hfs::ast::*;
 
 impl<'a> AstArena<'a> {
-    pub fn get_type_of_operation(&self, op: &Operation) -> Type {
+    pub fn get_type_of_operation(&self, op: &Operation) -> TypeId {
         match op {
             Operation::Add(lhs, rhs) => todo!(),
             Operation::Sub(lhs, rhs) => todo!(),
@@ -20,7 +20,7 @@ impl<'a> AstArena<'a> {
         }
     }
 
-    pub fn get_type_of_expr(&self, expr_id: ExprId) -> Type {
+    pub fn get_type_of_expr(&self, expr_id: ExprId) -> TypeId {
         let expr = self.get_expr(expr_id);
         match expr {
             Expression::Operation(operation) => self.get_type_of_operation(operation),
@@ -34,7 +34,7 @@ impl<'a> AstArena<'a> {
         }
     }
 
-    pub fn get_type_of_stmt(&self, stmt_id: StmtId) -> Type {
+    pub fn get_type_of_stmt(&self, stmt_id: StmtId) -> TypeId {
         let stmt = self.get_stmt(stmt_id);
         match stmt {
             Statement::If { cond, body, else_stmt } => todo!(),
@@ -49,7 +49,7 @@ impl<'a> AstArena<'a> {
         }
     }
 
-    pub fn get_type_of_top_level(&self, top_level_id: TopLevelId) -> Type {
+    pub fn get_type_of_top_level(&self, top_level_id: TopLevelId) -> TypeId {
         match top_level_id {
             TopLevelId::VariableDecl(var_id) => todo!(),
             TopLevelId::FunctionDecl(fn_id) => todo!(),

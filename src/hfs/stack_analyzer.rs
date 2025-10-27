@@ -41,7 +41,7 @@ impl<'a> AstArena<'a> {
         let back_of_stack = &self.hfs_stack.clone()[actual_count - expected_count..];
 
         for (expr_id, expected_type_id) in back_of_stack.iter().zip(return_types.iter()) {
-            let actual_type_id = self.get_type_of_expr(*expr_id);
+            let actual_type_id = self.get_type_id_of_expr(*expr_id);
             if let Err(err) = self.validate_type(actual_type_id, *expected_type_id) {
                 panic!("return value {}", err);
             }
@@ -186,6 +186,9 @@ impl<'a> StackAnalyzer<'a> {
         match unresolved_stmt {
             UnresolvedStatement::If { body, else_stmt } => {
                 let cond = self.arena.last_or_error("expected boolean or operation on stack for if statement argument");
+                if !matches!(self.arena.get_type_of_expr(cond), Type::Bool) {
+                    panic!("expected expression of type 'bool' in if statement condition") 
+                }
                 let body = self.resolve_stmt(body);
                 let else_stmt = match else_stmt {
                     Some(UnresolvedElseStmt::Else(stmt_id))   => Some(ElseStmt::Else(self.resolve_stmt(stmt_id))),
@@ -195,7 +198,10 @@ impl<'a> StackAnalyzer<'a> {
                 self.arena.alloc_stmt(Statement::If { cond, body, else_stmt }, token)
             }
             UnresolvedStatement::While { body } => {
-                let cond = self.arena.last_or_error("expected boolean or operation on stack for while loop argument");
+                let cond = self.arena.last_or_error("expected value on stack for while loop argument");
+                if !matches!(self.arena.get_type_of_expr(cond), Type::Bool) {
+                    panic!("expected expression of type 'bool' in while loop condition") 
+                }
                 let body = self.resolve_stmt(body);
                 self.arena.alloc_stmt(Statement::While { cond, body }, token)
             }
@@ -276,7 +282,7 @@ impl<'a> StackAnalyzer<'a> {
             UnresolvedExpression::FunctionCall { identifier } => {
                 // pop the tuple we just allocated from the stack
                 let tuple_expr = self.arena.pop_or_error("function calls require a tuple on the stack to be called!");
-                let Expression::Tuple { expressions, variadic } = self.arena.get_expr(tuple_expr) else { panic!("checked already") };
+                let Expression::Tuple { expressions, variadic } = self.arena.get_expr(tuple_expr).clone() else { panic!("checked already") };
 
                 // just checks if we actually had a function
                 let identifier = self.resolve_expr(identifier);
@@ -288,17 +294,18 @@ impl<'a> StackAnalyzer<'a> {
                 let func_decl = self.arena.get_func(func_id).clone(); // make borrow checker happy
 
                 // first make sure calling this function is valid given the stack state
-                let arg_type_id = self.arena.get_type_of_expr(tuple_expr);
+                let arg_type_id = self.arena.get_type_id_of_expr(tuple_expr);
                 self.arena.validate_func_call(func_decl.param_type, arg_type_id);
 
                 // now make sure the stack is updated based on the return type of the function
                 let Type::Tuple(return_types) = self.arena.get_type(func_decl.return_type) else { panic!("[internal error] functions only return tuples at the moment.") };
+                let mut return_values = Vec::<ExprId>::new();
                 for ret_type in return_types.clone() {
                     let token = self.arena.get_type_token(ret_type).clone();
-                    self.arena.alloc_and_push_to_hfs_stack(Expression::ReturnValue(ret_type), token);
+                    return_values.push(self.arena.alloc_and_push_to_hfs_stack(Expression::ReturnValue(ret_type), token));
                 }
                 // function calls dont go to the stack
-                self.arena.alloc_function_call(Expression::FunctionCall { tuple_args: tuple_expr, identifier: func_id }, token)
+                self.arena.alloc_function_call(Expression::FunctionCall { args: expressions, identifier: func_id, return_values}, token)
             }
 
             UnresolvedExpression::Tuple { expressions, variadic, called_func_name} => { 

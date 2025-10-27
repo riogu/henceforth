@@ -83,13 +83,13 @@ impl ScopeStack {
         }
         false // Not in any while loop
     }
-    pub fn find_variable(&self, name: &str) -> Option<VarId> {
+    fn find_variable(&self, name: &str) -> (Option<VarId>, bool) {
         // Search from innermost to outermost scope until function boundary
         for scope in self.scope_stack.iter().rev() {
             let mangled_name = format!("{}{}", scope.name, name);
             // Check if variable exists at this scope
             if let Some(&var_id) = self.mangled_locals.get(&mangled_name) {
-                return Some(var_id);
+                return (Some(var_id), false);
             }
             // Stop at function boundary - don't look into outer functions
             if scope.kind == ScopeKind::Function {
@@ -98,7 +98,7 @@ impl ScopeStack {
         }
         // Check globals
         let global_mangled_name = format!("{}{}", self.scope_stack[0].name, name);
-        self.mangled_global_vars.get(&global_mangled_name).copied()
+        (self.mangled_global_vars.get(&global_mangled_name).copied(), true)
     }
 
     pub fn find_function(&self, name: &str) -> Option<FuncId> {
@@ -121,11 +121,12 @@ impl ScopeStack {
 
     pub fn find_identifier(&self, name: &str) -> Identifier {
         match self.find_variable(&name) {
-            None => match self.find_function(&name) {
+            (None, _) => match self.find_function(&name) {
                 Some(id) => Identifier::Function(id),
                 None => panic!("use of undeclared identifier '{}'", name),
             },
-            Some(id) => Identifier::Variable(id),
+            (Some(id), false) => Identifier::Variable(id),
+            (Some(id), true) => Identifier::GlobalVar(id),
         }
     }
 }

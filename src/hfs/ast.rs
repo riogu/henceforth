@@ -17,6 +17,7 @@ use std::collections::HashMap;
 
 #[derive(Debug, Clone, Copy)]
 pub enum Identifier {
+    GlobalVar(VarId),
     Variable(VarId),
     Function(FuncId),
 }
@@ -43,10 +44,10 @@ pub enum Expression {
     Operation(Operation),
     Identifier(Identifier),
     Literal(Literal),
-    FunctionCall{ tuple_args: ExprId, identifier: FuncId },
+    FunctionCall{ args: Vec<ExprId>, identifier: FuncId, return_values: Vec<ExprId>},
     Tuple { expressions: Vec<ExprId>, variadic: bool },
-    Parameter(TypeId),
-    ReturnValue(TypeId),
+    Parameter(TypeId), // will be converted into another expression
+    ReturnValue(TypeId), // we replace this ExprId with another one when computed
 }
 
 

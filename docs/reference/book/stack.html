@@ -176,6 +176,50 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="stack-operations"><a class="header" href="#stack-operations">Stack Operations</a></h1>
+<p>Being a stack-based language, the stack is the core of Henceforth. This data structure has a LIFO policy, where the last element that went in the stack is the first element to come out.</p>
+<h2 id="key-differences-from-other-stack-based-languages"><a class="header" href="#key-differences-from-other-stack-based-languages">Key differences from other stack-based languages</a></h2>
+<ul>
+<li>In Henceforth, every function has its own stack, and these stacks can be seamlessly merged.</li>
+<li>Since not every operation affects the stack, Henceforth explicitly states whether something is changing it.</li>
+<li>For convenience, the interpreter handles some of the stack manipulation when switching contexts.</li>
+</ul>
+<h2 id="stack-blocks"><a class="header" href="#stack-blocks">Stack blocks</a></h2>
+<p>Stack blocks are Henceforth's way of separating imperative from stack-based code. They are delimited by <code>@(</code> and <code>)</code>. They don't have to be terminated by semicolons.</p>
+<h2 id="pushing-values-to-the-stack"><a class="header" href="#pushing-values-to-the-stack">Pushing values to the stack</a></h2>
+<p>To push a value to the stack, just write a literal or a variable inside a stack block.</p>
+<pre><code>@(5) // pushes 5
+@(5.0) // pushes 5.0
+@(true) // pushes true
+@((1 2 3)) // pushes (1 2 3)
+@("string") // pushes "string"
+@(var) // pushes the value of var, if var is a variable and has a value
+</code></pre>
+<h2 id="stack-operators"><a class="header" href="#stack-operators">Stack Operators</a></h2>
+<p>The following operators are allowed on the stack:</p>
+<pre><code>+ // pops two numbers, pushes their sum OR pops two strings, pushes their concatenation
+- // pops two numbers, pushes their difference
+* // pops two numbers, pushes their product
+/ // pops two numbers, pushes their quotient
+% // pops two numbers, pushes their integer division remainder
+== // pops two numbers, pushes true if they're equal and false otherwise
+!= // pops two numbers, pushes true if they're not equal and false otherwise
+&lt; // pops two numbers, pushes true if the left value is less than the right value and false otherwise
+&gt; // pops two numbers, pushes true if the left value is greater than the right value and false otherwise
+&lt;= // pops two numbers, pushes true if the left value is less than or equal to the right value and false otherwise
+&gt;= // pops two numbers, pushes true if the left value is greater than or equal to the right value and false otherwise
+! // pops a bool, pushes its inverse
+|| // pops two bools, pushes true if any of them are true and false otherwise
+&amp;&amp; // pops two bools, pushes true if both are true and false otherwise
+</code></pre>
+<p>Stack manipulation functions are defined in the <a href="./stdlib.html">standard library</a>.</p>
+<h2 id="common-mistakes"><a class="header" href="#common-mistakes">Common mistakes</a></h2>
+<p>Some common mistakes when using the stack include:</p>
+<pre><code>@(+) // ERROR: stack underflow
+</code></pre>
+<p>A stack underflow occurs when an operator expects more values than there are on the stack.</p>
+<pre><code>@(5 "hello" +) // ERROR: type mismatch
+</code></pre>
+<p>A type mismatch occurs when an operators expects values of a certain type but is given other types.</p>
 
                     </main>
 
@@ -185,7 +229,7 @@
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next prefetch" href="functions.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="variables.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -199,7 +243,7 @@
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next prefetch" href="functions.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="variables.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>

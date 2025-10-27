@@ -176,6 +176,41 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="standard-library-functions"><a class="header" href="#standard-library-functions">Standard Library Functions</a></h1>
+<p>Henceforth contains many functions in the standard library that allow for more abstraction out-of-the-box.</p>
+<h2 id="string-manipulation-and-io-functions"><a class="header" href="#string-manipulation-and-io-functions">String Manipulation and IO Functions</a></h2>
+<p>Currently, the Henceforth standard library only contains one function for string manipulation:</p>
+<pre><code>fn show: (i32) -&gt; str;
+fn show: (f32) -&gt; str;
+fn show: (bool) -&gt; str;
+</code></pre>
+<p>This converts any <code>i32</code>, <code>f32</code> or <code>bool</code> into a string.
+A function like this goes hand-in-hand with IO, for which Henceforth contains two functions:</p>
+<pre><code>fn print: (str) -&gt; (str);
+fn print_stack: () -&gt; ();
+</code></pre>
+<p><code>print_stack</code> differs from other functions as it affects the caller's entire stack, without explicitly passing it, printing it in reverse order (bottom to top), and works with any type.</p>
+<p><code>print</code> simply prints its argument.</p>
+<h2 id="introspection"><a class="header" href="#introspection">Introspection</a></h2>
+<p>There is only one introspection function in the standard library:</p>
+<pre><code>fn typeof: (i32) -&gt; (str);
+fn typeof: (f32) -&gt; (str);
+fn typeof: (bool) -&gt; (str);
+fn typeof: (str) -&gt; (str);
+</code></pre>
+<p>This function takes any value and returns its type as a string, which can be useful in control flow.</p>
+<h2 id="stack-operations"><a class="header" href="#stack-operations">Stack Operations</a></h2>
+<p>Stack operations make up most of the standard library. These functions can take any argument type, so we are annotating them with <code>T</code>, <code>U</code>, and <code>V</code>, even though generics don't exist in Henceforth:</p>
+<pre><code>fn pop: (T) -&gt; (); // removes the argument from the stack
+fn pop_all: () -&gt; (); // removes everything from the stack
+fn dup: (T) -&gt; (T T); // duplicates its argument
+fn swap: (T U) -&gt; (U T); // swaps its arguments
+fn over: (T U) -&gt; (T U T); // copies second element to top of stack
+fn rot: (T U V) -&gt; (U V T); // moves third element to the top of the stack
+fn rrot: (T U V) -&gt; (V T U); // moves first element to the third position of the stack (equivalent to calling rot twice)
+fn nip: (T U) -&gt; (U); // pops second element from the stack
+fn tuck: (T U) -&gt; (U T U); // copies first element to the third position of the stack
+</code></pre>
+<p>Note that <code>pop_all</code> works similarly to <code>print_stack</code> where nothing is passed, yet something happens as a side effect.</p>
 
                     </main>
 
@@ -185,9 +220,6 @@
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next prefetch" href="syntax.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
-                                <i class="fa fa-angle-right"></i>
-                            </a>
 
                         <div style="clear: both"></div>
                     </nav>
@@ -199,9 +231,6 @@
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next prefetch" href="syntax.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
-                        <i class="fa fa-angle-right"></i>
-                    </a>
             </nav>
 
         </div>

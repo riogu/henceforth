@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Syntax Rules - Henceforth Language Reference</title>
+        <title>Variables - Henceforth Language Reference</title>
 
 
         <!-- Custom HTML head -->
@@ -175,16 +175,74 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="syntax-rules"><a class="header" href="#syntax-rules">Syntax Rules</a></h1>
+                        <h1 id="variables"><a class="header" href="#variables">Variables</a></h1>
+<p>Variables are one of the many imperative features that make Henceforth so powerful. Instead of relying entirely on the stack, they allow for keeping state locally.</p>
+<h2 id="variable-declaration"><a class="header" href="#variable-declaration">Variable declaration</a></h2>
+<p>Variables can be declared with the following syntax:</p>
+<pre><code>let x: i32;
+let y: (i32 string);
+</code></pre>
+<p>Variables can't be initialized on declaration, they <strong>must</strong> use values on the stack.</p>
+<pre><code>let x: i32 = 5; // not valid
+</code></pre>
+<h2 id="how-variables-interact-with-the-stack"><a class="header" href="#how-variables-interact-with-the-stack">How variables interact with the stack</a></h2>
+<p>Variables can be assigned values directly from the stack:</p>
+<ul>
+<li><code>:=</code> copies the top value from the stack into the variable</li>
+<li><code>&amp;=</code> moves the top value from the stack, popping it, into the variable</li>
+</ul>
+<pre><code>let var: i32;
+@(1 2 3) := var; // stack: [1, 2, 3], var = 3
+</code></pre>
+<pre><code>let var: i32;
+@(1 2 3) &amp;= var; // stack: [1, 2], var = 3
+</code></pre>
+<p>The same rules apply to tuples:</p>
+<pre><code>let var: (i32 i32);
+@((1 2)) := var; // stack: [(1 2)], var = (1 2)
+</code></pre>
+<pre><code>let var: (i32 i32);
+@((1 2)) &amp;= var; // stack: [], var = (1 2)
+</code></pre>
+<p>Variables can be pushed onto the stack like any other literal.</p>
+<pre><code>let var: bool;
+@(5); // stack: [5]
+@(6); // stack: [5 6]
+@(&gt;); // stack: [false]
+:= var; // stack: [false], var = false
+@(var); // stack: [false, false], var = false
+</code></pre>
+<h2 id="scoping-rules"><a class="header" href="#scoping-rules">Scoping rules</a></h2>
+<p>Variables are always local to their scope, and you can't declare variables on a global scope.</p>
+<pre><code>let x: i32; // not valid
+
+fn foo: () -&gt; () {
+  let x: i32; // valid
+  @(x); // valid
+  ...
+}
+
+fn main: () -&gt; () {
+  @(x); // invalid
+  ...
+  if @(...) {
+    let y: i32; // valid
+  }
+  @(4) := y; // invalid
+}
+</code></pre>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="stdlib.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="stack.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
+                            <a rel="next prefetch" href="functions.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
 
                         <div style="clear: both"></div>
                     </nav>
@@ -192,10 +250,13 @@
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="stdlib.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="stack.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
 
+                    <a rel="next prefetch" href="functions.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
             </nav>
 
         </div>

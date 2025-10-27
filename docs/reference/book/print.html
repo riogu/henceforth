@@ -203,19 +203,388 @@ Control flow is also handled by the compiler, so that, for example, <strong>ever
 @(5 3 (...)add) // Implicit arguments (values already on stack)
 @(5 (... 3)add) // Partially implicit arguments (first value already on stack)
 </code></pre>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="lexical-structure"><a class="header" href="#lexical-structure">Lexical Structure</a></h1>
-<p>This section describes the basic lexical elements that make up Henceforth source code.</p>
+<div style="break-before: page; page-break-before: always;"></div><p>#T Lexical Structure
+This section describes the basic lexical elements that make up Henceforth source code.</p>
 <h2 id="comments"><a class="header" href="#comments">Comments</a></h2>
+<p>Line comments are indicated by <code>//</code>. Block comments are opened with <code>/*</code> and closed with. <code>*/</code>, and can be nested.</p>
+<pre><code>  // this is a comment
+
+  /*
+    this is also a comment
+  */
+
+  /*
+    /*
+        this is a nested comment
+    */
+    this is still a comment
+  */
+</code></pre>
 <h2 id="identifiers"><a class="header" href="#identifiers">Identifiers</a></h2>
+<p>Function and variable identifiers can contain <code>a-z</code>, <code>A-Z</code>, <code>0-9</code> and <code>_</code>, except for the first character, which can't be a number.</p>
+<pre><code>add // valid
+getValue2 // valid
+_private // valid
+
+2var // invalid (starts with number)
+my-function // invalid (has hyphen)
+hello world // invalid (has space)
+</code></pre>
 <h2 id="literals"><a class="header" href="#literals">Literals</a></h2>
+<p>Integer literals represent whole numbers:</p>
+<pre><code>42
+-17
+1000000
+</code></pre>
+<p>Floating-point literals represent decimal numbers:</p>
+<pre><code>3.14
+-0.5
+2.0
+</code></pre>
+<p>String literals are enclosed in double quotes:</p>
+<pre><code>"Hello, World!"
+""
+"Line 1\n Line 2"
+</code></pre>
+<p>The following escape sequences are allowed:</p>
+<pre><code>\n newline
+\t tab
+\\ backslash
+\" double quote
+\r carriage return
+</code></pre>
+<p>Boolean literals represent truth values:</p>
+<pre><code>true
+false
+</code></pre>
+<p>Tuple literals group other literals together:</p>
+<pre><code>(5 3 "string")
+(5.25 "test" true)
+</code></pre>
 <h2 id="keywords"><a class="header" href="#keywords">Keywords</a></h2>
+<p>The following identifiers are reserved as keywords and can't be used as an identifier.</p>
+<pre><code>fn
+while
+continue
+break
+return
+let
+if
+else
+false
+true
+i32
+f32
+str
+bool
+</code></pre>
 <h2 id="operators"><a class="header" href="#operators">Operators</a></h2>
+<p>Henceforth provides several categories of operators.</p>
+<p><strong>Arithmetic Operators</strong></p>
+<pre><code>+    addition
+-    subtraction
+*    multiplication
+/    division
+%    modulo
+</code></pre>
+<p><strong>Comparison Operators</strong></p>
+<pre><code>==   equal to
+!=   not equal to
+&lt;    less than
+&gt;    greater than
+&lt;=   less than or equal to
+&gt;=   greater than or equal to
+</code></pre>
+<p><strong>Logical Operators</strong></p>
+<pre><code>&amp;&amp;   logical AND
+||   logical OR
+!    logical NOT
+</code></pre>
+<p><strong>Special Syntax</strong></p>
+<pre><code>@    stack block indicator
+()   tuple constructor/stack block delimiter
+:    function signature separator
+-&gt;   return type indicator/argument redirection
+{}   block delimiters
+;    statement terminator
+:=   copy top value to variable
+&amp;=   pop to variable
+</code></pre>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="types"><a class="header" href="#types">Types</a></h1>
+<p>Henceforth's simple type system with static typing separates it from other stack-based languages, allowing for a more user-friendly experience.</p>
+<h2 id="primitive-types"><a class="header" href="#primitive-types">Primitive Types</a></h2>
+<p>Henceforth has four basic types:</p>
+<ul>
+<li><code>i32</code> - 32-bit signed integer</li>
+<li><code>f32</code> - 32-bit floating-point</li>
+<li><code>str</code> - UTF-8 encoded text</li>
+<li><code>bool</code> - <code>true</code> or <code>false</code></li>
+</ul>
+<p>For grouping values, there are also tuples, denoted by parentheses around values. Note that the <code>(...)</code> notation for function calls creates a tuple and passes it to the function, however, <code>...</code> is not allowed in any other context.</p>
+<h2 id="type-annotations"><a class="header" href="#type-annotations">Type Annotations</a></h2>
+<p>Henceforth doesn't have type inference, and all types <strong>must</strong> be specified.</p>
+<pre><code>fn foo: (i32 str) -&gt; (bool) { ... }
+         ^^^^^^^      ^^^^
+         parameters   return type
+</code></pre>
+<h2 id="type-conversions"><a class="header" href="#type-conversions">Type Conversions</a></h2>
+<p>There is only one standard library function to convert types:</p>
+<pre><code>fn show: (i32) -&gt; str {...}  
+fn show: (f32) -&gt; str {...}  
+</code></pre>
+<p>Operators implicitly convert between <code>i32</code> and <code>f32</code>.</p>
+<h2 id="type-compatibility"><a class="header" href="#type-compatibility">Type Compatibility</a></h2>
+<p>Being statically typed, Henceforth validates stack operations and function calls before running the program.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="stack-operations"><a class="header" href="#stack-operations">Stack Operations</a></h1>
+<p>Being a stack-based language, the stack is the core of Henceforth. This data structure has a LIFO policy, where the last element that went in the stack is the first element to come out.</p>
+<h2 id="key-differences-from-other-stack-based-languages"><a class="header" href="#key-differences-from-other-stack-based-languages">Key differences from other stack-based languages</a></h2>
+<ul>
+<li>In Henceforth, every function has its own stack, and these stacks can be seamlessly merged.</li>
+<li>Since not every operation affects the stack, Henceforth explicitly states whether something is changing it.</li>
+<li>For convenience, the interpreter handles some of the stack manipulation when switching contexts.</li>
+</ul>
+<h2 id="stack-blocks"><a class="header" href="#stack-blocks">Stack blocks</a></h2>
+<p>Stack blocks are Henceforth's way of separating imperative from stack-based code. They are delimited by <code>@(</code> and <code>)</code>. They don't have to be terminated by semicolons.</p>
+<h2 id="pushing-values-to-the-stack"><a class="header" href="#pushing-values-to-the-stack">Pushing values to the stack</a></h2>
+<p>To push a value to the stack, just write a literal or a variable inside a stack block.</p>
+<pre><code>@(5) // pushes 5
+@(5.0) // pushes 5.0
+@(true) // pushes true
+@((1 2 3)) // pushes (1 2 3)
+@("string") // pushes "string"
+@(var) // pushes the value of var, if var is a variable and has a value
+</code></pre>
+<h2 id="stack-operators"><a class="header" href="#stack-operators">Stack Operators</a></h2>
+<p>The following operators are allowed on the stack:</p>
+<pre><code>+ // pops two numbers, pushes their sum OR pops two strings, pushes their concatenation
+- // pops two numbers, pushes their difference
+* // pops two numbers, pushes their product
+/ // pops two numbers, pushes their quotient
+% // pops two numbers, pushes their integer division remainder
+== // pops two numbers, pushes true if they're equal and false otherwise
+!= // pops two numbers, pushes true if they're not equal and false otherwise
+&lt; // pops two numbers, pushes true if the left value is less than the right value and false otherwise
+&gt; // pops two numbers, pushes true if the left value is greater than the right value and false otherwise
+&lt;= // pops two numbers, pushes true if the left value is less than or equal to the right value and false otherwise
+&gt;= // pops two numbers, pushes true if the left value is greater than or equal to the right value and false otherwise
+! // pops a bool, pushes its inverse
+|| // pops two bools, pushes true if any of them are true and false otherwise
+&amp;&amp; // pops two bools, pushes true if both are true and false otherwise
+</code></pre>
+<p>Stack manipulation functions are defined in the <a href="./stdlib.html">standard library</a>.</p>
+<h2 id="common-mistakes"><a class="header" href="#common-mistakes">Common mistakes</a></h2>
+<p>Some common mistakes when using the stack include:</p>
+<pre><code>@(+) // ERROR: stack underflow
+</code></pre>
+<p>A stack underflow occurs when an operator expects more values than there are on the stack.</p>
+<pre><code>@(5 "hello" +) // ERROR: type mismatch
+</code></pre>
+<p>A type mismatch occurs when an operators expects values of a certain type but is given other types.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="variables"><a class="header" href="#variables">Variables</a></h1>
+<p>Variables are one of the many imperative features that make Henceforth so powerful. Instead of relying entirely on the stack, they allow for keeping state locally.</p>
+<h2 id="variable-declaration"><a class="header" href="#variable-declaration">Variable declaration</a></h2>
+<p>Variables can be declared with the following syntax:</p>
+<pre><code>let x: i32;
+let y: (i32 string);
+</code></pre>
+<p>Variables can't be initialized on declaration, they <strong>must</strong> use values on the stack.</p>
+<pre><code>let x: i32 = 5; // not valid
+</code></pre>
+<h2 id="how-variables-interact-with-the-stack"><a class="header" href="#how-variables-interact-with-the-stack">How variables interact with the stack</a></h2>
+<p>Variables can be assigned values directly from the stack:</p>
+<ul>
+<li><code>:=</code> copies the top value from the stack into the variable</li>
+<li><code>&amp;=</code> moves the top value from the stack, popping it, into the variable</li>
+</ul>
+<pre><code>let var: i32;
+@(1 2 3) := var; // stack: [1, 2, 3], var = 3
+</code></pre>
+<pre><code>let var: i32;
+@(1 2 3) &amp;= var; // stack: [1, 2], var = 3
+</code></pre>
+<p>The same rules apply to tuples:</p>
+<pre><code>let var: (i32 i32);
+@((1 2)) := var; // stack: [(1 2)], var = (1 2)
+</code></pre>
+<pre><code>let var: (i32 i32);
+@((1 2)) &amp;= var; // stack: [], var = (1 2)
+</code></pre>
+<p>Variables can be pushed onto the stack like any other literal.</p>
+<pre><code>let var: bool;
+@(5); // stack: [5]
+@(6); // stack: [5 6]
+@(&gt;); // stack: [false]
+:= var; // stack: [false], var = false
+@(var); // stack: [false, false], var = false
+</code></pre>
+<h2 id="scoping-rules"><a class="header" href="#scoping-rules">Scoping rules</a></h2>
+<p>Variables are always local to their scope, and you can't declare variables on a global scope.</p>
+<pre><code>let x: i32; // not valid
+
+fn foo: () -&gt; () {
+  let x: i32; // valid
+  @(x); // valid
+  ...
+}
+
+fn main: () -&gt; () {
+  @(x); // invalid
+  ...
+  if @(...) {
+    let y: i32; // valid
+  }
+  @(4) := y; // invalid
+}
+</code></pre>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="functions"><a class="header" href="#functions">Functions</a></h1>
+<p>Unlike other stack-based languages, functions in Henceforth are statically typed, giving a better abstraction than the normal approach of "pop from stack, push to stack".</p>
+<h2 id="declaring-functions"><a class="header" href="#declaring-functions">Declaring functions</a></h2>
+<p>Functions can be declared with the following syntax:</p>
+<pre><code>fn function_name: (i32) -&gt; (str bool) {
+  ...
+}
+/*
+fn &lt;name&gt;: (&lt;argument types&gt;) -&gt; (&lt;return types&gt;) {
+  &lt;body&gt;
+}
+*/
+</code></pre>
+<p>They must be declared on a global scope.</p>
+<h2 id="how-function-calls-affect-the-stack"><a class="header" href="#how-function-calls-affect-the-stack">How function calls affect the stack</a></h2>
+<p>There are three ways a function can be called:</p>
+<pre><code>@((1 2 3)foo); // explicit arguments
+@((...)foo); // implicit arguments, if arguments are already on the stack before the function call
+@((... 2 3)foo); // partially implicit arguments, if some of the arguments are already on the stack
+</code></pre>
+<p>Function calls are seamlessly integrated with the type system, as passing arguments has the same syntax as creating a tuple. This means that all functions take a single tuple as an argument, and that tuple is popped and destructured when entering the function's context.</p>
+<p>The <code>...</code> syntax is a special tuple operator that only works with function calls. It essentially completes the function signature with values from the stack.</p>
+<h2 id="how-context-switches-between-function-calls"><a class="header" href="#how-context-switches-between-function-calls">How context switches between function calls</a></h2>
+<p>In Henceforth, functions have separate stacks, and these stacks are merged between function calls.
+Here's an example using the standard library function <code>dup</code> to illustrate this:</p>
+<pre><code>fn dup: (i32) -&gt; (i32 i32) {
+  let temp: i32;
+  := temp;
+  @(temp) return;
+}
+
+fn main: () -&gt; () {
+  @((5)dup);
+  @(()pop_all) return;
+}
+</code></pre>
+<p>Now we can trace the program's execution:</p>
+<ul>
+<li>When <code>main</code> (the entry point for any Henceforth program) starts running, the stack is empty.</li>
+<li>When calling <code>dup</code> with the argument <code>5</code>, the following happens:
+<ul>
+<li><code>5</code> is pushed into the stack of <code>main</code></li>
+<li>A tuple is created with the previous value. Now the stack contains <code>[(5)]</code></li>
+<li>The function <code>dup</code> is pushed, and since it's a function, immediately pops along with its arguments, signaling the start of <code>dup</code>'s execution</li>
+</ul>
+</li>
+<li>When switching to the context of <code>dup</code>, the <code>main</code> stack is now empty, and the popped arguments are destructured and pushed into <code>dup</code>'s stack, which now contains <code>[5]</code> (note the lack of tuple)</li>
+<li>The function then creates a variable, copies the top of the stack (<code>5</code>) into it, and pushes the variable on the stack, essentially duplicating the value. Now the stack of <code>dup</code> contains <code>[5, 5]</code></li>
+<li>When calling return, a tuple is implicitly created with the entire stack of <code>dup</code>, and is compared against the expected return type (also a tuple). The stack of <code>dup</code>, before returning, contains <code>[(5 5)]</code>. This matches the expected return type, so we can switch back to the previous context of <code>main</code>.</li>
+<li>When switching context, like before, we destructure the tuple and put it into the stack of <code>main</code>, so now it contains <code>[5, 5]</code>.</li>
+<li>If we tried returning now, the stack would be compared against the return type of main (an empty tuple) and it would fail. To fix that we use <code>pop_all</code> to remove everything from the stack, so we can safely return (note that when we implicitly create a tuple and the stack is empty, the tuple created will be empty).</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="control-flow"><a class="header" href="#control-flow">Control Flow</a></h1>
+<p>In other stack-based languages, control flow is handled within the stack, leading to some questionable syntax (<em>looking at you, Forth</em>). Henceforth fixes this by handling it imperatively, leading to a more familiar way of doing things.</p>
+<h2 id="while-loops"><a class="header" href="#while-loops">While loops</a></h2>
+<p><code>while</code> loops are the primary way of repeating things in Henceforth, since <code>for</code> loops don't exist.
+They are used in the following way:</p>
+<pre><code>while @(&lt;condition&gt;) {
+  &lt;body&gt;
+}
+</code></pre>
+<p>As expected, the body of the loop will be repeated while the condition is still true.
+The one thing Henceforth does differently from other stack-based is that, when looping, the stack is restored to its original state before the loop, so every iteration works the same way. It also pops the result of evaluating the condition when entering the body, and when leaving the body after the condition is evaluated as <code>false</code>.</p>
+<p>This means that, if something changes the stack inside the loop's body, it must be stored in a variable before the next iteration.</p>
+<p>The following keywords can be used inside <code>while</code> loops to change its execution:</p>
+<ul>
+<li><code>break</code> - leaves the loop entirely</li>
+<li><code>continue</code> - skips the rest of the body's execution, starting the next iteration</li>
+</ul>
+<h2 id="if-statements"><a class="header" href="#if-statements">If statements</a></h2>
+<p><code>if</code> statements can be used to conditionally perform operations.
+They are used in the following way:</p>
+<pre><code>if @(&lt;condition1&gt;) {
+  &lt;if-body&gt;
+} else if @(&lt;condition2&gt;) {
+  &lt;else-if-body&gt;
+} else if ... {
+  ...
+} else {
+  &lt;else-body&gt;
+}
+</code></pre>
+<p>This syntax mirrors imperative syntax from languages like C, instead of the confusing <code>&lt;condition&gt; if &lt;body&gt; then ...</code> of Forth.</p>
+<p>Like in <code>while</code> statements, whenever a new branch is entered, the stack is restored to its previous state before the loop, and the result of evaluating the condition is always popped automatically.</p>
+<h2 id="example"><a class="header" href="#example">Example</a></h2>
+<p>This all may seem very confusing, let's look at a simple FizzBuzz program.</p>
+<pre><code>fn fizz_buzz: (i32) -&gt; (str) {
+	if @(15 % 0 ==) {
+		@("fizzbuzz") return;
+	} else if @(3 % 0 ==) {
+		@("fizz") return;
+	} else if @(5 % 0 ==) {
+		@("buzz") return;
+	} else {
+		@((...)pop "no fizzbuzz") return;
+	}
+}
+</code></pre>
+<p>Let's trace the program's execution:</p>
+<ul>
+<li>When entering the <code>if</code> statement the stack contains only the argument.</li>
+<li>The condition's stack block is executed, leaving <code>true</code> or <code>false</code> in the stack.</li>
+<li>Assuming the evaluated condition was true, when entering the body, this value is popped, so we add <code>"fizzbuzz"</code> to the stack and return with a stack that matches the expected return type.</li>
+<li>If the condition was false, we move on to the next branch. The stack is restored to just having the argument, and the condition is evaluated in the same way as before.</li>
+<li>When reaching the <code>else</code>, the stack only contains the argument, and since there is no condition, it stays there while entering the body, so we have to pop it.</li>
+<li>We then push the string <code>"no fizzbuzz"</code> and return as expected.</li>
+</ul>
+<p>Essentially, control flow boils down to these rules:</p>
+<ul>
+<li>Every branch of an <code>if</code> statement and every iteration of a <code>while</code> loop, starts with the same exact stack</li>
+<li>When entering the body of any control flow construct, the result of evaluating a condition is popped</li>
+<li>When entering the <code>else</code> branch of an <code>if</code> statement, since there's no condition, everything stays there</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="standard-library-functions"><a class="header" href="#standard-library-functions">Standard Library Functions</a></h1>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="syntax-rules"><a class="header" href="#syntax-rules">Syntax Rules</a></h1>
+<p>Henceforth contains many functions in the standard library that allow for more abstraction out-of-the-box.</p>
+<h2 id="string-manipulation-and-io-functions"><a class="header" href="#string-manipulation-and-io-functions">String Manipulation and IO Functions</a></h2>
+<p>Currently, the Henceforth standard library only contains one function for string manipulation:</p>
+<pre><code>fn show: (i32) -&gt; str;
+fn show: (f32) -&gt; str;
+fn show: (bool) -&gt; str;
+</code></pre>
+<p>This converts any <code>i32</code>, <code>f32</code> or <code>bool</code> into a string.
+A function like this goes hand-in-hand with IO, for which Henceforth contains two functions:</p>
+<pre><code>fn print: (str) -&gt; (str);
+fn print_stack: () -&gt; ();
+</code></pre>
+<p><code>print_stack</code> differs from other functions as it affects the caller's entire stack, without explicitly passing it, printing it in reverse order (bottom to top), and works with any type.</p>
+<p><code>print</code> simply prints its argument.</p>
+<h2 id="introspection"><a class="header" href="#introspection">Introspection</a></h2>
+<p>There is only one introspection function in the standard library:</p>
+<pre><code>fn typeof: (i32) -&gt; (str);
+fn typeof: (f32) -&gt; (str);
+fn typeof: (bool) -&gt; (str);
+fn typeof: (str) -&gt; (str);
+</code></pre>
+<p>This function takes any value and returns its type as a string, which can be useful in control flow.</p>
+<h2 id="stack-operations-1"><a class="header" href="#stack-operations-1">Stack Operations</a></h2>
+<p>Stack operations make up most of the standard library. These functions can take any argument type, so we are annotating them with <code>T</code>, <code>U</code>, and <code>V</code>, even though generics don't exist in Henceforth:</p>
+<pre><code>fn pop: (T) -&gt; (); // removes the argument from the stack
+fn pop_all: () -&gt; (); // removes everything from the stack
+fn dup: (T) -&gt; (T T); // duplicates its argument
+fn swap: (T U) -&gt; (U T); // swaps its arguments
+fn over: (T U) -&gt; (T U T); // copies second element to top of stack
+fn rot: (T U V) -&gt; (U V T); // moves third element to the top of the stack
+fn rrot: (T U V) -&gt; (V T U); // moves first element to the third position of the stack (equivalent to calling rot twice)
+fn nip: (T U) -&gt; (U); // pops second element from the stack
+fn tuck: (T U) -&gt; (U T U); // copies first element to the third position of the stack
+</code></pre>
+<p>Note that <code>pop_all</code> works similarly to <code>print_stack</code> where nothing is passed, yet something happens as a side effect.</p>
 
                     </main>
 

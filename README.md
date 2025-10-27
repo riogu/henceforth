@@ -1,3 +1,3 @@
 # henceforth
-[https://riogu.github.io/henceforth]
+https://riogu.github.io/henceforth
 

@@ -153,14 +153,15 @@ impl<'a> AstArena<'a> {
     pub fn new() -> Self {
         Self::default()
     }
-    // Allocation methods 
-    pub fn alloc_expr(&mut self, expr: Expression, token: Token<'a>) -> ExprId {
-        // allocates AND pushes to the stack 
+
+    pub fn alloc_and_push_to_hfs_stack(&mut self, expr: Expression, token: Token<'a>) -> ExprId {
+        // theres no reason to not push to the stack when making a new expression 
+        // so this is the only method available
         let id = ExprId(self.exprs.len());
         self.exprs.push(expr);
+        self.hfs_stack.push(id);
         id
     }
-
     pub fn alloc_stmt(&mut self, stmt: Statement, token: Token<'a>) -> StmtId {
         let id = StmtId(self.stmts.len());
         self.stmts.push(stmt);

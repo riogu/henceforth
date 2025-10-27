@@ -32,11 +32,7 @@ impl<'a> AstArena<'a> {
     pub fn push_to_hfs_stack(&mut self, expr_id: ExprId) {
         self.hfs_stack.push(expr_id)
     }
-    pub fn alloc_and_push_to_hfs_stack(&mut self, expr: Expression, token: Token<'a>) -> ExprId {
-        let id = self.alloc_expr(expr, token);
-        self.hfs_stack.push(id);
-        id
-    }
+
     pub fn validate_return_stack(&mut self, return_type: TypeId) {
         let Type::Tuple(return_types) = self.get_type(return_type) else { panic!("[internal error] functions only return tuples at the moment.") };
         let expected_count = return_types.len();
@@ -261,10 +257,10 @@ impl<'a> StackAnalyzer<'a> {
             UnresolvedExpression::Operation(unresolved_operation) => self.resolve_operation(&unresolved_operation, token),
             UnresolvedExpression::Identifier(identifier) => {
                 let identifier = self.scope_resolution_stack.find_identifier(&identifier);
-                self.arena.alloc_expr(Expression::Identifier(identifier), token)
+                self.arena.alloc_and_push_to_hfs_stack(Expression::Identifier(identifier), token)
             }
             UnresolvedExpression::Literal(literal) => {
-                self.arena.alloc_expr(Expression::Literal(literal), token)
+                self.arena.alloc_and_push_to_hfs_stack(Expression::Literal(literal), token)
             }
             UnresolvedExpression::FunctionCall { identifier } => {
                 let identifier = self.resolve_expr(identifier);
@@ -282,7 +278,7 @@ impl<'a> StackAnalyzer<'a> {
 
                 let tuple_args = self.arena.pop_or_error("function calls require a tuple on the stack to be called!");
 
-                self.arena.alloc_expr(Expression::FunctionCall { tuple_args, identifier }, token)
+                self.arena.alloc_and_push_to_hfs_stack(Expression::FunctionCall { tuple_args, identifier }, token)
             }
             UnresolvedExpression::Tuple { expressions, variadic } => { 
                 // TODO: add tuple parsing to the parser
@@ -291,7 +287,6 @@ impl<'a> StackAnalyzer<'a> {
                 // needs to resolve its arguments too
                 // we probably also need to infer the type of the tuple from the elements
                 if variadic {
-
                 }
                 todo!() 
             }
@@ -303,25 +298,25 @@ impl<'a> StackAnalyzer<'a> {
             op if op.is_binary() => {
                 let (lhs_expr, rhs_expr) = self.arena.pop2_or_error(format!("expected at least 2 values in stack for binary operation '{:?}'", op).as_str());
                 match op {
-                    UnresolvedOperation::Add          => self.arena.alloc_expr(Expression::Operation(Operation::Add(lhs_expr, rhs_expr)), token),
-                    UnresolvedOperation::Sub          => self.arena.alloc_expr(Expression::Operation(Operation::Sub(lhs_expr, rhs_expr)), token),
-                    UnresolvedOperation::Mul          => self.arena.alloc_expr(Expression::Operation(Operation::Mul(lhs_expr, rhs_expr)), token),
-                    UnresolvedOperation::Div          => self.arena.alloc_expr(Expression::Operation(Operation::Div(lhs_expr, rhs_expr)), token),
-                    UnresolvedOperation::Mod          => self.arena.alloc_expr(Expression::Operation(Operation::Mod(lhs_expr, rhs_expr)), token),
-                    UnresolvedOperation::Or           => self.arena.alloc_expr(Expression::Operation(Operation::Or(lhs_expr, rhs_expr)), token),
-                    UnresolvedOperation::And          => self.arena.alloc_expr(Expression::Operation(Operation::And(lhs_expr, rhs_expr)), token),
-                    UnresolvedOperation::Equal        => self.arena.alloc_expr(Expression::Operation(Operation::Equal(lhs_expr, rhs_expr)), token),
-                    UnresolvedOperation::NotEqual     => self.arena.alloc_expr(Expression::Operation(Operation::NotEqual(lhs_expr, rhs_expr)), token),
-                    UnresolvedOperation::Less         => self.arena.alloc_expr(Expression::Operation(Operation::Less(lhs_expr, rhs_expr)), token),
-                    UnresolvedOperation::LessEqual    => self.arena.alloc_expr(Expression::Operation(Operation::LessEqual(lhs_expr, rhs_expr)), token),
-                    UnresolvedOperation::Greater      => self.arena.alloc_expr(Expression::Operation(Operation::Greater(lhs_expr, rhs_expr)), token),
-                    UnresolvedOperation::GreaterEqual => self.arena.alloc_expr(Expression::Operation(Operation::GreaterEqual(lhs_expr, rhs_expr)), token),
+                    UnresolvedOperation::Add          => self.arena.alloc_and_push_to_hfs_stack(Expression::Operation(Operation::Add(lhs_expr, rhs_expr)), token),
+                    UnresolvedOperation::Sub          => self.arena.alloc_and_push_to_hfs_stack(Expression::Operation(Operation::Sub(lhs_expr, rhs_expr)), token),
+                    UnresolvedOperation::Mul          => self.arena.alloc_and_push_to_hfs_stack(Expression::Operation(Operation::Mul(lhs_expr, rhs_expr)), token),
+                    UnresolvedOperation::Div          => self.arena.alloc_and_push_to_hfs_stack(Expression::Operation(Operation::Div(lhs_expr, rhs_expr)), token),
+                    UnresolvedOperation::Mod          => self.arena.alloc_and_push_to_hfs_stack(Expression::Operation(Operation::Mod(lhs_expr, rhs_expr)), token),
+                    UnresolvedOperation::Or           => self.arena.alloc_and_push_to_hfs_stack(Expression::Operation(Operation::Or(lhs_expr, rhs_expr)), token),
+                    UnresolvedOperation::And          => self.arena.alloc_and_push_to_hfs_stack(Expression::Operation(Operation::And(lhs_expr, rhs_expr)), token),
+                    UnresolvedOperation::Equal        => self.arena.alloc_and_push_to_hfs_stack(Expression::Operation(Operation::Equal(lhs_expr, rhs_expr)), token),
+                    UnresolvedOperation::NotEqual     => self.arena.alloc_and_push_to_hfs_stack(Expression::Operation(Operation::NotEqual(lhs_expr, rhs_expr)), token),
+                    UnresolvedOperation::Less         => self.arena.alloc_and_push_to_hfs_stack(Expression::Operation(Operation::Less(lhs_expr, rhs_expr)), token),
+                    UnresolvedOperation::LessEqual    => self.arena.alloc_and_push_to_hfs_stack(Expression::Operation(Operation::LessEqual(lhs_expr, rhs_expr)), token),
+                    UnresolvedOperation::Greater      => self.arena.alloc_and_push_to_hfs_stack(Expression::Operation(Operation::Greater(lhs_expr, rhs_expr)), token),
+                    UnresolvedOperation::GreaterEqual => self.arena.alloc_and_push_to_hfs_stack(Expression::Operation(Operation::GreaterEqual(lhs_expr, rhs_expr)), token),
                     _ => unreachable!()
                 }
             }
             UnresolvedOperation::Not => {
                 let expr = self.arena.pop_or_error(format!("expected at least 1 value in stack for unary operation '{:?}'", op).as_str());
-                self.arena.alloc_expr(Expression::Operation(Operation::Not(expr)), token)
+                self.arena.alloc_and_push_to_hfs_stack(Expression::Operation(Operation::Not(expr)), token)
             }
             _ => panic!("missing semantic analysis for unary operation '{:?}'", op)
         }

@@ -74,6 +74,7 @@ impl<'a> Interpreter<'a> {
             Expression::FunctionCall { tuple_args, identifier } => todo!(),
             Expression::Tuple { expressions, variadic } => todo!(),
             Expression::Parameter(type_id) => todo!(),
+            Expression::ReturnValue(type_id) => todo!(),
         }
     }
 

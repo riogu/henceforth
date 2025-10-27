@@ -13,6 +13,10 @@ fn func: (i32 i32 f32) -> (str i32 i32 i32) {
             let var: i32; // file_name%func()::0::1::var
         }
     }
+    @( 1 2 + 4 *); // is just one multiplication "node"
+    // so internally our stack block sees
+    @( ((1 2) + 4) *) ) // which turns it into a compilable language lol
+    @( mul(add(1, 2), 4))
 }
 
 fn func: (i32 (i32 i32) (i32 (i32 f32 str)) ) -> () {

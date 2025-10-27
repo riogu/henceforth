@@ -276,7 +276,17 @@ impl<'a> Parser<'a> {
                 _ => expressions.push(self.stack_expression()),
             };
         }
-        self.arena.alloc_unresolved_expr(UnresolvedExpression::Tuple{expressions, variadic}, token)
+        if variadic {
+            self.expect(TokenKind::Arrow); // consume the '->'
+            let called_func_name = match &self.tokens.peek().expect("unexpected end of input").kind {
+                TokenKind::Identifier(name) => Some(name.clone()),
+                _ => None,
+            };
+            panic!("implicit '(...)' tuples are only allowed to be used as function call arguments");
+            self.arena.alloc_unresolved_expr(UnresolvedExpression::Tuple{expressions, variadic, called_func_name}, token)
+        } else {
+            self.arena.alloc_unresolved_expr(UnresolvedExpression::Tuple{expressions, variadic, called_func_name: None}, token)
+        }
     }
 
     // <assignment> ::= "&=" <identifier> ";"

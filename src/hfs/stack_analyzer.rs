@@ -29,9 +29,9 @@ impl<'a> AstArena<'a> {
             self.hfs_stack.pop().unwrap_or_else(|| panic!("{}", msg)),
         )
     }
-    pub fn push_to_hfs_stack(&mut self, expr_id: ExprId) {
-        self.hfs_stack.push(expr_id)
-    }
+    // pub fn push_to_hfs_stack(&mut self, expr_id: ExprId) {
+    //     self.hfs_stack.push(expr_id)
+    // }
 
     pub fn validate_return_stack(&mut self, return_type: TypeId) {
         let Type::Tuple(return_types) = self.get_type(return_type) else { panic!("[internal error] functions only return tuples at the moment.") };
@@ -49,7 +49,7 @@ impl<'a> AstArena<'a> {
             }
         }
     }
-    pub fn validate_func_call(&mut self, param_type: TypeId) {
+    pub fn validate_func_call(&self, param_type: TypeId) {
         let arg_type_id = self.get_type_of_expr(self.last_or_error("function calls require a tuple on the stack to be called!"));
 
         let Type::Tuple(_) = self.get_type(arg_type_id) else { panic!("expected tuple on stack before function call") };
@@ -203,9 +203,22 @@ impl<'a> StackAnalyzer<'a> {
                 self.arena.alloc_stmt(Statement::While { cond, body }, token)
             }
             UnresolvedStatement::StackBlock(unresolved_expr_ids) => {
-                let mut expr_ids = Vec::<ExprId>::new();
+                let stack_start = self.arena.hfs_stack.len();
+
                 for expr_id in unresolved_expr_ids {
-                    expr_ids.push(self.resolve_expr(expr_id));
+                    self.resolve_expr(expr_id);
+                }
+                // subtle detail here that is extremely important:
+                // when we resolve expressions from inside our stack block,
+                // we sometimes "consume" the stack state, for example in additions:
+                // @(1 2 +); // here '+' "grabs" 1 2 into its own node.
+                // that means in terms of hfs_stack state, we only have 1 element 
+                // on the stack. the other 2 have been consumed.
+                // so we just let expressions resolve themselves, and then we store
+                // whatever is now on the stack after resolving.
+                let mut expr_ids = Vec::<ExprId>::new();
+                for &expr_id in &self.arena.hfs_stack[stack_start..] {
+                    expr_ids.push(expr_id);
                 }
                 self.arena.alloc_stmt(Statement::StackBlock(expr_ids), token)
             }
@@ -269,6 +282,11 @@ impl<'a> StackAnalyzer<'a> {
                         Identifier::Function(func_id) => {
                             let func_decl  = self.arena.get_func(*func_id);
                             self.arena.validate_func_call(func_decl.param_type);
+                            let Type::Tuple(return_types) = self.arena.get_type(func_decl.return_type) else { panic!("[internal error] functions only return tuples at the moment.") };
+                            for ret_type in return_types.clone() {
+                                let token = self.arena.get_type_token(ret_type).clone();
+                                self.arena.alloc_and_push_to_hfs_stack(Expression::ReturnValue(ret_type), token);
+                            }
                         }
                         Identifier::Variable(var_id) => { // this means that it wasn't a function call, it was pushing a variable
                             return identifier;            // so we just go "okay then just treat it as a variable being pushed"
@@ -276,19 +294,26 @@ impl<'a> StackAnalyzer<'a> {
                     }
                 } else { panic!("[internal error] parser had a bug in function_call_or_tuple_expr()") }
 
-                let tuple_args = self.arena.pop_or_error("function calls require a tuple on the stack to be called!");
+                let tuple_expr = self.arena.pop_or_error("function calls require a tuple on the stack to be called!");
 
-                self.arena.alloc_and_push_to_hfs_stack(Expression::FunctionCall { tuple_args, identifier }, token)
+                let Expression::Tuple { expressions, variadic } = self.arena.get_expr(tuple_expr) else { panic!("checked already") };
+                let expr_id = self.arena.alloc_function_call(Expression::FunctionCall { tuple_args: tuple_expr, identifier }, token);
+
+                expr_id
             }
-            UnresolvedExpression::Tuple { expressions, variadic } => { 
-                // TODO: add tuple parsing to the parser
-                // allow (...) syntax
-                // here we need to actually implement the effects of (...)
-                // needs to resolve its arguments too
-                // we probably also need to infer the type of the tuple from the elements
+            UnresolvedExpression::Tuple { expressions, variadic, called_func_name} => { 
+                // the tuple's type is formed recursively whenever someone wants it 
+                // by calling arena.get_type_of_expr(tuple_expr_id);
                 if variadic {
                 }
-                todo!() 
+                let mut expr_ids = Vec::<ExprId>::new();
+                for expr_id in expressions {
+                    expr_ids.push(self.resolve_expr(expr_id));
+                    self.arena.pop_or_error("[internal error] didnt push to the stack properly");
+                    // clear the stack after we pushed, so that the only thing left on the
+                    // stack is the tuple itself, not its arguments (keeps the API agnostic)
+                }
+                self.arena.alloc_and_push_to_hfs_stack(Expression::Tuple { expressions: expr_ids, variadic }, token)
             }
         }
     }

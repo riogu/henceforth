@@ -25,12 +25,13 @@ impl<'a> AstArena<'a> {
         match expr {
             Expression::Operation(operation) => self.get_type_of_operation(operation),
             Expression::Identifier(identifier) => {
-                        todo!()
-                    }
+                todo!()
+            }
             Expression::Literal(literal) => todo!(),
             Expression::FunctionCall { tuple_args: tuple, identifier } => todo!(),
             Expression::Tuple { expressions, variadic } => todo!(),
             Expression::Parameter(_) => todo!(),
+            Expression::ReturnValue(type_id) => todo!(),
         }
     }
 

@@ -45,6 +45,7 @@ pub enum Expression {
     FunctionCall{ tuple_args: ExprId, identifier: ExprId },
     Tuple { expressions: Vec<ExprId>, variadic: bool },
     Parameter(TypeId),
+    ReturnValue(TypeId),
 }
 
 
@@ -124,6 +125,13 @@ impl Type {
         }
     }
 }
+pub struct FunctionCallId(ExprId);
+
+impl FunctionCallId {
+    pub fn new(id: ExprId, exprs: &[Expression]) -> Option<Self> {
+        matches!(exprs[id.0], Expression::FunctionCall { .. }).then_some(FunctionCallId(id))
+    }
+}
 
 // ============================================================================
 // Arena storage with token tracking
@@ -160,6 +168,15 @@ impl<'a> AstArena<'a> {
         let id = ExprId(self.exprs.len());
         self.exprs.push(expr);
         self.hfs_stack.push(id);
+        id
+    }
+    pub fn alloc_function_call(&mut self, expr: Expression, token: Token<'a>) -> ExprId {
+        // this is the only time so far that we dont want to push to the hfs stack 
+        // because we automatically unwrap return types into the stack
+        // so we cant just "push one function call"
+        if !matches!(expr, Expression::FunctionCall { .. }) { panic!("alloc_function_call requires a FunctionCall expression"); }
+        let id = ExprId(self.exprs.len());
+        self.exprs.push(expr);
         id
     }
     pub fn alloc_stmt(&mut self, stmt: Statement, token: Token<'a>) -> StmtId {
@@ -237,6 +254,11 @@ impl<'a> AstArena<'a> {
     pub fn get_function_token(&self, id: FuncId) -> &Token<'a> {
         &self.function_tokens[id.0]
     }
+
+    pub fn get_type_token(&self, id: TypeId) -> &Token<'a> {
+        &self.type_tokens[id.0]
+    }
+
 
 }
 

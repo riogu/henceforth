@@ -42,7 +42,7 @@ pub enum Expression {
     Operation(Operation),
     Identifier(Identifier),
     Literal(Literal),
-    FunctionCall{ tuple: ExprId, identifier: Identifier },
+    FunctionCall{ tuple: ExprId, identifier: ExprId },
     Tuple { expressions: Vec<ExprId>, variadic: bool },
     Parameter(TypeId),
 }

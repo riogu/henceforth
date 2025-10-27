@@ -13,6 +13,7 @@ pub enum RuntimeValue {
     String(String),
     Bool(bool),
     Tuple(Vec<RuntimeValue>),
+    ReturnedStack(Vec<RuntimeValue>),
 }
 impl RuntimeValue {
     pub fn default(hfs_type: &Type) -> RuntimeValue {
@@ -26,8 +27,11 @@ impl RuntimeValue {
     }
 }
 pub struct CallFrame {
-    function_id: FuncId,
+    func_id: FuncId,
     locals: HashMap<VarId, RuntimeValue>,
+    return_stack: Vec<RuntimeValue>,
+    should_return: bool,
+    should_break: bool,
 }
 
 //---------------------------------------------------------------------------
@@ -40,6 +44,10 @@ impl<'a> Interpreter<'a> {
     // utils 
     pub fn curr_call_frame(&self) -> &CallFrame {
         self.call_stack.last().expect("call stack shouldn't be empty")
+    }
+
+    pub fn curr_call_frame_mut(&mut self) -> &mut CallFrame {
+        self.call_stack.last_mut().expect("call stack shouldn't be empty")
     }
     pub fn curr_local_vars(&self) -> &HashMap<VarId, RuntimeValue>  {
         &self.call_stack.last().expect("call stack shouldn't be empty").locals
@@ -73,79 +81,107 @@ impl<'a> Interpreter<'a> {
         let call_frame = self.call_stack.last_mut().expect("[internal error] invalid call stack");
         call_frame.locals.insert(var_id, RuntimeValue::default(self.arena.get_type_of_var(var_id)));
     }
+
     fn call_declared_function(&mut self, func_id: FuncId, tuple_args: Vec<ExprId>) -> Vec<RuntimeValue> {
+
+        self.call_stack.push(CallFrame { func_id, locals: HashMap::new(), return_stack: Vec::new(),
+                                         should_break: false, should_return: false });
+
         let func = self.arena.get_func(func_id);
         self.interpret_stmt(func.body);
-        todo!()
+
         // if we have nothing to return, we return an empty vector (will be iterated anyway)
+        self.call_stack.pop().expect("pushed above").return_stack
     }
 
-    fn interpret_stmt(&mut self, stmt_id: StmtId) -> Option<&RuntimeValue> {
+    fn interpret_stmt(&mut self, stmt_id: StmtId) {
         match self.arena.get_stmt(stmt_id) {
             Statement::If { cond, body, else_stmt } => {
                 let RuntimeValue::Bool(val) = self.interpret_expr(*cond) else {
                     panic!("expected boolean value on stack for if statement condition")
                 };
-                None
             }
-            Statement::While { cond, body } => {
-                let RuntimeValue::Bool(val) = self.interpret_expr(*cond) else {
+            Statement::While { cond, body } => loop {
+                let RuntimeValue::Bool(while_cond) = self.interpret_expr(*cond) else {
                     panic!("expected boolean value on stack for while loop condition")
                 };
-                None
+                if !while_cond {
+                    break
+                } 
+                self.interpret_stmt(*body);
+            },
+            Statement::StackBlock(expressions) => {
+                for expr_id in expressions {
+                    let val = self.interpret_expr(*expr_id);
+                    if let RuntimeValue::ReturnedStack(runtime_values) = val {
+                        for val in runtime_values {
+                            self.curr_call_frame_mut().return_stack.push(val);
+                        }
+                    } else {
+                        self.curr_call_frame_mut().return_stack.push(val);
+                    }
+                }
+                todo!()
             }
-            Statement::StackBlock(expressions) => todo!(),
             Statement::BlockScope(top_level_nodes) => {
+                for &top_level_id in top_level_nodes {
+                    match top_level_id {
+                        TopLevelId::VariableDecl(var_id) => self.interpret_var_decl(var_id),
+                        TopLevelId::Statement(stmt_id) => {
+                            match self.arena.get_stmt(stmt_id) {
+                                Statement::Continue => return,
+                                _ => self.interpret_stmt(stmt_id)
+                            }
+                        }
+                        TopLevelId::FunctionDecl(func_id) => { 
+                            // do nothing, function declarations are already handled
+                        }
+                    }
+                }
                 todo!();
-                None
             }
-            Statement::Return => {
-                todo!();
-                None
-            }
-            Statement::Break => {
-                todo!();
-                None
-            }
-            Statement::Continue => {
-                todo!();
-                None
-            }
+            // note that we already ensured all break/continue are valid,
+            // so we can just interpret them
+            Statement::Return => self.curr_call_frame_mut().should_return = true, 
+            Statement::Break => self.curr_call_frame_mut().should_break = true,
+            Statement::Continue => {} // do nothing
             Statement::Assignment { value, identifier, is_move } => {
                 todo!();
-                None
             }
-            Statement::Empty => None,
+            Statement::Empty => {}
         }
     }
 
-    fn interpret_expr(&mut self, expr_id: ExprId) -> &RuntimeValue {
+    fn interpret_expr(&mut self, expr_id: ExprId) -> RuntimeValue {
         match self.arena.get_expr(expr_id) {
             Expression::Operation(op) => self.interpret_operation(op),
             Expression::Identifier(id) => self.interpret_identifier(id),
             Expression::Literal(lit) => self.interpret_literal(lit),
-            Expression::FunctionCall { args, identifier, return_values } => {
+            Expression::FunctionCall { args, identifier, ..} => {
                 let return_values = self.call_declared_function(*identifier, args.clone());
-                // RuntimeValue::Tuple(return_values);
-                todo!()
+                RuntimeValue::ReturnedStack(return_values)
             }
             Expression::Tuple { expressions, variadic } => {
-                todo!() 
+                let mut tuple_values = Vec::<RuntimeValue>::new();
+                for &expr_id in expressions {
+                    tuple_values.push(self.interpret_expr(expr_id))
+                }
+                RuntimeValue::Tuple(tuple_values)
             }
             Expression::Parameter(type_id) => todo!(),
             Expression::ReturnValue(type_id) => todo!(),
         }
     }
 
-    fn interpret_identifier(&mut self, id: &Identifier) -> &RuntimeValue {
-        match id {
-            Identifier::GlobalVar(var_id) => self.globals.get(var_id).expect("solved in stack analyzer."),
-            Identifier::Variable(var_id) => self.curr_local_vars().get(var_id).expect("solved in stack analyzer"),
+    fn interpret_identifier(&mut self, id: &Identifier) -> RuntimeValue {
+        match id { // pushing an identifier to the hfs_stack just copies its value
+            Identifier::GlobalVar(var_id) => self.globals.get(var_id).expect("solved in stack analyzer.").clone(),
+            Identifier::Variable(var_id) => self.curr_local_vars().get(var_id).expect("solved in stack analyzer").clone(),
             Identifier::Function(func_id) => panic!("function identifiers shouldn't be interpreted")
         }
     }
 
-    fn interpret_literal(&mut self, lit: &Literal) -> &RuntimeValue {
+    fn interpret_literal(&mut self, lit: &Literal) -> RuntimeValue {
         match lit {
             Literal::Integer(i) => todo!(),
             Literal::Float(f) => todo!(),
@@ -154,7 +190,7 @@ impl<'a> Interpreter<'a> {
         }
     }
 
-    fn interpret_operation(&mut self, op: &Operation) -> &RuntimeValue {
+    fn interpret_operation(&mut self, op: &Operation) -> RuntimeValue {
         match op {
             Operation::Add(l, r) => todo!(),
             Operation::Sub(l, r) => todo!(),

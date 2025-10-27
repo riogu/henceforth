@@ -3,10 +3,31 @@
 import hfs;
 
 fn func: (i32 i32 f32) -> (str i32 i32 i32) {
-    let v0: i32; &= v0;
-    let v1: i32; &= v1;
-    let v2: i32; &= v2;
-    @(v0 v1 v2)
+    let var: i32; // file_name%func()::var
+    {
+        let var: i32; // file_name%func()::0::var
+        {
+            let var: i32; // file_name%func()::0::0::var
+        }
+        {
+            let var: i32; // file_name%func()::0::1::var
+        }
+    }
+    @( 1 2 + 4 *); // is just one multiplication "node"
+    // so internally our stack block sees
+    @( ((1 2) + 4) *) ) // which turns it into a compilable language lol
+    @( mul(add(1, 2), 4))
+}
+
+fn func: (i32 (i32 i32) (i32 (i32 f32 str)) ) -> () {
+    let var: (i32 i32 i32); 
+    @( (1 2 3) ) &= var;
+    
+    @( (4 5 6) -> (...)func ); // do you want to allow this?
+    // this just pushes var to the stack which is a tuple
+    // to allow this ill make the ast backtrack 
+    // because this will be parsed as a function call initially
+
 }
 
 fn main: () -> (i32) {

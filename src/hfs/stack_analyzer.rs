@@ -8,7 +8,7 @@ use super::*;
 // the goal is to make Henceforth a compiled language, therefore we do multiple stack passes
 impl<'a> AstArena<'a> {
     // clears the stack and returns it to the user
-    pub fn pop_hfs_stack(&mut self) -> Vec<ExprId> {
+    pub fn pop_entire_hfs_stack(&mut self) -> Vec<ExprId> {
         let temp = self.hfs_stack.clone();
         self.hfs_stack.clear();
         temp
@@ -18,7 +18,7 @@ impl<'a> AstArena<'a> {
         // should start using our own error structs instead
         self.hfs_stack.pop().unwrap_or_else(|| panic!("{}", msg))
     }
-    pub fn last_or_error(&mut self, msg: &str) -> ExprId { 
+    pub fn last_or_error(&self, msg: &str) -> ExprId { 
         // should start using our own error structs instead
         *self.hfs_stack.last().unwrap_or_else(|| panic!("{}", msg))
     }
@@ -29,14 +29,10 @@ impl<'a> AstArena<'a> {
             self.hfs_stack.pop().unwrap_or_else(|| panic!("{}", msg)),
         )
     }
-    pub fn push_to_hfs_stack(&mut self, expr_id: ExprId) {
-        self.hfs_stack.push(expr_id)
-    }
-    pub fn alloc_and_push_to_hfs_stack(&mut self, expr: Expression, token: Token<'a>) -> ExprId {
-        let id = self.alloc_expr(expr, token);
-        self.hfs_stack.push(id);
-        id
-    }
+    // pub fn push_to_hfs_stack(&mut self, expr_id: ExprId) {
+    //     self.hfs_stack.push(expr_id)
+    // }
+
     pub fn validate_return_stack(&mut self, return_type: TypeId) {
         let Type::Tuple(return_types) = self.get_type(return_type) else { panic!("[internal error] functions only return tuples at the moment.") };
         let expected_count = return_types.len();
@@ -48,26 +44,42 @@ impl<'a> AstArena<'a> {
 
         for (&expr_id, &expected_type_id) in back_of_stack.iter().zip(return_types.iter()) {
             let actual_type_id = self.get_type_of_expr(expr_id);
-            if self.get_type(actual_type_id) != self.get_type(expected_type_id) {
-                panic!(
-                    "return type mismatch: expected '{:?}', found '{:?}'",
-                    self.get_type(expected_type_id),
-                    self.get_type(actual_type_id)
-                )
+            if let Err(err) = self.validate_type(actual_type_id, expected_type_id) {
+                panic!("return value {}", err);
             }
         }
     }
+    pub fn validate_func_call(&self, param_type: TypeId) {
+        let arg_type_id = self.get_type_of_expr(self.last_or_error("function calls require a tuple on the stack to be called!"));
 
-    // pub fn validate_func_call_args(&mut self, param_type: TypeId) -> bool {
-    //     if let Type::Tuple(param_types) = self.get_type(param_type) {
-    //         if param_types.len() != self.hfs_stack.len() {
-    //             return false;
-    //         }
-    //         for param_type in param_types { // function parameter type is always a tuple
-    //         }
-    //     }
-    //     todo!()
-    // }
+        let Type::Tuple(_) = self.get_type(arg_type_id) else { panic!("expected tuple on stack before function call") };
+        let Type::Tuple(_) = self.get_type(param_type) else { panic!("[internal error] functions argument type must be a tuple") };
+
+        if let Err(err) = self.validate_type(arg_type_id, param_type) {
+            panic!("function call argument {}", err);
+        }
+    }
+
+    pub fn validate_type(&self, actual_type_id: TypeId, expected_type_id: TypeId) -> Result<(), String> {
+        let actual_type = self.get_type(actual_type_id);
+        let expected_type = self.get_type(expected_type_id);
+        
+        match (actual_type, expected_type) {
+            (Type::Tuple(actual_types), Type::Tuple(expected_types)) => {
+                if actual_types.len() != expected_types.len() {
+                    return Err(format!("tuple length mismatch: expected {} elements, found {}", expected_types.len(), actual_types.len()));
+                }
+                // Recursively validate each element
+                for (i, (&actual_elem_id, &expected_elem_id)) in actual_types.iter().zip(expected_types.iter()).enumerate() {
+                    self.validate_type(actual_elem_id, expected_elem_id)
+                        .map_err(|err| format!("in tuple element {}: {}", i, err))?;
+                }
+                Ok(())
+            }
+            (actual, expected) if actual == expected => Ok(()),
+            (actual, expected) => Err(format!("type mismatch: expected '{:?}', found '{:?}'", expected, actual))
+        }
+    }
 }
 
 // ============================================================================
@@ -191,16 +203,35 @@ impl<'a> StackAnalyzer<'a> {
                 self.arena.alloc_stmt(Statement::While { cond, body }, token)
             }
             UnresolvedStatement::StackBlock(unresolved_expr_ids) => {
-                let mut expr_ids = Vec::<ExprId>::new();
+                let stack_start = self.arena.hfs_stack.len();
+
                 for expr_id in unresolved_expr_ids {
-                    expr_ids.push(self.resolve_expr(expr_id));
+                    self.resolve_expr(expr_id);
+                }
+                // subtle detail here that is extremely important:
+                // when we resolve expressions from inside our stack block,
+                // we sometimes "consume" the stack state, for example in additions:
+                // @(1 2 +); // here '+' "grabs" 1 2 into its own node.
+                // that means in terms of hfs_stack state, we only have 1 element 
+                // on the stack. the other 2 have been consumed.
+                // so we just let expressions resolve themselves, and then we store
+                // whatever is now on the stack after resolving.
+                let mut expr_ids = Vec::<ExprId>::new();
+                for &expr_id in &self.arena.hfs_stack[stack_start..] {
+                    expr_ids.push(expr_id);
                 }
                 self.arena.alloc_stmt(Statement::StackBlock(expr_ids), token)
             }
-            UnresolvedStatement::BlockScope(unresolved_top_level_ids) => {
-                self.scope_resolution_stack.push_block_scope();
-                let top_level_ids = self.resolve_top_level(unresolved_top_level_ids);
-                self.scope_resolution_stack.pop();
+            UnresolvedStatement::BlockScope(unresolved_top_level_ids, scope_kind) => {
+                let top_level_ids = if scope_kind != ScopeKind::Function {
+                    // Functions should push their own scopes
+                    self.scope_resolution_stack.push_scope(scope_kind);
+                    let temp = self.resolve_top_level(unresolved_top_level_ids);
+                    self.scope_resolution_stack.pop();
+                    temp
+                } else {
+                    self.resolve_top_level(unresolved_top_level_ids)
+                };
 
                 self.arena.alloc_stmt(Statement::BlockScope(top_level_ids), token)
             }
@@ -210,45 +241,109 @@ impl<'a> StackAnalyzer<'a> {
             }
             UnresolvedStatement::Break => {
                 if !self.scope_resolution_stack.is_in_while_loop_context() {
-                    panic!("")
+                    panic!("found break statement outside while loop.")
                 }
                 self.arena.alloc_stmt(Statement::Break, token)
             }
             UnresolvedStatement::Continue => {
+                if !self.scope_resolution_stack.is_in_while_loop_context() {
+                    panic!("found continue statement outside while loop.")
+                }
                 self.arena.alloc_stmt(Statement::Continue, token)
             }
             UnresolvedStatement::Empty => self.arena.alloc_stmt(Statement::Empty, token),
-            UnresolvedStatement::Assignment { identifier, is_move } => todo!(),
+            UnresolvedStatement::Assignment { identifier, is_move } => {
+                let value = if is_move {
+                    self.arena.pop_or_error("expected value in stack for move assignment statement.")
+                } else {
+                    self.arena.last_or_error("expected value in stack for copy assignment statement.")
+                };
+                let identifier = self.resolve_expr(identifier);
+                self.arena.alloc_stmt(Statement::Assignment { value, identifier, is_move }, token)
+            }
         }
     }
 
     fn resolve_expr(&mut self, id: UnresolvedExprId) -> ExprId {
         let token = self.unresolved_arena.get_unresolved_expr_token(id);
-        match self.unresolved_arena.get_unresolved_expr(id) {
-            UnresolvedExpression::Operation(unresolved_operation) => todo!(),
-            UnresolvedExpression::Identifier(_) => todo!(),
-            UnresolvedExpression::Literal(literal) => todo!(),
-            UnresolvedExpression::FunctionCall { identifier } => todo!(),
-            UnresolvedExpression::Tuple { expressions, variadic } => todo!(),
+        match self.unresolved_arena.get_unresolved_expr(id).clone() {
+            UnresolvedExpression::Operation(unresolved_operation) => self.resolve_operation(&unresolved_operation, token),
+            UnresolvedExpression::Identifier(identifier) => {
+                let identifier = self.scope_resolution_stack.find_identifier(&identifier);
+                self.arena.alloc_and_push_to_hfs_stack(Expression::Identifier(identifier), token)
+            }
+            UnresolvedExpression::Literal(literal) => {
+                self.arena.alloc_and_push_to_hfs_stack(Expression::Literal(literal), token)
+            }
+            UnresolvedExpression::FunctionCall { identifier } => {
+                let identifier = self.resolve_expr(identifier);
+                if let Expression::Identifier(id) = self.arena.get_expr(identifier) {
+                    match id {
+                        Identifier::Function(func_id) => {
+                            let func_decl  = self.arena.get_func(*func_id);
+                            self.arena.validate_func_call(func_decl.param_type);
+                            let Type::Tuple(return_types) = self.arena.get_type(func_decl.return_type) else { panic!("[internal error] functions only return tuples at the moment.") };
+                            for ret_type in return_types.clone() {
+                                let token = self.arena.get_type_token(ret_type).clone();
+                                self.arena.alloc_and_push_to_hfs_stack(Expression::ReturnValue(ret_type), token);
+                            }
+                        }
+                        Identifier::Variable(var_id) => { // this means that it wasn't a function call, it was pushing a variable
+                            return identifier;            // so we just go "okay then just treat it as a variable being pushed"
+                        }
+                    }
+                } else { panic!("[internal error] parser had a bug in function_call_or_tuple_expr()") }
+
+                let tuple_expr = self.arena.pop_or_error("function calls require a tuple on the stack to be called!");
+
+                let Expression::Tuple { expressions, variadic } = self.arena.get_expr(tuple_expr) else { panic!("checked already") };
+                let expr_id = self.arena.alloc_function_call(Expression::FunctionCall { tuple_args: tuple_expr, identifier }, token);
+
+                expr_id
+            }
+            UnresolvedExpression::Tuple { expressions, variadic, called_func_name} => { 
+                // the tuple's type is formed recursively whenever someone wants it 
+                // by calling arena.get_type_of_expr(tuple_expr_id);
+                if variadic {
+                }
+                let mut expr_ids = Vec::<ExprId>::new();
+                for expr_id in expressions {
+                    expr_ids.push(self.resolve_expr(expr_id));
+                    self.arena.pop_or_error("[internal error] didnt push to the stack properly");
+                    // clear the stack after we pushed, so that the only thing left on the
+                    // stack is the tuple itself, not its arguments (keeps the API agnostic)
+                }
+                self.arena.alloc_and_push_to_hfs_stack(Expression::Tuple { expressions: expr_ids, variadic }, token)
+            }
         }
     }
 
-    fn resolve_operation(&mut self, op: &UnresolvedOperation) -> ExprId {
+    fn resolve_operation(&mut self, op: &UnresolvedOperation, token: Token<'a>) -> ExprId {
         match op {
-            UnresolvedOperation::Add => todo!(),
-            UnresolvedOperation::Sub => todo!(),
-            UnresolvedOperation::Mul => todo!(),
-            UnresolvedOperation::Div => todo!(),
-            UnresolvedOperation::Mod => todo!(),
-            UnresolvedOperation::Or => todo!(),
-            UnresolvedOperation::And => todo!(),
-            UnresolvedOperation::Equal => todo!(),
-            UnresolvedOperation::NotEqual => todo!(),
-            UnresolvedOperation::Less => todo!(),
-            UnresolvedOperation::LessEqual => todo!(),
-            UnresolvedOperation::Greater => todo!(),
-            UnresolvedOperation::GreaterEqual => todo!(),
-            UnresolvedOperation::Not => todo!(),
+            op if op.is_binary() => {
+                let (lhs_expr, rhs_expr) = self.arena.pop2_or_error(format!("expected at least 2 values in stack for binary operation '{:?}'", op).as_str());
+                match op {
+                    UnresolvedOperation::Add          => self.arena.alloc_and_push_to_hfs_stack(Expression::Operation(Operation::Add(lhs_expr, rhs_expr)), token),
+                    UnresolvedOperation::Sub          => self.arena.alloc_and_push_to_hfs_stack(Expression::Operation(Operation::Sub(lhs_expr, rhs_expr)), token),
+                    UnresolvedOperation::Mul          => self.arena.alloc_and_push_to_hfs_stack(Expression::Operation(Operation::Mul(lhs_expr, rhs_expr)), token),
+                    UnresolvedOperation::Div          => self.arena.alloc_and_push_to_hfs_stack(Expression::Operation(Operation::Div(lhs_expr, rhs_expr)), token),
+                    UnresolvedOperation::Mod          => self.arena.alloc_and_push_to_hfs_stack(Expression::Operation(Operation::Mod(lhs_expr, rhs_expr)), token),
+                    UnresolvedOperation::Or           => self.arena.alloc_and_push_to_hfs_stack(Expression::Operation(Operation::Or(lhs_expr, rhs_expr)), token),
+                    UnresolvedOperation::And          => self.arena.alloc_and_push_to_hfs_stack(Expression::Operation(Operation::And(lhs_expr, rhs_expr)), token),
+                    UnresolvedOperation::Equal        => self.arena.alloc_and_push_to_hfs_stack(Expression::Operation(Operation::Equal(lhs_expr, rhs_expr)), token),
+                    UnresolvedOperation::NotEqual     => self.arena.alloc_and_push_to_hfs_stack(Expression::Operation(Operation::NotEqual(lhs_expr, rhs_expr)), token),
+                    UnresolvedOperation::Less         => self.arena.alloc_and_push_to_hfs_stack(Expression::Operation(Operation::Less(lhs_expr, rhs_expr)), token),
+                    UnresolvedOperation::LessEqual    => self.arena.alloc_and_push_to_hfs_stack(Expression::Operation(Operation::LessEqual(lhs_expr, rhs_expr)), token),
+                    UnresolvedOperation::Greater      => self.arena.alloc_and_push_to_hfs_stack(Expression::Operation(Operation::Greater(lhs_expr, rhs_expr)), token),
+                    UnresolvedOperation::GreaterEqual => self.arena.alloc_and_push_to_hfs_stack(Expression::Operation(Operation::GreaterEqual(lhs_expr, rhs_expr)), token),
+                    _ => unreachable!()
+                }
+            }
+            UnresolvedOperation::Not => {
+                let expr = self.arena.pop_or_error(format!("expected at least 1 value in stack for unary operation '{:?}'", op).as_str());
+                self.arena.alloc_and_push_to_hfs_stack(Expression::Operation(Operation::Not(expr)), token)
+            }
+            _ => panic!("missing semantic analysis for unary operation '{:?}'", op)
         }
     }
 

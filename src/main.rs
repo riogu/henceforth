@@ -6,7 +6,7 @@ mod hfs {
     pub mod builder;
     pub mod lexer;
     pub mod parser;
-    pub mod type_analyzer;
+    pub mod interpreter;
     pub mod token;
     pub mod types;
     pub mod stack_analyzer;
@@ -18,11 +18,10 @@ mod hfs {
     pub use builder::*;
     pub use lexer::*;
     pub use parser::*;
-    pub use type_analyzer::*;
+    pub use interpreter::*;
     pub use token::*;
     pub use types::*;
 }
-
 use clap::{Parser, arg};
 use std::path::PathBuf;
 
@@ -42,5 +41,4 @@ fn main() {
     let tokens = hfs::Lexer::tokenize(&file);
     let (unresolved_top_level_nodes, unresolved_ast_arena) = hfs::Parser::parse_tokens(tokens);
     let (top_level_nodes, ast_arena) = hfs::StackAnalyzer::resolve(unresolved_top_level_nodes, unresolved_ast_arena, file.path.to_str().unwrap().to_string());
-    hfs::TypeAnalyzer::analyze(&top_level_nodes, ast_arena);
 }

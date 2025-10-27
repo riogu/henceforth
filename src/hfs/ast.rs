@@ -16,7 +16,6 @@ use crate::hfs::token::*;
 
 #[derive(Debug)]
 pub enum Identifier {
-    Unresolved(String),
     Variable(VarId),
     Function(FuncId),
 }
@@ -43,9 +42,10 @@ pub enum Expression {
     Operation(Operation),
     Identifier(Identifier),
     Literal(Literal),
-    FunctionCall{ tuple: ExprId, identifier: Identifier },
+    FunctionCall{ tuple_args: ExprId, identifier: ExprId },
     Tuple { expressions: Vec<ExprId>, variadic: bool },
     Parameter(TypeId),
+    ReturnValue(TypeId),
 }
 
 
@@ -125,6 +125,13 @@ impl Type {
         }
     }
 }
+pub struct FunctionCallId(ExprId);
+
+impl FunctionCallId {
+    pub fn new(id: ExprId, exprs: &[Expression]) -> Option<Self> {
+        matches!(exprs[id.0], Expression::FunctionCall { .. }).then_some(FunctionCallId(id))
+    }
+}
 
 // ============================================================================
 // Arena storage with token tracking
@@ -146,8 +153,6 @@ pub struct AstArena<'a> {
     pub(crate) type_tokens: Vec<Token<'a>>,
 
     pub(crate) hfs_stack: Vec<ExprId>, // keeps track of the state of our stack
-    pub(crate) hfs_type_stack: Vec<TypeId>,  // keeps track of the state of our types,
-    // for semantic analysis
 }
 
 // had to move this here because i wanted to the arena's private members to be available to the parser
@@ -156,14 +161,24 @@ impl<'a> AstArena<'a> {
     pub fn new() -> Self {
         Self::default()
     }
-    // Allocation methods 
-    pub fn alloc_expr(&mut self, expr: Expression, token: Token<'a>) -> ExprId {
-        // allocates AND pushes to the stack 
+
+    pub fn alloc_and_push_to_hfs_stack(&mut self, expr: Expression, token: Token<'a>) -> ExprId {
+        // theres no reason to not push to the stack when making a new expression 
+        // so this is the only method available
+        let id = ExprId(self.exprs.len());
+        self.exprs.push(expr);
+        self.hfs_stack.push(id);
+        id
+    }
+    pub fn alloc_function_call(&mut self, expr: Expression, token: Token<'a>) -> ExprId {
+        // this is the only time so far that we dont want to push to the hfs stack 
+        // because we automatically unwrap return types into the stack
+        // so we cant just "push one function call"
+        if !matches!(expr, Expression::FunctionCall { .. }) { panic!("alloc_function_call requires a FunctionCall expression"); }
         let id = ExprId(self.exprs.len());
         self.exprs.push(expr);
         id
     }
-
     pub fn alloc_stmt(&mut self, stmt: Statement, token: Token<'a>) -> StmtId {
         let id = StmtId(self.stmts.len());
         self.stmts.push(stmt);
@@ -239,6 +254,11 @@ impl<'a> AstArena<'a> {
     pub fn get_function_token(&self, id: FuncId) -> &Token<'a> {
         &self.function_tokens[id.0]
     }
+
+    pub fn get_type_token(&self, id: TypeId) -> &Token<'a> {
+        &self.type_tokens[id.0]
+    }
+
 
 }
 

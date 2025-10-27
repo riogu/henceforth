@@ -47,9 +47,9 @@
 <stack_expression> ::= <stack_operation>
                      | <identifier>
                      | <literal>
-                     | <function_call>
+                     | <function_call_or_tuple_expr>
 
-<function_call> ::= <tuple_expression> <identifier>
+<function_call_or_tuple_expr> ::= <tuple_expression> <identifier>?
 
 <tuple_expression> ::= "(" <stack_expression>* ")"
 

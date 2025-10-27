@@ -30,9 +30,10 @@ jobs:
         run: |
           mkdir -p docs/output
           cp -r docs/guide/book docs/output/guide
-          cp -r docs/reference/book docs/output/reference
+          mkdir -p docs/output/reference
+          cp -r docs/reference/book/* docs/output/reference/
           cp docs/index.html docs/output/index.html
-      
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:

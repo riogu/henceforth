@@ -15,7 +15,7 @@ Unlike Forth, where everything is in one stack, Henceforth creates a new stack f
 Control flow is also handled by the compiler, so that, for example, __every__ branch of an if statement starts with the same stack.
 
 ### Strong Static Typing
-Despite its low-level feel, Henceforth is statically typed with types like i32, i64, string, and bool. The type system ensures stack operations are safe and well-defined.
+Despite its low-level feel, Henceforth is statically typed with types like `i32`, `f32`, `string`, and `bool`. The type system ensures stack operations are safe and well-defined.
 
 ## Quick Feature Overview
 ### Functions with Stack-Based Arguments

@@ -28,7 +28,7 @@ impl<'a> AstArena<'a> {
                         todo!()
                     }
             Expression::Literal(literal) => todo!(),
-            Expression::FunctionCall { tuple, identifier } => todo!(),
+            Expression::FunctionCall { tuple_args: tuple, identifier } => todo!(),
             Expression::Tuple { expressions, variadic } => todo!(),
             Expression::Parameter(_) => todo!(),
         }

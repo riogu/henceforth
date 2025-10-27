@@ -15,6 +15,17 @@ fn func: (i32 i32 f32) -> (str i32 i32 i32) {
     }
 }
 
+fn func: (i32 (i32 i32) (i32 (i32 f32 str)) ) -> () {
+    let var: (i32 i32 i32); 
+    @( (1 2 3) ) &= var;
+    
+    @( (4 5 6) -> (...)func ); // do you want to allow this?
+    // this just pushes var to the stack which is a tuple
+    // to allow this ill make the ast backtrack 
+    // because this will be parsed as a function call initially
+
+}
+
 fn main: () -> (i32) {
     @(1 2 3);
     @((...)func);

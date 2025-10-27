@@ -22,7 +22,6 @@ mod hfs {
     pub use token::*;
     pub use types::*;
 }
-
 use clap::{Parser, arg};
 use std::path::PathBuf;
 

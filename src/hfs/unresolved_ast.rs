@@ -30,7 +30,7 @@ pub enum UnresolvedExpression {
     Operation(UnresolvedOperation),
     Identifier(String),
     Literal(Literal),
-    FunctionCall { identifier: String }, // tuple comes from stack
+    FunctionCall { identifier: UnresolvedExprId }, // tuple comes from stack
     Tuple { expressions: Vec<UnresolvedExprId>, variadic: bool }
 }
 

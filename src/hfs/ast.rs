@@ -42,7 +42,7 @@ pub enum Expression {
     Operation(Operation),
     Identifier(Identifier),
     Literal(Literal),
-    FunctionCall{ tuple: ExprId, identifier: ExprId },
+    FunctionCall{ tuple_args: ExprId, identifier: ExprId },
     Tuple { expressions: Vec<ExprId>, variadic: bool },
     Parameter(TypeId),
 }
@@ -145,8 +145,6 @@ pub struct AstArena<'a> {
     pub(crate) type_tokens: Vec<Token<'a>>,
 
     pub(crate) hfs_stack: Vec<ExprId>, // keeps track of the state of our stack
-    pub(crate) hfs_type_stack: Vec<TypeId>,  // keeps track of the state of our types,
-    // for semantic analysis
 }
 
 // had to move this here because i wanted to the arena's private members to be available to the parser

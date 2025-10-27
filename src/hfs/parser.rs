@@ -207,7 +207,7 @@ impl<'a> Parser<'a> {
                 self.arena.alloc_unresolved_expr(UnresolvedExpression::Identifier(name), token)
             }
             TokenKind::Literal(lit) => self.arena.alloc_unresolved_expr(UnresolvedExpression::Literal(lit), self.tokens.next().unwrap()),
-            TokenKind::LeftParen    => self.function_call(),
+            TokenKind::LeftParen    => self.function_call_or_tuple_expr(),
             _ => panic!("expected expression")
         }
 
@@ -244,12 +244,22 @@ impl<'a> Parser<'a> {
         }
     }
 
-    // <function_call> ::= <tuple_expression> <identifier>
-    fn function_call(&mut self) -> UnresolvedExprId {
+    // <function_call> ::= <tuple_expression> <identifier>?
+    fn function_call_or_tuple_expr(&mut self) -> UnresolvedExprId {
+        // we want to allow tuples anywhere and functions consume a tuple from the stack
+        // this looks for an identifier immediatelly after the tuple, if found it assumes we have a
+        // function call. later, StackAnalyzer will verify if this was a function call, or if it
+        // was just a variable that was pushed to the stack
         let tuple = self.tuple_expression(); // for now we build a tuple explicitly
-        // later we want to allow tuples anywhere and functions consume a tuple from the stack
-        let (identifier, token) = self.expect_identifier();
-        self.arena.alloc_unresolved_expr(UnresolvedExpression::FunctionCall { identifier }, token)
+        let token = self.tokens.peek().expect("unexpected end of input");
+        match &token.kind {
+            TokenKind::Identifier(name) =>  {
+                let (identifier, token) = self.expect_identifier();
+                let identifier = self.arena.alloc_unresolved_expr(UnresolvedExpression::Identifier(identifier), token.clone());
+                self.arena.alloc_unresolved_expr(UnresolvedExpression::FunctionCall { identifier }, token)
+            }
+            _ => tuple
+        }
     }
 
     // <tuple_expression> ::= "(" <stack_expression>* ")"

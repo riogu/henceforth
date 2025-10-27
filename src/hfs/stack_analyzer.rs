@@ -18,7 +18,7 @@ impl<'a> AstArena<'a> {
         // should start using our own error structs instead
         self.hfs_stack.pop().unwrap_or_else(|| panic!("{}", msg))
     }
-    pub fn last_or_error(&mut self, msg: &str) -> ExprId { 
+    pub fn last_or_error(&self, msg: &str) -> ExprId { 
         // should start using our own error structs instead
         *self.hfs_stack.last().unwrap_or_else(|| panic!("{}", msg))
     }
@@ -48,26 +48,42 @@ impl<'a> AstArena<'a> {
 
         for (&expr_id, &expected_type_id) in back_of_stack.iter().zip(return_types.iter()) {
             let actual_type_id = self.get_type_of_expr(expr_id);
-            if self.get_type(actual_type_id) != self.get_type(expected_type_id) {
-                panic!(
-                    "return type mismatch: expected '{:?}', found '{:?}'",
-                    self.get_type(expected_type_id),
-                    self.get_type(actual_type_id)
-                )
+            if let Err(err) = self.validate_type(actual_type_id, expected_type_id) {
+                panic!("return value {}", err);
             }
         }
     }
+    pub fn validate_func_call(&mut self, param_type: TypeId) {
+        let arg_type_id = self.get_type_of_expr(self.last_or_error("function calls require a tuple on the stack to be called!"));
 
-    // pub fn validate_func_call_args(&mut self, param_type: TypeId) -> bool {
-    //     if let Type::Tuple(param_types) = self.get_type(param_type) {
-    //         if param_types.len() != self.hfs_stack.len() {
-    //             return false;
-    //         }
-    //         for param_type in param_types { // function parameter type is always a tuple
-    //         }
-    //     }
-    //     todo!()
-    // }
+        let Type::Tuple(_) = self.get_type(arg_type_id) else { panic!("expected tuple on stack before function call") };
+        let Type::Tuple(_) = self.get_type(param_type) else { panic!("[internal error] functions argument type must be a tuple") };
+
+        if let Err(err) = self.validate_type(arg_type_id, param_type) {
+            panic!("function call argument {}", err);
+        }
+    }
+
+    pub fn validate_type(&self, actual_type_id: TypeId, expected_type_id: TypeId) -> Result<(), String> {
+        let actual_type = self.get_type(actual_type_id);
+        let expected_type = self.get_type(expected_type_id);
+        
+        match (actual_type, expected_type) {
+            (Type::Tuple(actual_types), Type::Tuple(expected_types)) => {
+                if actual_types.len() != expected_types.len() {
+                    return Err(format!("tuple length mismatch: expected {} elements, found {}", expected_types.len(), actual_types.len()));
+                }
+                // Recursively validate each element
+                for (i, (&actual_elem_id, &expected_elem_id)) in actual_types.iter().zip(expected_types.iter()).enumerate() {
+                    self.validate_type(actual_elem_id, expected_elem_id)
+                        .map_err(|err| format!("in tuple element {}: {}", i, err))?;
+                }
+                Ok(())
+            }
+            (actual, expected) if actual == expected => Ok(()),
+            (actual, expected) => Err(format!("type mismatch: expected '{:?}', found '{:?}'", expected, actual))
+        }
+    }
 }
 
 // ============================================================================
@@ -247,9 +263,38 @@ impl<'a> StackAnalyzer<'a> {
                 let identifier = self.scope_resolution_stack.find_identifier(&identifier);
                 self.arena.alloc_expr(Expression::Identifier(identifier), token)
             }
-            UnresolvedExpression::Literal(literal) => todo!(),
-            UnresolvedExpression::FunctionCall { identifier } => todo!(),
-            UnresolvedExpression::Tuple { expressions, variadic } => todo!(),
+            UnresolvedExpression::Literal(literal) => {
+                self.arena.alloc_expr(Expression::Literal(literal), token)
+            }
+            UnresolvedExpression::FunctionCall { identifier } => {
+                let identifier = self.resolve_expr(identifier);
+                if let Expression::Identifier(id) = self.arena.get_expr(identifier) {
+                    match id {
+                        Identifier::Function(func_id) => {
+                            let func_decl  = self.arena.get_func(*func_id);
+                            self.arena.validate_func_call(func_decl.param_type);
+                        }
+                        Identifier::Variable(var_id) => { // this means that it wasn't a function call, it was pushing a variable
+                            return identifier;            // so we just go "okay then just treat it as a variable being pushed"
+                        }
+                    }
+                } else { panic!("[internal error] parser had a bug in function_call_or_tuple_expr()") }
+
+                let tuple_args = self.arena.pop_or_error("function calls require a tuple on the stack to be called!");
+
+                self.arena.alloc_expr(Expression::FunctionCall { tuple_args, identifier }, token)
+            }
+            UnresolvedExpression::Tuple { expressions, variadic } => { 
+                // TODO: add tuple parsing to the parser
+                // allow (...) syntax
+                // here we need to actually implement the effects of (...)
+                // needs to resolve its arguments too
+                // we probably also need to infer the type of the tuple from the elements
+                if variadic {
+
+                }
+                todo!() 
+            }
         }
     }
 

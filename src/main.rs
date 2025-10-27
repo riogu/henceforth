@@ -36,9 +36,14 @@ struct Args {
 fn main() {
     let args = Args::parse();
     let file = hfs::File::new(&args.source);
-    println!("{:?}", args);
-    println!("{:?}", file);
+    let file_name = file.path.to_str().unwrap().to_string();
+
     let tokens = hfs::Lexer::tokenize(&file);
+
     let (unresolved_top_level_nodes, unresolved_ast_arena) = hfs::Parser::parse_tokens(tokens);
-    let (top_level_nodes, ast_arena) = hfs::StackAnalyzer::resolve(unresolved_top_level_nodes, unresolved_ast_arena, file.path.to_str().unwrap().to_string());
+
+    let (top_level_nodes, ast_arena, scope_stack) =
+        hfs::StackAnalyzer::resolve(unresolved_top_level_nodes, unresolved_ast_arena, file_name);
+    // interpreter doesnt even need the top level nodes lol
+    hfs::Interpreter::interpret(&ast_arena, &scope_stack);
 }

@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use crate::hfs::scope_stack::*;
 use crate::hfs::ast::*;
 use crate::hfs::types::*;
 use crate::hfs::token::*;
@@ -13,34 +14,37 @@ pub enum RuntimeValue {
     Bool(bool),
     Tuple(Vec<RuntimeValue>),
 }
+struct CallFrame {
+    function_id: FuncId,
+    variables: HashMap<VarId, RuntimeValue>,
+}
 
 //---------------------------------------------------------------------------
 pub struct Interpreter<'a> {
     arena: &'a AstArena<'a>,
-    runtime_hfs_stack: Vec<RuntimeValue>,
+    globals: HashMap<VarId, RuntimeValue>, 
+    call_stack: Vec<CallFrame>,
 }
 
 impl<'a> Interpreter<'a> {
     pub fn new(arena: &'a AstArena<'a>) -> Self {
         Self {
             arena,
-            runtime_hfs_stack: Vec::new(),
+            globals: HashMap::new(),
+            call_stack: Vec::new()
         }
     }
 
-    pub fn interpret(top_level_nodes: &[TopLevelId], arena: &AstArena) {
+    pub fn interpret(arena: &AstArena, scope_stack: &ScopeStack) {
         let mut interpreter = Interpreter::new(arena);
-        
-        for node in top_level_nodes {
-            interpreter.interpret_top_level(*node);
+        // create all our globals at the start of our program
+        for var_id in scope_stack.mangled_global_vars.values() {
+            interpreter.interpret_var_decl(*var_id);
         }
-    }
-
-    fn interpret_top_level(&mut self, node: TopLevelId) {
-        match node {
-            TopLevelId::VariableDecl(var_id) => self.interpret_var_decl(var_id),
-            TopLevelId::FunctionDecl(func_id) => self.interpret_func_decl(func_id),
-            TopLevelId::Statement(stmt_id) => self.interpret_stmt(stmt_id),
+        if let Some(main) = scope_stack.find_function("main") {
+            interpreter.call_declared_function(main, Vec::new());
+        } else {
+            panic!("this file has no 'main()' entrypoint, so it cannot be interpreted")
         }
     }
 
@@ -48,13 +52,15 @@ impl<'a> Interpreter<'a> {
         todo!()
     }
 
-    fn interpret_func_decl(&mut self, func_id: FuncId) {
-        todo!()
+    fn call_declared_function(&mut self, func_id: FuncId, args: Vec<ExprId>) {
     }
 
     fn interpret_stmt(&mut self, stmt_id: StmtId) {
         match self.arena.get_stmt(stmt_id) {
-            Statement::If { cond, body, else_stmt } => todo!(),
+            Statement::If { cond, body, else_stmt } => {
+                self.interpret_expr(*cond);
+                todo!()
+            }
             Statement::While { cond, body } => todo!(),
             Statement::StackBlock(expressions) => todo!(),
             Statement::BlockScope(top_level_nodes) => todo!(),
@@ -66,7 +72,7 @@ impl<'a> Interpreter<'a> {
         }
     }
 
-    fn interpret_expr(&mut self, expr_id: ExprId) {
+    fn interpret_expr(&mut self, expr_id: ExprId) -> &RuntimeValue {
         match self.arena.get_expr(expr_id) {
             Expression::Operation(op) => self.interpret_operation(op),
             Expression::Identifier(id) => self.interpret_identifier(id),
@@ -77,15 +83,21 @@ impl<'a> Interpreter<'a> {
             Expression::ReturnValue(type_id) => todo!(),
         }
     }
-
-    fn interpret_identifier(&mut self, id: &Identifier) {
+    fn interpret_function_call(&mut self, id: &Identifier) -> &RuntimeValue {
         match id {
             Identifier::Variable(var_id) => todo!(),
             Identifier::Function(func_id) => todo!(),
         }
     }
 
-    fn interpret_literal(&mut self, lit: &Literal) {
+    fn interpret_identifier(&mut self, id: &Identifier) -> &RuntimeValue {
+        match id {
+            Identifier::Variable(var_id) => todo!(),
+            Identifier::Function(func_id) => todo!(),
+        }
+    }
+
+    fn interpret_literal(&mut self, lit: &Literal) -> &RuntimeValue {
         match lit {
             Literal::Integer(i) => todo!(),
             Literal::Float(f) => todo!(),
@@ -94,7 +106,7 @@ impl<'a> Interpreter<'a> {
         }
     }
 
-    fn interpret_operation(&mut self, op: &Operation) {
+    fn interpret_operation(&mut self, op: &Operation) -> &RuntimeValue {
         match op {
             Operation::Add(l, r) => todo!(),
             Operation::Sub(l, r) => todo!(),

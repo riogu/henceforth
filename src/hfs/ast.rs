@@ -125,14 +125,6 @@ impl Type {
         }
     }
 }
-pub struct FunctionCallId(ExprId);
-
-impl FunctionCallId {
-    pub fn new(id: ExprId, exprs: &[Expression]) -> Option<Self> {
-        matches!(exprs[id.0], Expression::FunctionCall { .. }).then_some(FunctionCallId(id))
-    }
-}
-
 // ============================================================================
 // Arena storage with token tracking
 // ============================================================================

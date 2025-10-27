@@ -21,9 +21,9 @@ struct Scope {
 
 pub struct ScopeStack {
     scope_stack: Vec<Scope>,
-    mangled_global_vars: HashMap<String, VarId>,
-    mangled_locals: HashMap<String, VarId>,
-    mangled_functions: HashMap<String, FuncId>,
+    pub mangled_global_vars: HashMap<String, VarId>,
+    pub mangled_locals: HashMap<String, VarId>,
+    pub mangled_functions: HashMap<String, FuncId>,
 }
 
 impl ScopeStack {

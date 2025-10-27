@@ -99,10 +99,10 @@ impl<'a> StackAnalyzer<'a> {
         }
     }
 
-    pub fn resolve(top_level: Vec<UnresolvedTopLevelId>, unresolved: UnresolvedAstArena<'a>, file_name: String) -> (Vec<TopLevelId>, AstArena<'a>) {
+    pub fn resolve(top_level: Vec<UnresolvedTopLevelId>, unresolved: UnresolvedAstArena<'a>, file_name: String) -> (Vec<TopLevelId>, AstArena<'a>, ScopeStack) {
         let mut stack_parser = StackAnalyzer::new(unresolved, file_name);
         let resolved_top_level = stack_parser.resolve_top_level(top_level);
-        (resolved_top_level, stack_parser.arena)
+        (resolved_top_level, stack_parser.arena, stack_parser.scope_resolution_stack)
     }
 
     fn resolve_top_level(&mut self, nodes: Vec<UnresolvedTopLevelId>) -> Vec<TopLevelId> {

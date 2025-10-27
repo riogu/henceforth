@@ -1,60 +1,90 @@
 use crate::hfs::ast::*;
+use crate::hfs::token::*;
 
 impl<'a> AstArena<'a> {
-    pub fn get_type_of_operation(&self, op: &Operation) -> TypeId {
+    // Convenience methods for common types
+    pub fn int_type(&self) -> TypeId {
+        TypeId(0)
+    }
+    pub fn float_type(&self) -> TypeId {
+        TypeId(1)
+    }
+    pub fn bool_type(&self) -> TypeId {
+        TypeId(2)
+    }
+    pub fn string_type(&self) -> TypeId {
+        TypeId(3)
+    }
+
+    // Only expressions have types!
+    pub fn get_type_of_operation(&mut self, op: &Operation) -> TypeId {
         match op {
-            Operation::Add(lhs, rhs) => todo!(),
-            Operation::Sub(lhs, rhs) => todo!(),
-            Operation::Mul(lhs, rhs) => todo!(),
-            Operation::Div(lhs, rhs) => todo!(),
-            Operation::Mod(lhs, rhs) => todo!(),
-            Operation::Or(lhs, rhs) => todo!(),
-            Operation::And(lhs, rhs) => todo!(),
-            Operation::Not(expr) => todo!(),
-            Operation::Equal(lhs, rhs) => todo!(),
-            Operation::Less(lhs, rhs) => todo!(),
-            Operation::LessEqual(lhs, rhs) => todo!(),
-            Operation::Greater(lhs, rhs) => todo!(),
-            Operation::GreaterEqual(lhs, rhs) => todo!(),
-            Operation::NotEqual(lhs, rhs) => todo!(),
-        }
-    }
-
-    pub fn get_type_of_expr(&self, expr_id: ExprId) -> TypeId {
-        let expr = self.get_expr(expr_id);
-        match expr {
-            Expression::Operation(operation) => self.get_type_of_operation(operation),
-            Expression::Identifier(identifier) => {
-                todo!()
+            // Arithmetic operations: return the operand type
+            Operation::Add(lhs, rhs)
+            | Operation::Sub(lhs, rhs)
+            | Operation::Mul(lhs, rhs)
+            | Operation::Div(lhs, rhs)
+            | Operation::Mod(lhs, rhs) => {
+                let lhs_type = self.get_type_of_expr(*lhs);
+                let rhs_type = self.get_type_of_expr(*rhs);
+                // TODO: Type checking - they should match
+                lhs_type
             }
-            Expression::Literal(literal) => todo!(),
-            Expression::FunctionCall { tuple_args: tuple, identifier } => todo!(),
-            Expression::Tuple { expressions, variadic } => todo!(),
-            Expression::Parameter(_) => todo!(),
-            Expression::ReturnValue(type_id) => todo!(),
+            Operation::Or(_, _)
+            | Operation::And(_, _)
+            | Operation::Not(_)
+            | Operation::Equal(_, _)
+            | Operation::NotEqual(_, _)
+            | Operation::Less(_, _)
+            | Operation::LessEqual(_, _)
+            | Operation::Greater(_, _)
+            | Operation::GreaterEqual(_, _) => self.bool_type(),
         }
     }
 
-    pub fn get_type_of_stmt(&self, stmt_id: StmtId) -> TypeId {
-        let stmt = self.get_stmt(stmt_id);
-        match stmt {
-            Statement::If { cond, body, else_stmt } => todo!(),
-            Statement::Return => todo!(),
-            Statement::StackBlock(stack_block) => todo!(),
-            Statement::BlockScope(block_scope) => todo!(),
-            Statement::While { cond, body } => todo!(),
-            Statement::Break => todo!(),
-            Statement::Continue => todo!(),
-            Statement::Assignment { value, identifier, is_move } => todo!(),
-            Statement::Empty => todo!(),
-        }
-    }
+    pub fn get_type_of_expr(&mut self, expr_id: ExprId) -> TypeId {
+        match self.get_expr(expr_id).clone() {
+            Expression::Operation(operation) => self.get_type_of_operation(&operation),
 
-    pub fn get_type_of_top_level(&self, top_level_id: TopLevelId) -> TypeId {
-        match top_level_id {
-            TopLevelId::VariableDecl(var_id) => todo!(),
-            TopLevelId::FunctionDecl(fn_id) => todo!(),
-            TopLevelId::Statement(stmt_id) => todo!(),
+            Expression::Identifier(identifier) => match identifier {
+                Identifier::Variable(var_id) => {
+                    let var = self.get_var(var_id);
+                    var.hfs_type
+                }
+                Identifier::Function(func_id) => {
+                    let func = self.get_func(func_id);
+                    func.return_type
+                }
+            },
+
+            Expression::Literal(literal) => match literal {
+                Literal::Integer(_) => self.int_type(),
+                Literal::Float(_) => self.float_type(),
+                Literal::String(_) => self.string_type(),
+                Literal::Bool(_) => self.bool_type(),
+            },
+
+            Expression::FunctionCall { identifier, tuple_args } => {
+                let func = self.get_func(identifier);
+                func.return_type
+            }
+
+            Expression::Tuple { expressions, variadic } => {
+                let token = self.get_expr_token(expr_id).clone();
+                // Build tuple type from element types
+                let mut element_types = Vec::new();
+                for expr_id in expressions.clone() {
+                    let elem_type = self.get_type_of_expr(expr_id);
+                    element_types.push(elem_type);
+                }
+
+                let tuple_type = Type::Tuple(element_types);
+                self.alloc_type(tuple_type, token)
+            }
+
+            Expression::Parameter(type_id) => type_id,
+
+            Expression::ReturnValue(type_id) => type_id,
         }
     }
 }

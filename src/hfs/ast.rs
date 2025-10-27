@@ -1,4 +1,5 @@
 use crate::hfs::token::*;
+use std::collections::HashMap;
 
 // ============================================================================
 // Type-safe ID types
@@ -14,12 +15,12 @@ use crate::hfs::token::*;
 // AST Node Structures
 // ============================================================================
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum Identifier {
     Variable(VarId),
     Function(FuncId),
 }
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum Operation {
     Add(ExprId, ExprId),
     Sub(ExprId, ExprId),
@@ -37,12 +38,12 @@ pub enum Operation {
     Not(ExprId),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Expression {
     Operation(Operation),
     Identifier(Identifier),
     Literal(Literal),
-    FunctionCall{ tuple_args: ExprId, identifier: ExprId },
+    FunctionCall{ tuple_args: ExprId, identifier: FuncId },
     Tuple { expressions: Vec<ExprId>, variadic: bool },
     Parameter(TypeId),
     ReturnValue(TypeId),
@@ -64,7 +65,7 @@ pub struct VarDeclaration {
     pub hfs_type: TypeId,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FunctionDeclaration {
     pub name: String,
     pub param_type: TypeId,     // either a tuple or a single type
@@ -120,7 +121,6 @@ impl Type {
             Type::String => TokenKind::String,
             Type::Bool => TokenKind::Bool,
             Type::Float => TokenKind::Float,
-            Type::Float => TokenKind::Float,
             Type::Tuple(_) => TokenKind::LeftParen,
         }
     }
@@ -153,13 +153,21 @@ pub struct AstArena<'a> {
     pub(crate) type_tokens: Vec<Token<'a>>,
 
     pub(crate) hfs_stack: Vec<ExprId>, // keeps track of the state of our stack
+
+    // Type deduplication cache
+    type_cache: HashMap<Type, TypeId>,
 }
 
 // had to move this here because i wanted to the arena's private members to be available to the parser
 // for better code structure (without making arena members public)
 impl<'a> AstArena<'a> {
     pub fn new() -> Self {
-        Self::default()
+        let mut arena = Self::default();
+        arena.alloc_type_uncached(Type::Int, Token { kind: TokenKind::Int, source_info: SourceInfo::new(0, 0, 0, "Int")});
+        arena.alloc_type_uncached(Type::Float, Token { kind: TokenKind::Float, source_info: SourceInfo::new(0, 0, 0, "Float")});
+        arena.alloc_type_uncached(Type::Bool, Token { kind: TokenKind::Bool, source_info: SourceInfo::new(0, 0, 0, "Bool")});
+        arena.alloc_type_uncached(Type::String, Token { kind: TokenKind::String, source_info: SourceInfo::new(0, 0, 0, "String")});
+        arena
     }
 
     pub fn alloc_and_push_to_hfs_stack(&mut self, expr: Expression, token: Token<'a>) -> ExprId {
@@ -197,10 +205,22 @@ impl<'a> AstArena<'a> {
         id
     }
 
-    pub fn alloc_type(&mut self, hfs_type: Type, token: Token<'a>) -> TypeId {
+    // Internal: allocate without checking cache
+    fn alloc_type_uncached(&mut self, hfs_type: Type, token: Token<'a>) -> TypeId {
         let id = TypeId(self.types.len());
-        self.types.push(hfs_type);
+        self.types.push(hfs_type.clone());
+        self.type_tokens.push(token);
+        self.type_cache.insert(hfs_type, id);
         id
+    }
+    pub fn alloc_type(&mut self, hfs_type: Type, token: Token<'a>) -> TypeId {
+        // Check if this type already exists
+        if let Some(&existing_id) = self.type_cache.get(&hfs_type) {
+            return existing_id;
+        }
+        
+        // If not, allocate it
+        self.alloc_type_uncached(hfs_type, token)
     }
     // this is necessary to allow recursive functions
     pub fn temporarily_get_next_stmt_id(&mut self) -> StmtId {
@@ -258,7 +278,5 @@ impl<'a> AstArena<'a> {
     pub fn get_type_token(&self, id: TypeId) -> &Token<'a> {
         &self.type_tokens[id.0]
     }
-
-
 }
 

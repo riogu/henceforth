@@ -84,67 +84,41 @@ impl ScopeStack {
         false // Not in any while loop
     }
     pub fn find_variable(&self, name: &str) -> Option<VarId> {
-        let mut current_scope_name = self.scope_stack.last().expect("[internal hfs error] no scope found").name.clone();
-        // Search from current scope up to function boundary
+        // Search from innermost to outermost scope until function boundary
         for scope in self.scope_stack.iter().rev() {
-            let mangled_name = format!("{}{}", current_scope_name, name);
-            // Try locals
+            let mangled_name = format!("{}{}", scope.name, name);
+            // Check if variable exists at this scope
             if let Some(&var_id) = self.mangled_locals.get(&mangled_name) {
                 return Some(var_id);
             }
-            // Stop at function boundary
+            // Stop at function boundary - don't look into outer functions
             if scope.kind == ScopeKind::Function {
                 break;
             }
-            // Move up one scope level by removing the last "::" segment
-            if let Some(pos) = current_scope_name[..current_scope_name.len()-2].rfind("::") {
-                current_scope_name = current_scope_name[..pos+2].to_string();
-            } else {
-                break;
-            }
         }
-        // After breaking at function boundary, still check globals
-        // Global variables have format: "file_name%variable_name"
-        let global_mangled_name = format!("{}{}", 
-            self.scope_stack[0].name,  // The global scope name (file_name%)
-            name
-        );
-        if let Some(&var_id) = self.mangled_global_vars.get(&global_mangled_name) {
-            return Some(var_id);
-        }
-        None
+        // Check globals
+        let global_mangled_name = format!("{}{}", self.scope_stack[0].name, name);
+        self.mangled_global_vars.get(&global_mangled_name).copied()
     }
+
     pub fn find_function(&self, name: &str) -> Option<FuncId> {
-        let mut current_scope_name = self.scope_stack.last().expect("[internal hfs error] no scope found").name.clone();
-        // Search from current scope up to function boundary
+        // Search from innermost scope to outermost until function boundary
         for scope in self.scope_stack.iter().rev() {
-            let mangled_name = format!("{}{}()", current_scope_name, name);
-            // Try to find function at this scope level
+            let mangled_name = format!("{}{}()", scope.name, name);
+            
             if let Some(&func_id) = self.mangled_functions.get(&mangled_name) {
                 return Some(func_id);
             }
-            // Stop at function boundary (nested functions can't see parent's nested functions)
+            // Stop at function boundary - nested functions can't see outer nested functions
             if scope.kind == ScopeKind::Function {
                 break;
             }
-            // Move up one scope level by removing the last "::" segment
-            if let Some(pos) = current_scope_name[..current_scope_name.len()-2].rfind("::") {
-                current_scope_name = current_scope_name[..pos+2].to_string();
-            } else {
-                break;
-            }
         }
-        // After breaking at function boundary, check global functions
-        // Global functions have format: "file_name%function_name()"
-        let global_mangled_name = format!("{}{}()", 
-            self.scope_stack[0].name,  // The global scope name (file_name%)
-            name
-        );
-        if let Some(&func_id) = self.mangled_functions.get(&global_mangled_name) {
-            return Some(func_id);
-        }
-        None
+        // Check globals
+        let global_mangled_name = format!("{}{}()", self.scope_stack[0].name, name);
+        self.mangled_functions.get(&global_mangled_name).copied()
     }
+
     pub fn find_identifier(&self, name: &str) -> Identifier {
         match self.find_variable(&name) {
             None => match self.find_function(&name) {

@@ -108,6 +108,21 @@ impl<'a> Parser<'a> {
         }
         (top_level, parser.arena)
     }
+    // <block_scope> ::= "{" <top_level_node>* "}"
+    fn block_scope(&mut self, scope_kind: ScopeKind) -> UnresolvedStmtId {
+        let mut top_level_ids = Vec::<UnresolvedTopLevelId>::new();
+        let token = self.expect(TokenKind::LeftBrace);
+        loop {
+            match self.tokens.next().expect("unexpected end of input").kind {
+                kind if kind == TokenKind::RightBrace => break,
+                TokenKind::Let => top_level_ids.push(UnresolvedTopLevelId::VariableDecl(self.variable_declaration())),
+                TokenKind::Fn  => top_level_ids.push(UnresolvedTopLevelId::FunctionDecl(self.function_declaration())),
+                TokenKind::At  => top_level_ids.push(UnresolvedTopLevelId::Statement(self.stack_block())),
+                _ =>  top_level_ids.push(UnresolvedTopLevelId::Statement(self.statement())),
+            };
+        }
+        self.arena.alloc_unresolved_stmt(UnresolvedStatement::BlockScope(top_level_ids, scope_kind), token)
+    }
 
     // <statement> ::= <if_stmt> | <stack_block> | <while_stmt> | <return_stmt> 
     //               | <break_stmt> | <continue_stmt> | <assignment_stmt> | ";" 
@@ -122,8 +137,14 @@ impl<'a> Parser<'a> {
                 self.expect(TokenKind::Semicolon);
                 self.arena .alloc_unresolved_stmt(UnresolvedStatement::Return, token)
             }
-            TokenKind::Break      => self.arena.alloc_unresolved_stmt(UnresolvedStatement::Break, token),
-            TokenKind::Continue   => self.arena.alloc_unresolved_stmt(UnresolvedStatement::Continue, token),
+            TokenKind::Break => {
+                self.expect(TokenKind::Semicolon);
+                self.arena.alloc_unresolved_stmt(UnresolvedStatement::Break, token)
+            }
+            TokenKind::Continue => {
+                self.expect(TokenKind::Semicolon);
+                self.arena.alloc_unresolved_stmt(UnresolvedStatement::Continue, token)
+            }
             TokenKind::CopyAssign => self.assignment(false),
             TokenKind::MoveAssign => self.assignment(true),
             TokenKind::Semicolon  => self.arena.alloc_unresolved_stmt(UnresolvedStatement::Empty, token),
@@ -164,22 +185,6 @@ impl<'a> Parser<'a> {
         self.stack_block();
         let body = self.block_scope(ScopeKind::WhileLoop);
         self.arena.alloc_unresolved_stmt(UnresolvedStatement::While { body }, token)
-    }
-
-    // <block_scope> ::= "{" <top_level_node>* "}"
-    fn block_scope(&mut self, scope_kind: ScopeKind) -> UnresolvedStmtId {
-        let mut top_level_ids = Vec::<UnresolvedTopLevelId>::new();
-        let token = self.expect(TokenKind::LeftBrace);
-        loop {
-            match self.tokens.next().expect("unexpected end of input").kind {
-                kind if kind == TokenKind::RightBrace => break,
-                TokenKind::Let => top_level_ids.push(UnresolvedTopLevelId::VariableDecl(self.variable_declaration())),
-                TokenKind::Fn  => top_level_ids.push(UnresolvedTopLevelId::FunctionDecl(self.function_declaration())),
-                TokenKind::At  => top_level_ids.push(UnresolvedTopLevelId::Statement(self.stack_block())),
-                _ => panic!("expected variable or function declaration"),
-            };
-        }
-        self.arena.alloc_unresolved_stmt(UnresolvedStatement::BlockScope(top_level_ids, scope_kind), token)
     }
 
     // <stack_block> ::= "@" "(" <expression>* ")"
@@ -280,9 +285,9 @@ impl<'a> Parser<'a> {
             self.expect(TokenKind::Arrow); // consume the '->'
             let called_func_name = match &self.tokens.peek().expect("unexpected end of input").kind {
                 TokenKind::Identifier(name) => Some(name.clone()),
-                _ => None,
+                _ => panic!("implicit '(...)' tuples are only allowed to be used as function call arguments")
             };
-            panic!("implicit '(...)' tuples are only allowed to be used as function call arguments");
+            
             self.arena.alloc_unresolved_expr(UnresolvedExpression::Tuple{expressions, variadic, called_func_name}, token)
         } else {
             self.arena.alloc_unresolved_expr(UnresolvedExpression::Tuple{expressions, variadic, called_func_name: None}, token)
@@ -297,6 +302,7 @@ impl<'a> Parser<'a> {
         let (name, token) = self.expect_identifier();
         let identifier = self.arena.alloc_unresolved_expr(UnresolvedExpression::Identifier(name), token);
 
+        self.expect(TokenKind::Semicolon); 
         self.arena.alloc_unresolved_stmt(UnresolvedStatement::Assignment{identifier, is_move}, assign_tkn)
     }
 }

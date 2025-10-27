@@ -43,7 +43,6 @@ fn main: () -> (i32) {
     // this also means that:
     let var: (i32 i32 i32);
     @(1 2 3);
-    @( (...)var); // also works! which is good
     := var; // would also work the same way (this operator is a convenient shorthand we provide
     // so := var basically acts the same as consuming the stack directly with (...)var;
 }   // this way, our (...) operator is always the same, consistent operation.

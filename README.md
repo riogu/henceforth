@@ -1,4 +1,5 @@
-# henceforth
+# henceforth compiler/interpreter
+Please check the henceforth github page for more info:
 https://riogu.github.io/henceforth
 
 

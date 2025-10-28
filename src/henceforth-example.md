@@ -2,23 +2,6 @@
 ```cpp
 import hfs;
 
-fn func: (i32 i32 f32) -> (str i32 i32 i32) {
-    let var: i32; // file_name%func()::var
-    {
-        let var: i32; // file_name%func()::0::var
-        {
-            let var: i32; // file_name%func()::0::0::var
-        }
-        {
-            let var: i32; // file_name%func()::0::1::var
-        }
-    }
-    @( 1 2 + 4 *); // is just one multiplication "node"
-    // so internally our stack block sees
-    @( ((1 2) + 4) *) ) // which turns it into a compilable language lol
-    @( mul(add(1, 2), 4))
-}
-
 fn func: (i32 (i32 i32) (i32 (i32 f32 str)) ) -> () {
     let var: (i32 i32 i32); 
     @( (1 2 3) ) &= var;
@@ -47,6 +30,23 @@ fn main: () -> (i32) {
     // so := var basically acts the same as consuming the stack directly with (...)var;
 }   // this way, our (...) operator is always the same, consistent operation.
     // it consumes the stack and pushes a tuple with what it consumed.
+
+fn func: (i32 i32 f32) -> (str i32 i32 i32) {
+    let var: i32; // file_name%func()::var
+    {
+        let var: i32; // file_name%func()::0::var
+        {
+            let var: i32; // file_name%func()::0::0::var
+        }
+        {
+            let var: i32; // file_name%func()::0::1::var
+        }
+    }
+    @( 1 2 + 4 *); // is just one multiplication "node"
+    // so internally our stack block sees
+    @( ((1 2) + 4) *) ) // which turns it into a compilable language lol
+    @( mul(add(1, 2), 4))
+}
 
 // Calculate factorial using stack operations
 fn factorial: (i32) -> (i32) {
@@ -92,7 +92,7 @@ fn main: () -> (i32) {
     // Stack now has: 1 2 3 4 5
     while @(hfs::depth 0 >) {
         &= temp;  // pop and assign
-        @(temp) factorial;
+        @((temp)factorial);
         @(sum +) &= sum;  // pop and assign
     }
     

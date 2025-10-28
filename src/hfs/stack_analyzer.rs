@@ -185,24 +185,84 @@ impl<'a> StackAnalyzer<'a> {
         
         match unresolved_stmt {
             UnresolvedStatement::If { body, else_stmt } => {
-                let cond = self.arena.last_or_error("expected boolean or operation on stack for if statement argument");
+                let stack_depth_before_branches = self.arena.hfs_stack.len();
+                
+                // condition isnt included in the stack depth count
+                let cond = self.arena.pop_or_error("expected boolean on stack for if statement");
                 if !matches!(self.arena.get_type_of_expr(cond), Type::Bool) {
                     panic!("expected expression of type 'bool' in if statement condition") 
                 }
+                
+                // Analyze if body
+                let if_depth_before = self.arena.hfs_stack.len();
                 let body = self.resolve_stmt(body);
+                let if_depth_after = self.arena.hfs_stack.len();
+
+                self.arena.hfs_stack.push(cond);
+                
                 let else_stmt = match else_stmt {
-                    Some(UnresolvedElseStmt::Else(stmt_id))   => Some(ElseStmt::Else(self.resolve_stmt(stmt_id))),
-                    Some(UnresolvedElseStmt::ElseIf(stmt_id)) => Some(ElseStmt::ElseIf(self.resolve_stmt(stmt_id))),
-                    None => None,
+                    Some(UnresolvedElseStmt::Else(stmt_id)) => {
+                        // Reset stack to pre-if state for else branch
+                        self.arena.hfs_stack.truncate(stack_depth_before_branches);
+                        let else_body = self.resolve_stmt(stmt_id);
+                        let else_depth_after = self.arena.hfs_stack.len();
+                        
+                        // Both branches must have same stack effect
+                        if if_depth_after != else_depth_after {
+                            panic!(
+                                "if/else branches must have matching stack effects: if branch results in {} values, else branch results in {}",
+                                if_depth_after - if_depth_before,
+                                else_depth_after - if_depth_before
+                            );
+                        }
+                        Some(ElseStmt::Else(else_body))
+                    },
+                    Some(UnresolvedElseStmt::ElseIf(stmt_id)) => {
+                        self.arena.hfs_stack.truncate(if_depth_before);
+                        Some(ElseStmt::ElseIf(self.resolve_stmt(stmt_id)))
+                    },
+                    None => {
+                        // If no else, the if body must have net-zero stack effect
+                        if if_depth_before != if_depth_after {
+                            panic!(
+                                "if statement without else clause must have net-zero stack effect, but changed stack by {}",
+                                (if_depth_after as i32) - (if_depth_before as i32)
+                            );
+                        }
+                        None
+                    }
                 };
+                
                 self.arena.alloc_stmt(Statement::If { cond, body, else_stmt }, token)
             }
             UnresolvedStatement::While { body } => {
-                let cond = self.arena.last_or_error("expected value on stack for while loop argument");
+
+                // TODO: decide how while loops should work. consume on entry or not? 
+                
+                let cond = self.arena.pop_or_error("expected value on stack for while loop argument");
+                // condition isnt included in the stack depth count since its popped when entering
+                // each while loop (our stack state is left right after the condition is popped)
+                let stack_depth_before = self.arena.hfs_stack.len();
+
                 if !matches!(self.arena.get_type_of_expr(cond), Type::Bool) {
                     panic!("expected expression of type 'bool' in while loop condition") 
                 }
+                
+                // Analyze the body
                 let body = self.resolve_stmt(body);
+
+                self.arena.hfs_stack.push(cond);
+                
+                // Enforce stack balance
+                let stack_depth_after = self.arena.hfs_stack.len();
+                if stack_depth_before != stack_depth_after {
+                    panic!(
+                        "while loop body must maintain stack balance: expected {} values on stack after loop body, found {}",
+                        stack_depth_before, 
+                        stack_depth_after
+                    );
+                }
+                
                 self.arena.alloc_stmt(Statement::While { cond, body }, token)
             }
             UnresolvedStatement::StackBlock(unresolved_expr_ids) => {

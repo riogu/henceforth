@@ -20,8 +20,8 @@ impl RuntimeValue {
         match hfs_type {
             Type::Int => RuntimeValue::Integer(0),
             Type::String => RuntimeValue::String("".to_string()),
-            Type::Bool => RuntimeValue::Float(0.0),
-            Type::Float => RuntimeValue::Bool(false),
+            Type::Bool => RuntimeValue::Bool(false),
+            Type::Float => RuntimeValue::Float(0.0),
             Type::Tuple(type_ids) => RuntimeValue::Tuple(Vec::new()),
         }
     }
@@ -82,7 +82,7 @@ impl<'a> Interpreter<'a> {
         if let Some(main) = scope_stack.find_function("main") {
             interpreter.call_declared_function(main, Vec::new());
         } else {
-            panic!("this file has no 'main()' entrypoint, so it cannot be interpreted")
+            panic!("this file has no 'main()' entrypoint, so it cannot be interpreted (consider compiling it instead)")
         }
     }
 
@@ -101,6 +101,10 @@ impl<'a> Interpreter<'a> {
 
         // if we have nothing to return, we return an empty vector (will be iterated anyway)
         self.call_stack.pop().expect("pushed above").return_stack
+        // TODO: decide how we pass values to the caller (depends on how we manage the stack
+        // tracking)
+        // if we solve it in StackAnalyzer for each branch, the code can "just run" here because
+        // the user was forced to keep the size of the stack consistent anyways.
     }
 
     fn interpret_stmt(&mut self, stmt_id: StmtId) {
@@ -125,16 +129,14 @@ impl<'a> Interpreter<'a> {
                 }
             }
             Statement::While { cond, body } => loop {
+                // TODO: decide the semantics of while loops
                 let RuntimeValue::Bool(while_cond) = self.interpret_expr(*cond) else {
                     panic!("expected boolean value on stack for while loop condition")
                 };
                 if !while_cond { return; }
                 self.interpret_stmt(*body);
                 match self.curr_call_frame().flow_state {
-                    CtrlFlowState::Return => {
-                        self.curr_call_frame_mut().flow_state = CtrlFlowState::Normal;
-                        return
-                    }
+                    CtrlFlowState::Return => return,
                     CtrlFlowState::Break => {
                         self.curr_call_frame_mut().flow_state = CtrlFlowState::Normal;
                         break
@@ -143,7 +145,7 @@ impl<'a> Interpreter<'a> {
                         self.curr_call_frame_mut().flow_state = CtrlFlowState::Normal;
                         continue
                     } 
-                    CtrlFlowState::Normal => {/* do nothing */}
+                    CtrlFlowState::Normal => { /* do nothing */ }
                 }
             }
             Statement::StackBlock(expressions) => {
@@ -158,7 +160,6 @@ impl<'a> Interpreter<'a> {
                         self.curr_call_frame_mut().return_stack.push(val);
                     }
                 }
-                todo!()
             }
             Statement::BlockScope(top_level_nodes, scope_kind) => {
                 for &top_level_id in top_level_nodes {
@@ -208,8 +209,18 @@ impl<'a> Interpreter<'a> {
                 }
                 RuntimeValue::Tuple(tuple_values)
             }
-            Expression::Parameter(type_id) => todo!(),
-            Expression::ReturnValue(type_id) => todo!(),
+            Expression::Parameter(type_id) => {
+                // Parameters should be pre-populated in the call frame when the function is called
+                // This node shouldn't be encountered during interpretation if resolved properly
+                panic!("Parameter nodes should be replaced by semantic analyzer")
+            }
+
+            Expression::ReturnValue(type_id) => {
+                // This should point to a specific value that was computed
+                // If the semantic analyzer properly resolved it, what does it point to?
+                // Do you need an ExprId field here?
+                todo!("What does ReturnValue contain after semantic analysis?")
+            }
         }
     }
 
@@ -230,165 +241,165 @@ impl<'a> Interpreter<'a> {
         }
     }
 
-fn interpret_operation(&mut self, op: &Operation) -> RuntimeValue {
-    match op {
-        Operation::Add(l, r) => {
-            let left = self.interpret_expr(*l);
-            let right = self.interpret_expr(*r);
-            match (left, right) {
-                (RuntimeValue::Integer(a), RuntimeValue::Integer(b)) => RuntimeValue::Integer(a + b),
-                (RuntimeValue::Float(a), RuntimeValue::Float(b))     => RuntimeValue::Float(a + b),
-                (RuntimeValue::Integer(a), RuntimeValue::Float(b))   => RuntimeValue::Float(a as f32 + b),
-                (RuntimeValue::Float(a), RuntimeValue::Integer(b))   => RuntimeValue::Float(a + b as f32),
-                (RuntimeValue::String(a), RuntimeValue::String(b))   => RuntimeValue::String(format!("{}{}", a, b)),
-                _ => panic!("invalid operands for addition"),
-            }
-        }
-        Operation::Sub(l, r) => {
-            let left = self.interpret_expr(*l);
-            let right = self.interpret_expr(*r);
-            match (left, right) {
-                (RuntimeValue::Integer(a), RuntimeValue::Integer(b)) => RuntimeValue::Integer(a - b),
-                (RuntimeValue::Float(a), RuntimeValue::Float(b))     => RuntimeValue::Float(a - b),
-                (RuntimeValue::Integer(a), RuntimeValue::Float(b))   => RuntimeValue::Float(a as f32 - b),
-                (RuntimeValue::Float(a), RuntimeValue::Integer(b))   => RuntimeValue::Float(a - b as f32),
-                _ => panic!("invalid operands for subtraction"),
-            }
-        }
-        Operation::Mul(l, r) => {
-            let left = self.interpret_expr(*l);
-            let right = self.interpret_expr(*r);
-            match (left, right) {
-                (RuntimeValue::Integer(a), RuntimeValue::Integer(b)) => RuntimeValue::Integer(a * b),
-                (RuntimeValue::Float(a), RuntimeValue::Float(b))     => RuntimeValue::Float(a * b),
-                (RuntimeValue::Integer(a), RuntimeValue::Float(b))   => RuntimeValue::Float(a as f32 * b),
-                (RuntimeValue::Float(a), RuntimeValue::Integer(b))   => RuntimeValue::Float(a * b as f32),
-                _ => panic!("invalid operands for multiplication"),
-            }
-        }
-        Operation::Div(l, r) => {
-            let left = self.interpret_expr(*l);
-            let right = self.interpret_expr(*r);
-            match (left, right) {
-                (RuntimeValue::Integer(a), RuntimeValue::Integer(b)) => {
-                    if b == 0 { panic!("division by zero"); }
-                    RuntimeValue::Integer(a / b)
+    fn interpret_operation(&mut self, op: &Operation) -> RuntimeValue {
+        match op {
+            Operation::Add(l, r) => {
+                let left = self.interpret_expr(*l);
+                let right = self.interpret_expr(*r);
+                match (left, right) {
+                    (RuntimeValue::Integer(a), RuntimeValue::Integer(b)) => RuntimeValue::Integer(a + b),
+                    (RuntimeValue::Float(a), RuntimeValue::Float(b))     => RuntimeValue::Float(a + b),
+                    (RuntimeValue::Integer(a), RuntimeValue::Float(b))   => RuntimeValue::Float(a as f32 + b),
+                    (RuntimeValue::Float(a), RuntimeValue::Integer(b))   => RuntimeValue::Float(a + b as f32),
+                    (RuntimeValue::String(a), RuntimeValue::String(b))   => RuntimeValue::String(format!("{}{}", a, b)),
+                    _ => panic!("invalid operands for addition"),
                 }
-                (RuntimeValue::Float(a), RuntimeValue::Float(b)) => {
-                    if b == 0.0 { panic!("division by zero"); }
-                    RuntimeValue::Float(a / b)
+            }
+            Operation::Sub(l, r) => {
+                let left = self.interpret_expr(*l);
+                let right = self.interpret_expr(*r);
+                match (left, right) {
+                    (RuntimeValue::Integer(a), RuntimeValue::Integer(b)) => RuntimeValue::Integer(a - b),
+                    (RuntimeValue::Float(a), RuntimeValue::Float(b))     => RuntimeValue::Float(a - b),
+                    (RuntimeValue::Integer(a), RuntimeValue::Float(b))   => RuntimeValue::Float(a as f32 - b),
+                    (RuntimeValue::Float(a), RuntimeValue::Integer(b))   => RuntimeValue::Float(a - b as f32),
+                    _ => panic!("invalid operands for subtraction"),
                 }
-                (RuntimeValue::Integer(a), RuntimeValue::Float(b)) => {
-                    if b == 0.0 { panic!("division by zero"); }
-                    RuntimeValue::Float(a as f32 / b)
+            }
+            Operation::Mul(l, r) => {
+                let left = self.interpret_expr(*l);
+                let right = self.interpret_expr(*r);
+                match (left, right) {
+                    (RuntimeValue::Integer(a), RuntimeValue::Integer(b)) => RuntimeValue::Integer(a * b),
+                    (RuntimeValue::Float(a), RuntimeValue::Float(b))     => RuntimeValue::Float(a * b),
+                    (RuntimeValue::Integer(a), RuntimeValue::Float(b))   => RuntimeValue::Float(a as f32 * b),
+                    (RuntimeValue::Float(a), RuntimeValue::Integer(b))   => RuntimeValue::Float(a * b as f32),
+                    _ => panic!("invalid operands for multiplication"),
                 }
-                (RuntimeValue::Float(a), RuntimeValue::Integer(b)) => {
-                    if b == 0 { panic!("division by zero"); }
-                    RuntimeValue::Float(a / b as f32)
+            }
+            Operation::Div(l, r) => {
+                let left = self.interpret_expr(*l);
+                let right = self.interpret_expr(*r);
+                match (left, right) {
+                    (RuntimeValue::Integer(a), RuntimeValue::Integer(b)) => {
+                        if b == 0 { panic!("division by zero"); }
+                        RuntimeValue::Integer(a / b)
+                    }
+                    (RuntimeValue::Float(a), RuntimeValue::Float(b)) => {
+                        if b == 0.0 { panic!("division by zero"); }
+                        RuntimeValue::Float(a / b)
+                    }
+                    (RuntimeValue::Integer(a), RuntimeValue::Float(b)) => {
+                        if b == 0.0 { panic!("division by zero"); }
+                        RuntimeValue::Float(a as f32 / b)
+                    }
+                    (RuntimeValue::Float(a), RuntimeValue::Integer(b)) => {
+                        if b == 0 { panic!("division by zero"); }
+                        RuntimeValue::Float(a / b as f32)
+                    }
+                    _ => panic!("invalid operands for division"),
                 }
-                _ => panic!("invalid operands for division"),
             }
-        }
-        Operation::Mod(l, r) => {
-            let left = self.interpret_expr(*l);
-            let right = self.interpret_expr(*r);
-            match (left, right) {
-                (RuntimeValue::Integer(a), RuntimeValue::Integer(b)) => {
-                    if b == 0 { panic!("modulo by zero"); }
-                    RuntimeValue::Integer(a % b)
+            Operation::Mod(l, r) => {
+                let left = self.interpret_expr(*l);
+                let right = self.interpret_expr(*r);
+                match (left, right) {
+                    (RuntimeValue::Integer(a), RuntimeValue::Integer(b)) => {
+                        if b == 0 { panic!("modulo by zero"); }
+                        RuntimeValue::Integer(a % b)
+                    }
+                    (RuntimeValue::Float(a), RuntimeValue::Float(b)) => {
+                        if b == 0.0 { panic!("modulo by zero"); }
+                        RuntimeValue::Float(a % b)
+                    } (RuntimeValue::Integer(a), RuntimeValue::Float(b)) => {
+                        if b == 0.0 { panic!("modulo by zero"); }
+                        RuntimeValue::Float(a as f32 % b)
+                    }
+                    (RuntimeValue::Float(a), RuntimeValue::Integer(b)) => {
+                        if b == 0 { panic!("modulo by zero") }
+                        RuntimeValue::Float(a % b as f32)
+                    }
+                    _ => panic!("invalid operands for modulo"),
                 }
-                (RuntimeValue::Float(a), RuntimeValue::Float(b)) => {
-                    if b == 0.0 { panic!("modulo by zero"); }
-                    RuntimeValue::Float(a % b)
-                } (RuntimeValue::Integer(a), RuntimeValue::Float(b)) => {
-                    if b == 0.0 { panic!("modulo by zero"); }
-                    RuntimeValue::Float(a as f32 % b)
+            }
+            Operation::Equal(l, r) => {
+                let left = self.interpret_expr(*l);
+                let right = self.interpret_expr(*r);
+                RuntimeValue::Bool(left == right)
+            }
+            Operation::NotEqual(l, r) => {
+                let left = self.interpret_expr(*l);
+                let right = self.interpret_expr(*r);
+                RuntimeValue::Bool(left != right)
+            }
+            Operation::Less(l, r) => {
+                let left = self.interpret_expr(*l);
+                let right = self.interpret_expr(*r);
+                match (left, right) {
+                    (RuntimeValue::Integer(a), RuntimeValue::Integer(b)) => RuntimeValue::Bool(a < b),
+                    (RuntimeValue::Float(a), RuntimeValue::Float(b))     => RuntimeValue::Bool(a < b),
+                    (RuntimeValue::Integer(a), RuntimeValue::Float(b))   => RuntimeValue::Bool((a as f32) < b),
+                    (RuntimeValue::Float(a), RuntimeValue::Integer(b))   => RuntimeValue::Bool(a < (b as f32)),
+                    _ => panic!("invalid operands for less than comparison"),
                 }
-                (RuntimeValue::Float(a), RuntimeValue::Integer(b)) => {
-                    if b == 0 { panic!("modulo by zero") }
-                    RuntimeValue::Float(a % b as f32)
+            }
+            Operation::LessEqual(l, r) => {
+                let left = self.interpret_expr(*l);
+                let right = self.interpret_expr(*r);
+                match (left, right) {
+                    (RuntimeValue::Integer(a), RuntimeValue::Integer(b)) => RuntimeValue::Bool(a <= b),
+                    (RuntimeValue::Float(a), RuntimeValue::Float(b))     => RuntimeValue::Bool(a <= b),
+                    (RuntimeValue::Integer(a), RuntimeValue::Float(b))   => RuntimeValue::Bool((a as f32) <= b),
+                    (RuntimeValue::Float(a), RuntimeValue::Integer(b))   => RuntimeValue::Bool(a <= (b as f32)),
+                    _ => panic!("invalid operands for '<=' comparison"),
                 }
-                _ => panic!("invalid operands for modulo"),
             }
-        }
-        Operation::Equal(l, r) => {
-            let left = self.interpret_expr(*l);
-            let right = self.interpret_expr(*r);
-            RuntimeValue::Bool(left == right)
-        }
-        Operation::NotEqual(l, r) => {
-            let left = self.interpret_expr(*l);
-            let right = self.interpret_expr(*r);
-            RuntimeValue::Bool(left != right)
-        }
-        Operation::Less(l, r) => {
-            let left = self.interpret_expr(*l);
-            let right = self.interpret_expr(*r);
-            match (left, right) {
-                (RuntimeValue::Integer(a), RuntimeValue::Integer(b)) => RuntimeValue::Bool(a < b),
-                (RuntimeValue::Float(a), RuntimeValue::Float(b))     => RuntimeValue::Bool(a < b),
-                (RuntimeValue::Integer(a), RuntimeValue::Float(b))   => RuntimeValue::Bool((a as f32) < b),
-                (RuntimeValue::Float(a), RuntimeValue::Integer(b))   => RuntimeValue::Bool(a < (b as f32)),
-                _ => panic!("invalid operands for less than comparison"),
+            Operation::Greater(l, r) => {
+                let left = self.interpret_expr(*l);
+                let right = self.interpret_expr(*r);
+                match (left, right) {
+                    (RuntimeValue::Integer(a), RuntimeValue::Integer(b)) => RuntimeValue::Bool(a > b),
+                    (RuntimeValue::Float(a), RuntimeValue::Float(b))     => RuntimeValue::Bool(a > b),
+                    (RuntimeValue::Integer(a), RuntimeValue::Float(b))   => RuntimeValue::Bool((a as f32) > b),
+                    (RuntimeValue::Float(a), RuntimeValue::Integer(b))   => RuntimeValue::Bool(a > (b as f32)),
+                    _ => panic!("invalid operands for greater than comparison"),
+                }
             }
-        }
-        Operation::LessEqual(l, r) => {
-            let left = self.interpret_expr(*l);
-            let right = self.interpret_expr(*r);
-            match (left, right) {
-                (RuntimeValue::Integer(a), RuntimeValue::Integer(b)) => RuntimeValue::Bool(a <= b),
-                (RuntimeValue::Float(a), RuntimeValue::Float(b))     => RuntimeValue::Bool(a <= b),
-                (RuntimeValue::Integer(a), RuntimeValue::Float(b))   => RuntimeValue::Bool((a as f32) <= b),
-                (RuntimeValue::Float(a), RuntimeValue::Integer(b))   => RuntimeValue::Bool(a <= (b as f32)),
-                _ => panic!("invalid operands for '<=' comparison"),
+            Operation::GreaterEqual(l, r) => {
+                let left = self.interpret_expr(*l);
+                let right = self.interpret_expr(*r);
+                match (left, right) {
+                    (RuntimeValue::Integer(a), RuntimeValue::Integer(b)) => RuntimeValue::Bool(a >= b),
+                    (RuntimeValue::Float(a), RuntimeValue::Float(b))     => RuntimeValue::Bool(a >= b),
+                    (RuntimeValue::Integer(a), RuntimeValue::Float(b))   => RuntimeValue::Bool((a as f32) >= b),
+                    (RuntimeValue::Float(a), RuntimeValue::Integer(b))   => RuntimeValue::Bool(a >= (b as f32)),
+                    _ => panic!("invalid operands for greater than or equal comparison"),
+                }
             }
-        }
-        Operation::Greater(l, r) => {
-            let left = self.interpret_expr(*l);
-            let right = self.interpret_expr(*r);
-            match (left, right) {
-                (RuntimeValue::Integer(a), RuntimeValue::Integer(b)) => RuntimeValue::Bool(a > b),
-                (RuntimeValue::Float(a), RuntimeValue::Float(b))     => RuntimeValue::Bool(a > b),
-                (RuntimeValue::Integer(a), RuntimeValue::Float(b))   => RuntimeValue::Bool((a as f32) > b),
-                (RuntimeValue::Float(a), RuntimeValue::Integer(b))   => RuntimeValue::Bool(a > (b as f32)),
-                _ => panic!("invalid operands for greater than comparison"),
+            Operation::Or(l, r) => {
+                let left = self.interpret_expr(*l);
+                let right = self.interpret_expr(*r);
+                match (left, right) {
+                    (RuntimeValue::Bool(a), RuntimeValue::Bool(b)) => RuntimeValue::Bool(a || b),
+                    _ => panic!("invalid operands for logical OR (expected booleans)"),
+                }
             }
-        }
-        Operation::GreaterEqual(l, r) => {
-            let left = self.interpret_expr(*l);
-            let right = self.interpret_expr(*r);
-            match (left, right) {
-                (RuntimeValue::Integer(a), RuntimeValue::Integer(b)) => RuntimeValue::Bool(a >= b),
-                (RuntimeValue::Float(a), RuntimeValue::Float(b))     => RuntimeValue::Bool(a >= b),
-                (RuntimeValue::Integer(a), RuntimeValue::Float(b))   => RuntimeValue::Bool((a as f32) >= b),
-                (RuntimeValue::Float(a), RuntimeValue::Integer(b))   => RuntimeValue::Bool(a >= (b as f32)),
-                _ => panic!("invalid operands for greater than or equal comparison"),
+            Operation::And(l, r) => {
+                let left = self.interpret_expr(*l);
+                let right = self.interpret_expr(*r);
+                match (left, right) {
+                    (RuntimeValue::Bool(a), RuntimeValue::Bool(b)) => RuntimeValue::Bool(a && b),
+                    _ => panic!("invalid operands for logical AND (expected booleans)"),
+                }
             }
-        }
-        Operation::Or(l, r) => {
-            let left = self.interpret_expr(*l);
-            let right = self.interpret_expr(*r);
-            match (left, right) {
-                (RuntimeValue::Bool(a), RuntimeValue::Bool(b)) => RuntimeValue::Bool(a || b),
-                _ => panic!("invalid operands for logical OR (expected booleans)"),
-            }
-        }
-        Operation::And(l, r) => {
-            let left = self.interpret_expr(*l);
-            let right = self.interpret_expr(*r);
-            match (left, right) {
-                (RuntimeValue::Bool(a), RuntimeValue::Bool(b)) => RuntimeValue::Bool(a && b),
-                _ => panic!("invalid operands for logical AND (expected booleans)"),
-            }
-        }
-        Operation::Not(expr) => {
-            let value = self.interpret_expr(*expr);
-            match value {
-                RuntimeValue::Bool(b) => RuntimeValue::Bool(!b),
-                _ => panic!("invalid operand for logical NOT (expected boolean)"),
+            Operation::Not(expr) => {
+                let value = self.interpret_expr(*expr);
+                match value {
+                    RuntimeValue::Bool(b) => RuntimeValue::Bool(!b),
+                    _ => panic!("invalid operand for logical NOT (expected boolean)"),
+                }
             }
         }
     }
-}
 }
 

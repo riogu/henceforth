@@ -58,6 +58,9 @@ impl<'a> Interpreter<'a> {
     pub fn curr_local_vars(&self) -> &HashMap<VarId, RuntimeValue>  {
         &self.call_stack.last().expect("call stack shouldn't be empty").locals
     }
+    pub fn curr_local_vars_mut(&mut self) -> &mut HashMap<VarId, RuntimeValue>  {
+        &mut self.call_stack.last_mut().expect("call stack shouldn't be empty").locals
+    }
 }
 
 impl<'a> Interpreter<'a> {
@@ -177,7 +180,13 @@ impl<'a> Interpreter<'a> {
             Statement::Break    => self.curr_call_frame_mut().flow_state = CtrlFlowState::Break,
             Statement::Continue => self.curr_call_frame_mut().flow_state = CtrlFlowState::Continue,
             Statement::Assignment { value, identifier, is_move } => {
-                todo!();
+                let new_value = self.interpret_expr(*value);
+                let Expression::Identifier(id) = self.arena.get_expr(*identifier) else { panic!() };
+                match id {
+                    Identifier::GlobalVar(var_id) => self.globals.insert(*var_id, new_value),
+                    Identifier::Variable(var_id)  => self.curr_local_vars_mut().insert(*var_id, new_value),
+                    Identifier::Function(func_id) => { panic!("[internal error] functions aren't assignable (fix StackAnalyzer)") }
+                };
             }
             Statement::Empty => {}
         }

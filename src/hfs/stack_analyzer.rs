@@ -262,6 +262,9 @@ impl<'a> StackAnalyzer<'a> {
                     self.arena.last_or_error("expected value in stack for copy assignment statement.")
                 };
                 let identifier = self.resolve_expr(identifier);
+                if let Expression::Identifier(Identifier::Function(func_id)) = self.arena.get_expr(identifier) {
+                    panic!("cannot assign value to a function")
+                }
                 self.arena.alloc_stmt(Statement::Assignment { value, identifier, is_move }, token)
             }
         }

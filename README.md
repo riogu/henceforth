@@ -1,6 +1,8 @@
 # henceforth
 https://riogu.github.io/henceforth
-Example:
+
+
+# Example:
 ```rs
 // Calculate factorial using stack operations
 fn factorial: (i32) -> (i32) {

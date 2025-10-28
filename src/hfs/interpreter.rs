@@ -97,15 +97,26 @@ impl<'a> Interpreter<'a> {
     fn interpret_stmt(&mut self, stmt_id: StmtId) {
         match self.arena.get_stmt(stmt_id) {
             Statement::If { cond, body, else_stmt } => {
-                let RuntimeValue::Bool(val) = self.interpret_expr(*cond) else {
+                let RuntimeValue::Bool(if_cond) = self.interpret_expr(*cond) else {
                     panic!("expected boolean value on stack for if statement condition")
                 };
+                if self.curr_call_frame().should_break || self.curr_call_frame().should_return {
+                    return;
+                }
+                if if_cond {
+                    self.interpret_stmt(*body);
+                } else if let Some(else_stmt) = else_stmt {
+                    match else_stmt {
+                        ElseStmt::ElseIf(stmt_id) | ElseStmt::Else(stmt_id) => self.interpret_stmt(*stmt_id),
+                    }
+                }
             }
             Statement::While { cond, body } => loop {
                 let RuntimeValue::Bool(while_cond) = self.interpret_expr(*cond) else {
                     panic!("expected boolean value on stack for while loop condition")
                 };
-                if !while_cond {
+                if !while_cond || self.curr_call_frame().should_break || self.curr_call_frame().should_return {
+                    self.curr_call_frame_mut().should_break = false;
                     break
                 } 
                 self.interpret_stmt(*body);
@@ -133,9 +144,7 @@ impl<'a> Interpreter<'a> {
                                 _ => self.interpret_stmt(stmt_id)
                             }
                         }
-                        TopLevelId::FunctionDecl(func_id) => { 
-                            // do nothing, function declarations are already handled
-                        }
+                        TopLevelId::FunctionDecl(func_id) => { /* do nothing, function declarations are already handled */ }
                     }
                 }
                 todo!();

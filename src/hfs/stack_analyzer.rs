@@ -286,6 +286,11 @@ impl<'a> StackAnalyzer<'a> {
                 self.arena.alloc_stmt(Statement::StackBlock(expr_ids), token)
             }
             UnresolvedStatement::BlockScope(unresolved_top_level_ids, scope_kind) => {
+                // FIXME: this needs to stop when it finds return/continue/break, just like 
+                // the interpreter does, otherwise it will count the stack depth wrong
+                // move the validation of each branch to StackAnalyzer, and dont perform any checks
+                // in the interpreter. there, you just want to run whatever node you recieve,
+                // because we have checked that every branch is valid beforehand here
                 let top_level_ids = if scope_kind != ScopeKind::Function {
                     // Functions should push their own scopes
                     self.scope_resolution_stack.push_scope(scope_kind);

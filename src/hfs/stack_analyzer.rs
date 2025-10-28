@@ -25,7 +25,7 @@ impl<'a> AstArena<'a> {
     }
     pub fn pop2_or_error(&mut self, msg: &str) -> (ExprId, ExprId) { 
         // should start using our own error structs instead
-        let rhs = self.hfs_stack.pop().unwrap_or_else(|| panic!("{}", msg));
+       let rhs = self.hfs_stack.pop().unwrap_or_else(|| panic!("{}", msg));
         let lhs = self.hfs_stack.pop().unwrap_or_else(|| panic!("{}", msg));
         (lhs, rhs)
     }
@@ -236,7 +236,7 @@ impl<'a> StackAnalyzer<'a> {
                     self.resolve_top_level(unresolved_top_level_ids)
                 };
 
-                self.arena.alloc_stmt(Statement::BlockScope(top_level_ids), token)
+                self.arena.alloc_stmt(Statement::BlockScope(top_level_ids, scope_kind), token)
             }
             UnresolvedStatement::Return => {
                 self.arena.validate_return_stack(self.scope_resolution_stack.get_curr_func_return_type());

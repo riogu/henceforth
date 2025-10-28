@@ -1,4 +1,4 @@
-use crate::hfs::token::*;
+use crate::hfs::{token::*, ScopeKind};
 use std::collections::HashMap;
 
 // ============================================================================
@@ -96,7 +96,7 @@ pub enum Statement {
         body: StmtId, // points to BlockScope
     },
     StackBlock(Vec<ExprId>),
-    BlockScope(Vec<TopLevelId>),
+    BlockScope(Vec<TopLevelId>, ScopeKind),
     Return,
     Break,
     Continue,

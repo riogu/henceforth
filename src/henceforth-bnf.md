@@ -1,3 +1,4 @@
+```html
 <program> ::= <top_level_node>*
 
 <top_level_node> ::= <var_decl>
@@ -73,3 +74,4 @@
 <boolean> ::= "true" | "false"
 
 <string> ::= '"' [^"]* '"'
+```

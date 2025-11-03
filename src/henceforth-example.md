@@ -2,34 +2,18 @@
 ```cpp
 import hfs;
 
-fn func: (i32 (i32 i32) (i32 (i32 f32 str)) ) -> () {
-    let var: (i32 i32 i32); 
-    @( (1 2 3) ) &= var;
-    
-    @( (4 5 6) -> (...)func ); // do you want to allow this?
-    // this just pushes var to the stack which is a tuple
-    // to allow this ill make the ast backtrack 
-    // because this will be parsed as a function call initially
+
+
+fn foo: (i32 i32 str) -> (i32 i32 i32) {
+
+    let var: f32;
+    @(1 2 3.0) &= var;
+    @(1 2 3.0) := var;
+    @(1 2 3.0) &> func;
+    @(1 2 3.0) :> func;
 
 }
 
-fn main: () -> (i32) {
-    @(1 2 3);
-    @((...)func);
-    // i propose that (...) does the following:
-    // - checks the type of whatever comes after it
-    // - uses that information [in this case, (i32 i32 i23)] to turn the top of the stack
-    // into a tuple. that means that:
-    @(1 2 3 (...)); // is valid.
-    // after this, the stack is:
-    @((1 2 3)); // one tuple element
-    // this also means that:
-    let var: (i32 i32 i32);
-    @(1 2 3);
-    := var; // would also work the same way (this operator is a convenient shorthand we provide
-    // so := var basically acts the same as consuming the stack directly with (...)var;
-}   // this way, our (...) operator is always the same, consistent operation.
-    // it consumes the stack and pushes a tuple with what it consumed.
 
 fn func: (i32 i32 f32) -> (str i32 i32 i32) {
     let var: i32; // file_name%func()::var

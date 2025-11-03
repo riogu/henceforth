@@ -23,6 +23,7 @@
               | <break_stmt>
               | <continue_stmt>
               | <assignment_stmt>
+              | <function_call>
               | ";"
 
 <if_stmt> ::= "if" <stack_block> <block_scope> <else_stmt>?
@@ -44,13 +45,14 @@
 
 <assignment_stmt> ::= "&=" <identifier>
                     | ":=" <identifier>
+<function_call> ::= "&>" <identifier>
+                  | ":>" <identifier>
 
 <stack_expression> ::= <stack_operation>
                      | <identifier>
                      | <literal>
-                     | <function_call_or_tuple_expr>
+                     | <tuple_expression>
 
-<function_call_or_tuple_expr> ::= <tuple_expression> <identifier>?
 
 <tuple_expression> ::= "(" <stack_expression>* ")"
 

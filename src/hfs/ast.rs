@@ -44,8 +44,7 @@ pub enum Expression {
     Operation(Operation),
     Identifier(Identifier),
     Literal(Literal),
-    FunctionCall{ args: Vec<ExprId>, identifier: FuncId, return_values: Vec<ExprId>},
-    Tuple { expressions: Vec<ExprId>, variadic: bool },
+    Tuple { expressions: Vec<ExprId> },
     Parameter(TypeId), // will be converted into another expression
     ReturnValue(TypeId), // we replace this ExprId with another one when computed
 }
@@ -102,6 +101,7 @@ pub enum Statement {
     Continue,
     Empty,
     Assignment { value: ExprId, identifier: ExprId, is_move: bool },
+    FunctionCall { args: Vec<ExprId>, identifier: FuncId, return_values: Vec<ExprId>, is_move: bool},
 }
 
 
@@ -171,15 +171,7 @@ impl<'a> AstArena<'a> {
         self.hfs_stack.push(id);
         id
     }
-    pub fn alloc_function_call(&mut self, expr: Expression, token: Token<'a>) -> ExprId {
-        // this is the only time so far that we dont want to push to the hfs stack 
-        // because we automatically unwrap return types into the stack
-        // so we cant just "push one function call"
-        if !matches!(expr, Expression::FunctionCall { .. }) { panic!("alloc_function_call requires a FunctionCall expression"); }
-        let id = ExprId(self.exprs.len());
-        self.exprs.push(expr);
-        id
-    }
+
     pub fn alloc_stmt(&mut self, stmt: Statement, token: Token<'a>) -> StmtId {
         let id = StmtId(self.stmts.len());
         self.stmts.push(stmt);

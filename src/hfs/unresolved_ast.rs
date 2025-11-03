@@ -30,8 +30,7 @@ pub enum UnresolvedExpression {
     Operation(UnresolvedOperation),
     Identifier(String),
     Literal(Literal),
-    FunctionCall { identifier: UnresolvedExprId }, // tuple comes from stack
-    Tuple { expressions: Vec<UnresolvedExprId>, variadic: bool, called_func_name: Option<String>}
+    Tuple { expressions: Vec<UnresolvedExprId>}
 }
 
 
@@ -55,6 +54,11 @@ pub enum UnresolvedStatement {
     Assignment { 
         identifier: UnresolvedExprId, // just the name
         is_move: bool,      // true for &=, false for :=
+        // value comes from stack
+    },
+    FunctionCall { 
+        identifier: UnresolvedExprId,
+        is_move: bool,      // true for &>, false for :>
         // value comes from stack
     },
 }

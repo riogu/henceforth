@@ -64,13 +64,7 @@ impl<'a> AstArena<'a> {
                 Literal::String(_) => self.string_type(),
                 Literal::Bool(_) => self.bool_type(),
             },
-
-            Expression::FunctionCall { identifier, args, return_values } => {
-                let func = self.get_func(identifier);
-                func.return_type
-            }
-
-            Expression::Tuple { expressions, variadic } => {
+            Expression::Tuple { expressions } => {
                 let token = self.get_expr_token(expr_id).clone();
                 // Build tuple type from element types
                 let mut element_types = Vec::new();

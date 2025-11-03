@@ -13,7 +13,6 @@ pub enum RuntimeValue {
     String(String),
     Bool(bool),
     Tuple(Vec<RuntimeValue>),
-    ReturnedStack(Vec<RuntimeValue>),
 }
 impl RuntimeValue {
     pub fn default(hfs_type: &Type) -> RuntimeValue {
@@ -151,14 +150,7 @@ impl<'a> Interpreter<'a> {
             Statement::StackBlock(expressions) => {
                 for expr_id in expressions {
                     let val = self.interpret_expr(*expr_id);
-                    if let RuntimeValue::ReturnedStack(runtime_values) = val {
-                        for val in runtime_values {
-                            // merge returned tuples into the caller's stack
-                            self.curr_call_frame_mut().return_stack.push(val);
-                        }
-                    } else {
-                        self.curr_call_frame_mut().return_stack.push(val);
-                    }
+                    self.curr_call_frame_mut().return_stack.push(val);
                 }
             }
             Statement::BlockScope(top_level_nodes, scope_kind) => {
@@ -190,6 +182,13 @@ impl<'a> Interpreter<'a> {
                 };
             }
             Statement::Empty => {}
+            Statement::FunctionCall { args, identifier, return_values, is_move } =>{
+                let return_values = self.call_declared_function(*identifier, args.clone());
+                for val in return_values {
+                    // merge returned tuples into the caller's stack
+                    self.curr_call_frame_mut().return_stack.push(val);
+                }
+            }
         }
     }
 
@@ -198,11 +197,7 @@ impl<'a> Interpreter<'a> {
             Expression::Operation(op) => self.interpret_operation(op),
             Expression::Identifier(id) => self.interpret_identifier(id),
             Expression::Literal(lit) => self.interpret_literal(lit),
-            Expression::FunctionCall { args, identifier, ..} => {
-                let return_values = self.call_declared_function(*identifier, args.clone());
-                RuntimeValue::ReturnedStack(return_values)
-            }
-            Expression::Tuple { expressions, variadic } => {
+            Expression::Tuple { expressions } => {
                 let mut tuple_values = Vec::<RuntimeValue>::new();
                 for &expr_id in expressions {
                     tuple_values.push(self.interpret_expr(expr_id))

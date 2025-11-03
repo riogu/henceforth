@@ -70,6 +70,9 @@ pub enum TokenKind {
     // Assignment
     CopyAssign, // &=
     MoveAssign, // :=
+    // Call
+    CopyCall, // &=
+    MoveCall, // :=
     // Delimiters
     LeftParen,    // (
     RightParen,   // )
@@ -174,6 +177,8 @@ impl fmt::Display for TokenKind {
             TokenKind::Bool => write!(f, "bool"),
             TokenKind::Float => write!(f, "f32"),
             TokenKind::Identifier(_) => todo!(),
+            TokenKind::CopyCall => todo!(),
+            TokenKind::MoveCall => todo!(),
         }
     }
 }

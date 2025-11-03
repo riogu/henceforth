@@ -44,7 +44,7 @@ The following operators are allowed on the stack:
 
 ## Stack manipulation builtins
 
-There are several keywords for working with the stack. These are denoted by the `@` prefix and work with the stack despite not being in a stack block.
+There are several keywords for working with the stack. These are denoted by the `@` prefix and work with the stack despite not always being in a stack block.
 ```
 @pop // removes the argument from the stack
 @pop_all // removes everything from the stack

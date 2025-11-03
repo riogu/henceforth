@@ -185,7 +185,7 @@
 <li><code>str</code> - UTF-8 encoded text</li>
 <li><code>bool</code> - <code>true</code> or <code>false</code></li>
 </ul>
-<p>For grouping values, there are also tuples, denoted by parentheses around values. Note that the <code>(...)</code> notation for function calls creates a tuple and passes it to the function, however, <code>...</code> is not allowed in any other context.</p>
+<p>For grouping values, there are also tuples, denoted by parentheses around values.</p>
 <h2 id="type-annotations"><a class="header" href="#type-annotations">Type Annotations</a></h2>
 <p>Henceforth doesn't have type inference, and all types <strong>must</strong> be specified.</p>
 <pre><code>fn foo: (i32 str) -&gt; (bool) { ... }
@@ -193,9 +193,10 @@
          parameters   return type
 </code></pre>
 <h2 id="type-conversions"><a class="header" href="#type-conversions">Type Conversions</a></h2>
-<p>There is only one standard library function to convert types:</p>
-<pre><code>fn show: (i32) -&gt; str {...}  
-fn show: (f32) -&gt; str {...}  
+<p>There are only three standard library functions to convert types:</p>
+<pre><code>fn i32_to_str: (i32) -&gt; str {...}  
+fn f32_to_str: (f32) -&gt; str {...}  
+fn bool_to_str: (bool) -&gt; str {...}  
 </code></pre>
 <p>Operators implicitly convert between <code>i32</code> and <code>f32</code>.</p>
 <h2 id="type-compatibility"><a class="header" href="#type-compatibility">Type Compatibility</a></h2>

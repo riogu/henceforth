@@ -211,7 +211,18 @@
 || // pops two bools, pushes true if any of them are true and false otherwise
 &amp;&amp; // pops two bools, pushes true if both are true and false otherwise
 </code></pre>
-<p>Stack manipulation functions are defined in the <a href="./stdlib.html">standard library</a>.</p>
+<h2 id="stack-manipulation-builtins"><a class="header" href="#stack-manipulation-builtins">Stack manipulation builtins</a></h2>
+<p>There are several keywords for working with the stack. These are denoted by the <code>@</code> prefix and work with the stack despite not being in a stack block.</p>
+<pre><code>@pop // removes the argument from the stack
+@pop_all // removes everything from the stack
+@dup // duplicates its argument
+@swap // swaps its arguments
+@over // copies second element to top of stack
+@rot // moves third element to the top of the stack
+@rrot // moves first element to the third position of the stack (equivalent to calling rot twice)
+@nip // pops second element from the stack
+@tuck // copies first element to the third position of the stack
+</code></pre>
 <h2 id="common-mistakes"><a class="header" href="#common-mistakes">Common mistakes</a></h2>
 <p>Some common mistakes when using the stack include:</p>
 <pre><code>@(+) // ERROR: stack underflow

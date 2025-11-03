@@ -185,7 +185,8 @@ They are used in the following way:</p>
 }
 </code></pre>
 <p>As expected, the body of the loop will be repeated while the condition is still true.
-The one thing Henceforth does differently from other stack-based is that, when looping, the stack is restored to its original state before the loop, so every iteration works the same way. It also pops the result of evaluating the condition when entering the body, and when leaving the body after the condition is evaluated as <code>false</code>.</p>
+The one thing Henceforth does differently from other stack-based languages is that, when looping, it pops the result of evaluating the condition when entering the body, and when leaving the body after the condition is evaluated as <code>false</code>.
+<strong>In Henceforth, a while loop must not change the depth of the stack.</strong></p>
 <p>This means that, if something changes the stack inside the loop's body, it must be stored in a variable before the next iteration.</p>
 <p>The following keywords can be used inside <code>while</code> loops to change its execution:</p>
 <ul>
@@ -206,18 +207,20 @@ They are used in the following way:</p>
 }
 </code></pre>
 <p>This syntax mirrors imperative syntax from languages like C, instead of the confusing <code>&lt;condition&gt; if &lt;body&gt; then ...</code> of Forth.</p>
-<p>Like in <code>while</code> statements, whenever a new branch is entered, the stack is restored to its previous state before the loop, and the result of evaluating the condition is always popped automatically.</p>
+<p>Like in <code>while</code> statements, whenever a new branch is entered, the stack is restored to its previous state before the loop, and the result of evaluating the condition is always popped automatically.
+In an <code>if</code> statement, all branches must have the same stack depth.</p>
 <h2 id="example"><a class="header" href="#example">Example</a></h2>
 <p>This all may seem very confusing, let's look at a simple FizzBuzz program.</p>
 <pre><code>fn fizz_buzz: (i32) -&gt; (str) {
 	if @(15 % 0 ==) {
-		@("fizzbuzz") return;
+		@("fizzbuzz");
 	} else if @(3 % 0 ==) {
-		@("fizz") return;
+		@("fizz");
 	} else if @(5 % 0 ==) {
-		@("buzz") return;
+		@("buzz");
 	} else {
-		@((...)pop "no fizzbuzz") return;
+		@pop;
+		@("no fizzbuzz");
 	}
 }
 </code></pre>
@@ -233,7 +236,8 @@ They are used in the following way:</p>
 <p>Essentially, control flow boils down to these rules:</p>
 <ul>
 <li>Every branch of an <code>if</code> statement and every iteration of a <code>while</code> loop, starts with the same exact stack</li>
-<li>When entering the body of any control flow construct, the result of evaluating a condition is popped</li>
+<li>All branches of an <code>if</code> statement must have the same final stack depth</li>
+<li>A <code>while</code> loop must maintain stack depth</li>
 <li>When entering the <code>else</code> branch of an <code>if</code> statement, since there's no condition, everything stays there</li>
 </ul>
 

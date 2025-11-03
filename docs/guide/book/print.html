@@ -191,7 +191,8 @@ touch main.hfs
 <p>Open <code>main.hfs</code> in your favorite text editor and add the following code:</p>
 <pre><code>// main.hfs
 fn main: () -&gt; () {
-  @(("Hello, world!")print (...)pop) return;
+  @("Hello, world!") &amp;&gt; print;
+  @pop;
 }
 </code></pre>
 <p>This simple program prints "Hello, world!" to the terminal. If you don't understand some of the syntax, you can learn about it in the next section, or in the language reference.</p>
@@ -208,20 +209,17 @@ fn main: () -&gt; () {
 <p>Now that you wrote and ran a Hello World program, let's dive into something a bit more involved.</p>
 <p>Create a new directory, or just use the one from the previous step. Then, create a file called <code>calculator.hfs</code>.</p>
 <p>Add the following code to it:</p>
-<pre><code>fn add: (i32 i32) -&gt; (i32) {
-  return;
-}
+<pre><code>fn add: (i32 i32) -&gt; (i32) {}
 </code></pre>
 <p>Currently, this code won't run, but let's break down what's happening.</p>
 <ul>
 <li><code>fn</code> declares a function</li>
 <li><code>add</code> is the function's name</li>
 <li>After the colon, we have the function signature, in this case <code>(i32 i32) -&gt; (i32)</code>. This function takes two 32 bit ints, and returns one 32 bit int. In Henceforth, arguments don't have names - they're accessed from the stack instead (More on this below).</li>
-<li>Inside the function body, denoted by curly braces, <code>return</code> ends the function's execution. (Note: semicolon rules are covered in the Language Reference)</li>
 </ul>
 <p>Now, let's complete this function:</p>
 <pre><code>fn add: (i32 i32) -&gt; (i32) {
-  @(+) return;
+  @(+);
 }
 </code></pre>
 <ul>
@@ -243,33 +241,40 @@ fn main: () -&gt; () {
 </ul>
 <p>Now, to finish this, let's make our main function:</p>
 <pre><code>...
-
 fn main: () -&gt; () {
-  @("5 + 3 = " ((5 3)add)show +);
-  @((...)print ()pop_all) return;
+  @("5 + 3 = " 5 3);
+  &amp;&gt; add;
+  &amp;&gt; i32_to_str;
+  @(+);
+  &amp;&gt; print;
+  @pop_all;
 }
 </code></pre>
 <ul>
 <li>We create our function as before, <code>main</code> takes no arguments and has no return type.</li>
-<li>We add the string <code>"5 + 3 = "</code> to the stack, followed by calling <code>add</code> with arguments <code>5</code> and <code>3</code> using the syntax <code>(5 3)add</code> - in Henceforth, arguments come before the function name. We then pass that to <code>show</code>, which converts a number into a string.
+<li>We add the string <code>"5 + 3 = "</code> to the stack, followed by <code>5</code> and <code>3</code>.</li>
+<li>Then, we call <code>add</code>, moving the arguments with the <code>&amp;&gt;</code> operator.</li>
+<li>We now call <code>i32_to_str</code>, which converts a number into a string, also moving the argument.
 <strong>Stack state:</strong></li>
 </ul>
 <pre><code>["5 + 3 = ", "8"]
 </code></pre>
 <ul>
 <li>Since <code>print</code> only takes one argument, we concatenate the strings with <code>+</code>, similarly to how we added numbers.</li>
-<li>We call <code>print</code> with <code>(...)print</code>. The <code>(...)</code> tells Henceforth to use whatever values are already on the stack (our concatenated string) as arguments, rather than pushing new values first.</li>
-<li>After that, since <code>main</code> doesn't return anything but might have leftover values on the stack, we use <code>pop_all</code> to clear the stack before returning. (Note: <code>()</code> means pop_all takes no arguments)</li>
-<li>At the end, we return from our main function, finishing the program's execution.</li>
+<li>We call <code>print</code>, moving its arguments, then we use the <code>@pop_all</code> keyword to pop the string we just printed.</li>
 </ul>
 <p>Here's the complete program:</p>
 <pre><code>fn add: (i32 i32) -&gt; (i32) {
-  @(+) return;
+  @(+);
 }
 
 fn main: () -&gt; () {
-  @("5 + 3 = " ((5 3)add)show +);
-  @((...)print ()pop_all) return;
+  @("5 + 3 = " 5 3);
+  &amp;&gt; add;
+  &amp;&gt; i32_to_str;
+  @(+);
+  &amp;&gt; print;
+  @pop_all;
 }
 </code></pre>
 <p>Now, run it with <code>henceforth calculator.hfs</code>. The expected output should be:</p>

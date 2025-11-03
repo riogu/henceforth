@@ -279,7 +279,8 @@ touch main.hfs
               </p>
               <pre><code>// main.hfs
 fn main: () -&gt; () {
-  @(("Hello, world!")print (...)pop) return;
+  @("Hello, world!") &amp;&gt; print;
+  @pop;
 }
 </code></pre>
               <p>

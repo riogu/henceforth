@@ -1,5 +1,5 @@
 
-fn main: () -> (i32) {
+fn main: () -> () {
 	let copy: i32;
 	let move: i32;
 	@(5) := copy;

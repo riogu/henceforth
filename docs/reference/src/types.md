@@ -9,7 +9,7 @@ Henceforth has four basic types:
 - `str` - UTF-8 encoded text
 - `bool` - `true` or `false`
 
-For grouping values, there are also tuples, denoted by parentheses around values. Note that the `(...)` notation for function calls creates a tuple and passes it to the function, however, `...` is not allowed in any other context.
+For grouping values, there are also tuples, denoted by parentheses around values. 
 
 ## Type Annotations
 Henceforth doesn't have type inference, and all types **must** be specified.
@@ -20,10 +20,11 @@ fn foo: (i32 str) -> (bool) { ... }
 ```
 
 ## Type Conversions
-There is only one standard library function to convert types:
+There are only three standard library functions to convert types:
 ```
-fn show: (i32) -> str {...}  
-fn show: (f32) -> str {...}  
+fn i32_to_str: (i32) -> str {...}  
+fn f32_to_str: (f32) -> str {...}  
+fn bool_to_str: (bool) -> str {...}  
 ```
 
 Operators implicitly convert between `i32` and `f32`.

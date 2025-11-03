@@ -21,7 +21,7 @@ Despite its low-level feel, Henceforth is statically typed with types like `i32`
 ### Functions with Stack-Based Arguments
 ```
 fn add: (i32 i32) -> (i32) {
-  @(+) return;
+  @(+); 
 }
 ```
 
@@ -32,8 +32,7 @@ fn add: (i32 i32) -> (i32) {
 
 ### Several Ways to Call Functions
 ```
-@((5 3)add) // Explicit arguments
-@(5 3 (...)add) // Implicit arguments (values already on stack)
-@(5 (... 3)add) // Partially implicit arguments (first value already on stack)
+@(5 3) :> add; // copies the arguments
+@(5 3) &> add; // moves the arguments
 ```
 

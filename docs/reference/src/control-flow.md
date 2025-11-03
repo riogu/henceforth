@@ -11,7 +11,8 @@ while @(<condition>) {
 }
 ```
 As expected, the body of the loop will be repeated while the condition is still true.
-The one thing Henceforth does differently from other stack-based is that, when looping, the stack is restored to its original state before the loop, so every iteration works the same way. It also pops the result of evaluating the condition when entering the body, and when leaving the body after the condition is evaluated as `false`.
+The one thing Henceforth does differently from other stack-based languages is that, when looping, it pops the result of evaluating the condition when entering the body, and when leaving the body after the condition is evaluated as `false`.
+__In Henceforth, a while loop must not change the depth of the stack.__
 
 This means that, if something changes the stack inside the loop's body, it must be stored in a variable before the next iteration.
 
@@ -37,6 +38,7 @@ if @(<condition1>) {
 This syntax mirrors imperative syntax from languages like C, instead of the confusing `<condition> if <body> then ...` of Forth.
 
 Like in `while` statements, whenever a new branch is entered, the stack is restored to its previous state before the loop, and the result of evaluating the condition is always popped automatically.
+In an `if` statement, all branches must have the same stack depth.
 
 ## Example
 
@@ -44,13 +46,14 @@ This all may seem very confusing, let's look at a simple FizzBuzz program.
 ```
 fn fizz_buzz: (i32) -> (str) {
 	if @(15 % 0 ==) {
-		@("fizzbuzz") return;
+		@("fizzbuzz");
 	} else if @(3 % 0 ==) {
-		@("fizz") return;
+		@("fizz");
 	} else if @(5 % 0 ==) {
-		@("buzz") return;
+		@("buzz");
 	} else {
-		@((...)pop "no fizzbuzz") return;
+		@pop;
+		@("no fizzbuzz");
 	}
 }
 ```
@@ -64,5 +67,6 @@ Let's trace the program's execution:
 
 Essentially, control flow boils down to these rules:
 - Every branch of an `if` statement and every iteration of a `while` loop, starts with the same exact stack
-- When entering the body of any control flow construct, the result of evaluating a condition is popped
+- All branches of an `if` statement must have the same final stack depth
+- A `while` loop must maintain stack depth
 - When entering the `else` branch of an `if` statement, since there's no condition, everything stays there

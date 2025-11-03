@@ -20,7 +20,8 @@ Open `main.hfs` in your favorite text editor and add the following code:
 ```
 // main.hfs
 fn main: () -> () {
-  @(("Hello, world!")print (...)pop) return;
+  @("Hello, world!") &> print;
+  @pop;
 }
 ```
 

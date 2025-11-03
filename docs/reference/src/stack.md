@@ -42,7 +42,20 @@ The following operators are allowed on the stack:
 && // pops two bools, pushes true if both are true and false otherwise
 ```
 
-Stack manipulation functions are defined in the [standard library](./stdlib.md).
+## Stack manipulation builtins
+
+There are several keywords for working with the stack. These are denoted by the `@` prefix and work with the stack despite not being in a stack block.
+```
+@pop // removes the argument from the stack
+@pop_all // removes everything from the stack
+@dup // duplicates its argument
+@swap // swaps its arguments
+@over // copies second element to top of stack
+@rot // moves third element to the top of the stack
+@rrot // moves first element to the third position of the stack (equivalent to calling rot twice)
+@nip // pops second element from the stack
+@tuck // copies first element to the third position of the stack
+```
 
 ## Common mistakes
 

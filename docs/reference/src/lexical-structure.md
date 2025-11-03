@@ -1,4 +1,4 @@
-#T Lexical Structure
+# Lexical Structure
 This section describes the basic lexical elements that make up Henceforth source code.
 
 ## Comments
@@ -89,6 +89,15 @@ i32
 f32
 str
 bool
+@pop
+@pop_all
+@dup
+@swap
+@over
+@rot
+@rrot
+@nip
+@tuck
 ```
 
 ## Operators
@@ -129,4 +138,6 @@ Henceforth provides several categories of operators.
 ;    statement terminator
 :=   copy top value to variable
 &=   pop to variable
+:>   copy arguments to function call   
+&>   move arguments to function call
 ```

@@ -176,6 +176,123 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="lexical-structure"><a class="header" href="#lexical-structure">Lexical Structure</a></h1>
+<p>This section describes the basic lexical elements that make up Henceforth source code.</p>
+<h2 id="comments"><a class="header" href="#comments">Comments</a></h2>
+<p>Line comments are indicated by <code>//</code>. Block comments are opened with <code>/*</code> and closed with. <code>*/</code>, and can be nested.</p>
+<pre><code>  // this is a comment
+
+  /*
+    this is also a comment
+  */
+
+  /*
+    /*
+        this is a nested comment
+    */
+    this is still a comment
+  */
+</code></pre>
+<h2 id="identifiers"><a class="header" href="#identifiers">Identifiers</a></h2>
+<p>Function and variable identifiers can contain <code>a-z</code>, <code>A-Z</code>, <code>0-9</code> and <code>_</code>, except for the first character, which can't be a number.</p>
+<pre><code>add // valid
+getValue2 // valid
+_private // valid
+
+2var // invalid (starts with number)
+my-function // invalid (has hyphen)
+hello world // invalid (has space)
+</code></pre>
+<h2 id="literals"><a class="header" href="#literals">Literals</a></h2>
+<p>Integer literals represent whole numbers:</p>
+<pre><code>42
+-17
+1000000
+</code></pre>
+<p>Floating-point literals represent decimal numbers:</p>
+<pre><code>3.14
+-0.5
+2.0
+</code></pre>
+<p>String literals are enclosed in double quotes:</p>
+<pre><code>"Hello, World!"
+""
+"Line 1\n Line 2"
+</code></pre>
+<p>The following escape sequences are allowed:</p>
+<pre><code>\n newline
+\t tab
+\\ backslash
+\" double quote
+\r carriage return
+</code></pre>
+<p>Boolean literals represent truth values:</p>
+<pre><code>true
+false
+</code></pre>
+<p>Tuple literals group other literals together:</p>
+<pre><code>(5 3 "string")
+(5.25 "test" true)
+</code></pre>
+<h2 id="keywords"><a class="header" href="#keywords">Keywords</a></h2>
+<p>The following identifiers are reserved as keywords and can't be used as an identifier.</p>
+<pre><code>fn
+while
+continue
+break
+return
+let
+if
+else
+false
+true
+i32
+f32
+str
+bool
+@pop
+@pop_all
+@dup
+@swap
+@over
+@rot
+@rrot
+@nip
+@tuck
+</code></pre>
+<h2 id="operators"><a class="header" href="#operators">Operators</a></h2>
+<p>Henceforth provides several categories of operators.</p>
+<p><strong>Arithmetic Operators</strong></p>
+<pre><code>+    addition
+-    subtraction
+*    multiplication
+/    division
+%    modulo
+</code></pre>
+<p><strong>Comparison Operators</strong></p>
+<pre><code>==   equal to
+!=   not equal to
+&lt;    less than
+&gt;    greater than
+&lt;=   less than or equal to
+&gt;=   greater than or equal to
+</code></pre>
+<p><strong>Logical Operators</strong></p>
+<pre><code>&amp;&amp;   logical AND
+||   logical OR
+!    logical NOT
+</code></pre>
+<p><strong>Special Syntax</strong></p>
+<pre><code>@    stack block indicator
+()   tuple constructor/stack block delimiter
+:    function signature separator
+-&gt;   return type indicator/argument redirection
+{}   block delimiters
+;    statement terminator
+:=   copy top value to variable
+&amp;=   pop to variable
+:&gt;   copy arguments to function call   
+&amp;&gt;   move arguments to function call
+</code></pre>
 
                     </main>
 

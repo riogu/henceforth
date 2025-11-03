@@ -176,6 +176,70 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="control-flow"><a class="header" href="#control-flow">Control Flow</a></h1>
+<p>In other stack-based languages, control flow is handled within the stack, leading to some questionable syntax (<em>looking at you, Forth</em>). Henceforth fixes this by handling it imperatively, leading to a more familiar way of doing things.</p>
+<h2 id="while-loops"><a class="header" href="#while-loops">While loops</a></h2>
+<p><code>while</code> loops are the primary way of repeating things in Henceforth, since <code>for</code> loops don't exist.
+They are used in the following way:</p>
+<pre><code>while @(&lt;condition&gt;) {
+  &lt;body&gt;
+}
+</code></pre>
+<p>As expected, the body of the loop will be repeated while the condition is still true.
+The one thing Henceforth does differently from other stack-based languages is that, when looping, it pops the result of evaluating the condition when entering the body, and when leaving the body after the condition is evaluated as <code>false</code>.
+<strong>In Henceforth, a while loop must not change the depth of the stack.</strong></p>
+<p>This means that, if something changes the stack inside the loop's body, it must be stored in a variable before the next iteration.</p>
+<p>The following keywords can be used inside <code>while</code> loops to change its execution:</p>
+<ul>
+<li><code>break</code> - leaves the loop entirely</li>
+<li><code>continue</code> - skips the rest of the body's execution, starting the next iteration</li>
+</ul>
+<h2 id="if-statements"><a class="header" href="#if-statements">If statements</a></h2>
+<p><code>if</code> statements can be used to conditionally perform operations.
+They are used in the following way:</p>
+<pre><code>if @(&lt;condition1&gt;) {
+  &lt;if-body&gt;
+} else if @(&lt;condition2&gt;) {
+  &lt;else-if-body&gt;
+} else if ... {
+  ...
+} else {
+  &lt;else-body&gt;
+}
+</code></pre>
+<p>This syntax mirrors imperative syntax from languages like C, instead of the confusing <code>&lt;condition&gt; if &lt;body&gt; then ...</code> of Forth.</p>
+<p>Like in <code>while</code> statements, whenever a new branch is entered, the stack is restored to its previous state before the loop, and the result of evaluating the condition is always popped automatically.
+In an <code>if</code> statement, all branches must have the same stack depth.</p>
+<h2 id="example"><a class="header" href="#example">Example</a></h2>
+<p>This all may seem very confusing, let's look at a simple FizzBuzz program.</p>
+<pre><code>fn fizz_buzz: (i32) -&gt; (str) {
+	if @(15 % 0 ==) {
+		@("fizzbuzz");
+	} else if @(3 % 0 ==) {
+		@("fizz");
+	} else if @(5 % 0 ==) {
+		@("buzz");
+	} else {
+		@pop;
+		@("no fizzbuzz");
+	}
+}
+</code></pre>
+<p>Let's trace the program's execution:</p>
+<ul>
+<li>When entering the <code>if</code> statement the stack contains only the argument.</li>
+<li>The condition's stack block is executed, leaving <code>true</code> or <code>false</code> in the stack.</li>
+<li>Assuming the evaluated condition was true, when entering the body, this value is popped, so we add <code>"fizzbuzz"</code> to the stack and return with a stack that matches the expected return type.</li>
+<li>If the condition was false, we move on to the next branch. The stack is restored to just having the argument, and the condition is evaluated in the same way as before.</li>
+<li>When reaching the <code>else</code>, the stack only contains the argument, and since there is no condition, it stays there while entering the body, so we have to pop it.</li>
+<li>We then push the string <code>"no fizzbuzz"</code> and return as expected.</li>
+</ul>
+<p>Essentially, control flow boils down to these rules:</p>
+<ul>
+<li>Every branch of an <code>if</code> statement and every iteration of a <code>while</code> loop, starts with the same exact stack</li>
+<li>All branches of an <code>if</code> statement must have the same final stack depth</li>
+<li>A <code>while</code> loop must maintain stack depth</li>
+<li>When entering the <code>else</code> branch of an <code>if</code> statement, since there's no condition, everything stays there</li>
+</ul>
 
                     </main>
 

@@ -176,6 +176,20 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="standard-library-functions"><a class="header" href="#standard-library-functions">Standard Library Functions</a></h1>
+<p>Henceforth contains many functions in the standard library that allow for more abstraction out-of-the-box.</p>
+<h2 id="string-manipulation-and-io-functions"><a class="header" href="#string-manipulation-and-io-functions">String Manipulation and IO Functions</a></h2>
+<p>Currently, the Henceforth standard library only contains three functions for string manipulation:</p>
+<pre><code>fn i32_to_str: (i32) -&gt; str;
+fn i32_to_str: (f32) -&gt; str;
+fn bool_to_str: (bool) -&gt; str;
+</code></pre>
+<p>This converts an <code>i32</code>, <code>f32</code> or <code>bool</code> into a string.
+A function like this goes hand-in-hand with IO, for which Henceforth contains two functions:</p>
+<pre><code>fn print: (str) -&gt; (str);
+fn print_stack: () -&gt; ();
+</code></pre>
+<p><code>print_stack</code> differs from other functions as it affects the caller's entire stack, without explicitly passing it, printing it in reverse order (bottom to top), and works with any type.
+<code>print</code> simply prints its argument.</p>
 
                     </main>
 
@@ -185,9 +199,6 @@
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next prefetch" href="syntax.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
-                                <i class="fa fa-angle-right"></i>
-                            </a>
 
                         <div style="clear: both"></div>
                     </nav>
@@ -199,9 +210,6 @@
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next prefetch" href="syntax.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
-                        <i class="fa fa-angle-right"></i>
-                    </a>
             </nav>
 
         </div>

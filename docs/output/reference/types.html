@@ -176,6 +176,31 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="types"><a class="header" href="#types">Types</a></h1>
+<p>Henceforth's simple type system with static typing separates it from other stack-based languages, allowing for a more user-friendly experience.</p>
+<h2 id="primitive-types"><a class="header" href="#primitive-types">Primitive Types</a></h2>
+<p>Henceforth has four basic types:</p>
+<ul>
+<li><code>i32</code> - 32-bit signed integer</li>
+<li><code>f32</code> - 32-bit floating-point</li>
+<li><code>str</code> - UTF-8 encoded text</li>
+<li><code>bool</code> - <code>true</code> or <code>false</code></li>
+</ul>
+<p>For grouping values, there are also tuples, denoted by parentheses around values.</p>
+<h2 id="type-annotations"><a class="header" href="#type-annotations">Type Annotations</a></h2>
+<p>Henceforth doesn't have type inference, and all types <strong>must</strong> be specified.</p>
+<pre><code>fn foo: (i32 str) -&gt; (bool) { ... }
+         ^^^^^^^      ^^^^
+         parameters   return type
+</code></pre>
+<h2 id="type-conversions"><a class="header" href="#type-conversions">Type Conversions</a></h2>
+<p>There are only three standard library functions to convert types:</p>
+<pre><code>fn i32_to_str: (i32) -&gt; str {...}  
+fn f32_to_str: (f32) -&gt; str {...}  
+fn bool_to_str: (bool) -&gt; str {...}  
+</code></pre>
+<p>Operators implicitly convert between <code>i32</code> and <code>f32</code>.</p>
+<h2 id="type-compatibility"><a class="header" href="#type-compatibility">Type Compatibility</a></h2>
+<p>Being statically typed, Henceforth validates stack operations and function calls before running the program.</p>
 
                     </main>
 

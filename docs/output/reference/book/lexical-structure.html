@@ -175,8 +175,8 @@
 
                 <div id="content" class="content">
                     <main>
-                        <p>#T Lexical Structure
-This section describes the basic lexical elements that make up Henceforth source code.</p>
+                        <h1 id="lexical-structure"><a class="header" href="#lexical-structure">Lexical Structure</a></h1>
+<p>This section describes the basic lexical elements that make up Henceforth source code.</p>
 <h2 id="comments"><a class="header" href="#comments">Comments</a></h2>
 <p>Line comments are indicated by <code>//</code>. Block comments are opened with <code>/*</code> and closed with. <code>*/</code>, and can be nested.</p>
 <pre><code>  // this is a comment
@@ -249,6 +249,15 @@ i32
 f32
 str
 bool
+@pop
+@pop_all
+@dup
+@swap
+@over
+@rot
+@rrot
+@nip
+@tuck
 </code></pre>
 <h2 id="operators"><a class="header" href="#operators">Operators</a></h2>
 <p>Henceforth provides several categories of operators.</p>
@@ -281,6 +290,8 @@ bool
 ;    statement terminator
 :=   copy top value to variable
 &amp;=   pop to variable
+:&gt;   copy arguments to function call   
+&amp;&gt;   move arguments to function call
 </code></pre>
 
                     </main>

@@ -188,8 +188,7 @@ touch main.hfs
 <p>Open <code>main.hfs</code> in your favorite text editor and add the following code:</p>
 <pre><code>// main.hfs
 fn main: () -&gt; () {
-  @("Hello, world!") &amp;&gt; print;
-  @pop;
+  @(("Hello, world!")print (...)pop) return;
 }
 </code></pre>
 <p>This simple program prints "Hello, world!" to the terminal. If you don't understand some of the syntax, you can learn about it in the next section, or in the language reference.</p>

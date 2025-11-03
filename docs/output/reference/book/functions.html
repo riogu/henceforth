@@ -190,42 +190,38 @@ fn &lt;name&gt;: (&lt;argument types&gt;) -&gt; (&lt;return types&gt;) {
 </code></pre>
 <p>They must be declared on a global scope.</p>
 <h2 id="how-function-calls-affect-the-stack"><a class="header" href="#how-function-calls-affect-the-stack">How function calls affect the stack</a></h2>
-<p>There are three ways a function can be called:</p>
-<pre><code>@((1 2 3)foo); // explicit arguments
-@((...)foo); // implicit arguments, if arguments are already on the stack before the function call
-@((... 2 3)foo); // partially implicit arguments, if some of the arguments are already on the stack
+<p>There are two operators to call a function:</p>
+<pre><code>@(1 2 3) :&gt; foo;
+@(1 2 3) &amp;&gt; foo;
 </code></pre>
-<p>Function calls are seamlessly integrated with the type system, as passing arguments has the same syntax as creating a tuple. This means that all functions take a single tuple as an argument, and that tuple is popped and destructured when entering the function's context.</p>
-<p>The <code>...</code> syntax is a special tuple operator that only works with function calls. It essentially completes the function signature with values from the stack.</p>
+<p>The <code>:&gt;</code> operator copies the arguments, keeping them in the stack, and the <code>&amp;&gt;</code> operator moves the arguments, removing them from the stack. This syntax closely resembles the <code>:=</code> and <code>&amp;=</code> operators, and their behavior is similar.</p>
 <h2 id="how-context-switches-between-function-calls"><a class="header" href="#how-context-switches-between-function-calls">How context switches between function calls</a></h2>
 <p>In Henceforth, functions have separate stacks, and these stacks are merged between function calls.
-Here's an example using the standard library function <code>dup</code> to illustrate this:</p>
-<pre><code>fn dup: (i32) -&gt; (i32 i32) {
+Here's an example of a function that mimics the functionality of the <code>@dup</code> keyword.</p>
+<pre><code>fn duplicate: (i32) -&gt; (i32 i32) {
   let temp: i32;
   := temp;
-  @(temp) return;
+  @(temp);
 }
 
 fn main: () -&gt; () {
-  @((5)dup);
-  @(()pop_all) return;
+  @(5) &amp;&gt; duplicate;
+  @pop_all;
 }
 </code></pre>
 <p>Now we can trace the program's execution:</p>
 <ul>
 <li>When <code>main</code> (the entry point for any Henceforth program) starts running, the stack is empty.</li>
-<li>When calling <code>dup</code> with the argument <code>5</code>, the following happens:
+<li>When calling <code>duplicate</code> with the argument <code>5</code>, the following happens:
 <ul>
-<li><code>5</code> is pushed into the stack of <code>main</code></li>
-<li>A tuple is created with the previous value. Now the stack contains <code>[(5)]</code></li>
-<li>The function <code>dup</code> is pushed, and since it's a function, immediately pops along with its arguments, signaling the start of <code>dup</code>'s execution</li>
+<li><code>5</code> is pushed into the stack of <code>main</code>, then we call dup by moving its argument with <code>&amp;&gt;</code>.</li>
 </ul>
 </li>
-<li>When switching to the context of <code>dup</code>, the <code>main</code> stack is now empty, and the popped arguments are destructured and pushed into <code>dup</code>'s stack, which now contains <code>[5]</code> (note the lack of tuple)</li>
-<li>The function then creates a variable, copies the top of the stack (<code>5</code>) into it, and pushes the variable on the stack, essentially duplicating the value. Now the stack of <code>dup</code> contains <code>[5, 5]</code></li>
-<li>When calling return, a tuple is implicitly created with the entire stack of <code>dup</code>, and is compared against the expected return type (also a tuple). The stack of <code>dup</code>, before returning, contains <code>[(5 5)]</code>. This matches the expected return type, so we can switch back to the previous context of <code>main</code>.</li>
-<li>When switching context, like before, we destructure the tuple and put it into the stack of <code>main</code>, so now it contains <code>[5, 5]</code>.</li>
-<li>If we tried returning now, the stack would be compared against the return type of main (an empty tuple) and it would fail. To fix that we use <code>pop_all</code> to remove everything from the stack, so we can safely return (note that when we implicitly create a tuple and the stack is empty, the tuple created will be empty).</li>
+<li>When switching to the context of <code>duplicate</code>, the <code>main</code> stack is now empty, and the popped arguments are pushed into <code>duplicate</code>'s stack, which now contains <code>[5]</code>.</li>
+<li>The function then creates a variable, copies the top of the stack (<code>5</code>) into it, and pushes the variable on the stack, essentially duplicating the value. Now the stack of <code>duplicate</code> contains <code>[5, 5]</code></li>
+<li>When finishing <code>duplicate</code>'s execution, <code>return</code> is not necessary, since the function will just return whatever is in the stack when the execution finishes. The <code>return</code> keyword is only necessary for early returns.</li>
+<li>When switching context, like before, we put it into the stack of <code>main</code>, so now it contains <code>[5, 5]</code>.</li>
+<li>If we tried returning now, the stack would be compared against the return type of main and it would fail. To fix that we use <code>@pop_all</code> to remove everything from the stack, so we can safely return.</li>
 </ul>
 
                     </main>

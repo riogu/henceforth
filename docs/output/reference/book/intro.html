@@ -187,20 +187,19 @@ Unlike traditional languages with nested function calls and expressions, Hencefo
 <p>Unlike Forth, where everything is in one stack, Henceforth creates a new stack for every function, merging the callee and caller's stacks when the function is done executing, all done in a way that feels natural.
 Control flow is also handled by the compiler, so that, for example, <strong>every</strong> branch of an if statement starts with the same stack.</p>
 <h3 id="strong-static-typing"><a class="header" href="#strong-static-typing">Strong Static Typing</a></h3>
-<p>Despite its low-level feel, Henceforth is statically typed with types like i32, i64, string, and bool. The type system ensures stack operations are safe and well-defined.</p>
+<p>Despite its low-level feel, Henceforth is statically typed with types like <code>i32</code>, <code>f32</code>, <code>string</code>, and <code>bool</code>. The type system ensures stack operations are safe and well-defined.</p>
 <h2 id="quick-feature-overview"><a class="header" href="#quick-feature-overview">Quick Feature Overview</a></h2>
 <h3 id="functions-with-stack-based-arguments"><a class="header" href="#functions-with-stack-based-arguments">Functions with Stack-Based Arguments</a></h3>
 <pre><code>fn add: (i32 i32) -&gt; (i32) {
-  @(+) return;
+  @(+); 
 }
 </code></pre>
 <h3 id="stack-blocks-for-direct-fine-grained-manipulation"><a class="header" href="#stack-blocks-for-direct-fine-grained-manipulation">Stack Blocks for Direct Fine-grained Manipulation</a></h3>
 <pre><code>@(1 3 + 2 *)  // Push 1, push 3, add, push 2, multiply
 </code></pre>
 <h3 id="several-ways-to-call-functions"><a class="header" href="#several-ways-to-call-functions">Several Ways to Call Functions</a></h3>
-<pre><code>@((5 3)add) // Explicit arguments
-@(5 3 (...)add) // Implicit arguments (values already on stack)
-@(5 (... 3)add) // Partially implicit arguments (first value already on stack)
+<pre><code>@(5 3) :&gt; add; // copies the arguments
+@(5 3) &amp;&gt; add; // moves the arguments
 </code></pre>
 
                     </main>

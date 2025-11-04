@@ -5,11 +5,16 @@ use std::collections::HashMap;
 // Type-safe ID types
 // ============================================================================
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)] pub struct VarId (pub usize);
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)] pub struct FuncId(pub usize);
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)] pub struct ExprId(pub usize);
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)] pub struct StmtId(pub usize);
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)] pub struct TypeId(pub usize);
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct VarId(pub usize);
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct FuncId(pub usize);
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ExprId(pub usize);
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct StmtId(pub usize);
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct TypeId(pub usize);
 
 // ============================================================================
 // AST Node Structures
@@ -45,10 +50,9 @@ pub enum Expression {
     Identifier(Identifier),
     Literal(Literal),
     Tuple { expressions: Vec<ExprId> },
-    Parameter(TypeId), // will be converted into another expression
+    Parameter(TypeId),   // will be converted into another expression
     ReturnValue(TypeId), // we replace this ExprId with another one when computed
 }
-
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TopLevelId {
@@ -68,19 +72,19 @@ pub struct VarDeclaration {
 #[derive(Debug, Clone)]
 pub struct FunctionDeclaration {
     pub name: String,
-    pub param_type: TypeId,     // either a tuple or a single type
-    pub return_type: TypeId,    // either a tuple or a single type
+    pub param_type: TypeId,  // either a tuple or a single type
+    pub return_type: TypeId, // either a tuple or a single type
     pub body: StmtId,
-    pub params: Vec<ExprId>,  // Vec<Expression::Parameter>
+    pub params: Vec<ExprId>, // Vec<Expression::Parameter>
 }
 
 // ============================================================================
-// Statements 
+// Statements
 
 #[derive(Debug)]
 pub enum ElseStmt {
-    ElseIf(StmtId),  // Points to an IfStmt
-    Else(StmtId),    // Points to a BlockScope
+    ElseIf(StmtId), // Points to an IfStmt
+    Else(StmtId),   // Points to a BlockScope
 }
 
 #[derive(Debug)]
@@ -100,10 +104,18 @@ pub enum Statement {
     Break,
     Continue,
     Empty,
-    Assignment { value: ExprId, identifier: ExprId, is_move: bool },
-    FunctionCall { args: Vec<ExprId>, identifier: FuncId, return_values: Vec<ExprId>, is_move: bool},
+    Assignment {
+        value: ExprId,
+        identifier: ExprId,
+        is_move: bool,
+    },
+    FunctionCall {
+        args: Vec<ExprId>,
+        identifier: FuncId,
+        return_values: Vec<ExprId>,
+        is_move: bool,
+    },
 }
-
 
 // -----------------------------------------------------------
 // Types
@@ -156,15 +168,39 @@ pub struct AstArena<'a> {
 impl<'a> AstArena<'a> {
     pub fn new() -> Self {
         let mut arena = Self::default();
-        arena.alloc_type_uncached(Type::Int, Token { kind: TokenKind::Int, source_info: SourceInfo::new(0, 0, 0, "Int")});
-        arena.alloc_type_uncached(Type::Float, Token { kind: TokenKind::Float, source_info: SourceInfo::new(0, 0, 0, "Float")});
-        arena.alloc_type_uncached(Type::Bool, Token { kind: TokenKind::Bool, source_info: SourceInfo::new(0, 0, 0, "Bool")});
-        arena.alloc_type_uncached(Type::String, Token { kind: TokenKind::String, source_info: SourceInfo::new(0, 0, 0, "String")});
+        arena.alloc_type_uncached(
+            Type::Int,
+            Token {
+                kind: TokenKind::Int,
+                source_info: SourceInfo::new(0, 0, 0, "Int"),
+            },
+        );
+        arena.alloc_type_uncached(
+            Type::Float,
+            Token {
+                kind: TokenKind::Float,
+                source_info: SourceInfo::new(0, 0, 0, "Float"),
+            },
+        );
+        arena.alloc_type_uncached(
+            Type::Bool,
+            Token {
+                kind: TokenKind::Bool,
+                source_info: SourceInfo::new(0, 0, 0, "Bool"),
+            },
+        );
+        arena.alloc_type_uncached(
+            Type::String,
+            Token {
+                kind: TokenKind::String,
+                source_info: SourceInfo::new(0, 0, 0, "String"),
+            },
+        );
         arena
     }
 
     pub fn alloc_and_push_to_hfs_stack(&mut self, expr: Expression, token: Token<'a>) -> ExprId {
-        // theres no reason to not push to the stack when making a new expression 
+        // theres no reason to not push to the stack when making a new expression
         // so this is the only method available
         let id = ExprId(self.exprs.len());
         self.exprs.push(expr);
@@ -203,7 +239,7 @@ impl<'a> AstArena<'a> {
         if let Some(&existing_id) = self.type_cache.get(&hfs_type) {
             return existing_id;
         }
-        
+
         // If not, allocate it
         self.alloc_type_uncached(hfs_type, token)
     }
@@ -264,4 +300,3 @@ impl<'a> AstArena<'a> {
         &self.type_tokens[id.0]
     }
 }
-

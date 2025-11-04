@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 // Expression stack methods (used to finish building up the AST)
 // we need to make sure expressions have been pushed throughout the program
 // to do this, we keep track of which expressions have been pushed
@@ -92,9 +94,11 @@ pub struct StackAnalyzer<'a> {
 
 impl<'a> StackAnalyzer<'a> {
     pub fn new(unresolved: UnresolvedAstArena<'a>, file_name: String) -> Self {
+        let mut arena = AstArena::new();
+        arena.types.extend_from_slice(&unresolved.types[4..]);
         Self {
+            arena,
             unresolved_arena: unresolved,
-            arena: AstArena::new(),
             scope_resolution_stack: ScopeStack::new(file_name),
         }
     }
@@ -165,9 +169,9 @@ impl<'a> StackAnalyzer<'a> {
         // we push scopes so the body can solve identifiers
         let func_id = self.push_function_and_scope_and_alloc(&name, func, token); 
         let body = self.resolve_stmt(unresolved_body);
-        self.scope_resolution_stack.pop();
         //------------------------------------------------------------
         self.arena.validate_return_stack(self.scope_resolution_stack.get_curr_func_return_type());
+        self.scope_resolution_stack.pop();
         self.arena.hfs_stack.clear(); // context should be reset after each function!
         func_id
     }

@@ -7,7 +7,7 @@ fn fizz_buzz: (i32) -> (str) {
 		@("buzz");
 	} else {
 		@pop;
-		@("no fizzbuzz") return;
+		@("no fizzbuzz");
 	}
 }
 

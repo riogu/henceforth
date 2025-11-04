@@ -1,6 +1,7 @@
 fn main: () -> () {
 	if @(5 2 >) {
-		@(1 2 3 4 ()pop_all);
+		@(1 2 3 4);
+		@pop_all;
 		return;
 	} else {
 		return;

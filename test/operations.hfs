@@ -7,5 +7,4 @@ fn main: () -> () {
 	@dup;
 	@(|| ! true &&);
 	@pop;
-	return;
 }

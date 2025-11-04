@@ -1,7 +1,9 @@
+use crate::hfs::lexer;
 use crate::hfs::token::Literal;
 use crate::hfs::token::SourceInfo;
 use crate::hfs::token::Token;
 use crate::hfs::token::TokenKind;
+use crate::hfs::VALID_STACK_KEYWORDS;
 use std::{fs, path::PathBuf};
 
 #[derive(Debug)]
@@ -42,7 +44,21 @@ impl Lexer {
                     '}' => TokenKind::RightBrace,
                     ';' => TokenKind::Semicolon,
                     '%' => TokenKind::Percent,
-                    '@' => TokenKind::At,
+                    '@' => {
+                        let mut lit = char.to_string();
+                        while let Some(c) = chars_iter.next_if(|c| {
+                            ('a'..='z').contains(c) || ('A'..='Z').contains(c) || c == &'_'
+                        }) {
+                            lit.push(c);
+                        }
+                        if VALID_STACK_KEYWORDS.contains(&lit.as_str()) {
+                            TokenKind::StackKeyword(lit)
+                        } else if lit.as_str() == "@" {
+                            TokenKind::At
+                        } else {
+                            panic!("lexer error")
+                        }
+                    }
                     '+' => TokenKind::Plus,
                     '.' => {
                         if let Some(_) = chars_iter.next_if_eq(&'.') {
@@ -59,7 +75,11 @@ impl Lexer {
                         if let Some(_) = chars_iter.next_if_eq(&'=') {
                             TokenKind::CopyAssign
                         } else {
-                            TokenKind::Colon
+                            if let Some(_) = chars_iter.next_if_eq(&'>') {
+                                TokenKind::CopyCall
+                            } else {
+                                TokenKind::Colon
+                            }
                         }
                     }
                     '-' => {
@@ -112,7 +132,11 @@ impl Lexer {
                             if let Some(_) = chars_iter.next_if_eq(&'=') {
                                 TokenKind::MoveAssign
                             } else {
-                                panic!("lexer error")
+                                if let Some(_) = chars_iter.next_if_eq(&'>') {
+                                    TokenKind::MoveCall
+                                } else {
+                                    panic!("lexer error")
+                                }
                             }
                         } // &&
                     }
@@ -208,7 +232,8 @@ mod tests {
     use crate::{
         hfs::ast::Type,
         hfs::builder::{
-            ControlFlowOps, FunctionOps, LoopOps, BuilderOperation, StackOps, TokenSequence, VariableOps,
+            BuilderOperation, ControlFlowOps, FunctionOps, LoopOps, StackOps, TokenSequence,
+            VariableOps,
         },
     };
 
@@ -230,7 +255,6 @@ mod tests {
         let expected = TokenSequence::new()
             .func_with("main", None, None)
             .body()
-            .return_statement()
             .end_body()
             .build();
 
@@ -259,7 +283,6 @@ mod tests {
             .push_literal(false)
             .push_literal("test")
             .end_stack_block(false)
-            .return_statement()
             .end_body()
             .build();
 
@@ -275,7 +298,6 @@ mod tests {
             .stack_block()
             .push_literal(4)
             .end_stack_block(false)
-            .return_statement()
             .end_body()
             .build();
 
@@ -291,7 +313,6 @@ mod tests {
             .stack_block()
             .push_function_implicit("pop")
             .end_stack_block(false)
-            .return_statement()
             .end_body()
             .build();
         assert_eq!(tokens, expected);
@@ -307,7 +328,6 @@ mod tests {
             .variable("b", Type::Float)
             .variable("c", Type::String)
             .variable("d", Type::Bool)
-            .return_statement()
             .end_body()
             .build();
 
@@ -327,7 +347,6 @@ mod tests {
             .end_stack_block(false)
             .copy_to("copy")
             .move_to("move")
-            .return_statement()
             .end_body()
             .build();
         assert_eq!(tokens, expected);
@@ -511,8 +530,8 @@ mod tests {
     }
 
     #[test]
-    fn test_partially_implicit_function_calls() {
-        let tokens = tokenize_file_into_kinds("test/partially_implicit_function_calls.hfs");
+    fn test_copy_and_move_func_calls() {
+        let tokens = tokenize_file_into_kinds("test/copy_and_move_func_calls.hfs");
         let expected = TokenSequence::new()
             .func_with(
                 "max",

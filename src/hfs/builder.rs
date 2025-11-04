@@ -1,6 +1,6 @@
 use crate::{
-    hfs::Type,
     hfs::token::{Literal, TokenKind},
+    hfs::Type,
 };
 
 pub enum BuilderOperation {
@@ -20,6 +20,11 @@ pub enum BuilderOperation {
     LessThanEq,
 }
 
+pub enum PassMode {
+    Copy,
+    Move,
+}
+
 pub struct TokenSequence {
     tokens: Vec<TokenKind>,
 }
@@ -31,6 +36,7 @@ pub trait FunctionOps {
         -> Self;
     fn body(self) -> Self;
     fn end_body(self) -> Self;
+    fn call_function(self, name: &str, mode: PassMode) -> Self;
     fn return_statement(self) -> Self;
 }
 
@@ -39,18 +45,13 @@ pub trait StackOps {
     fn end_stack_block(self, semicolon: bool) -> Self;
     fn push_literal<T: Into<Literal>>(self, lit: T) -> Self;
     fn push_operation(self, op: BuilderOperation) -> Self;
-    fn push_function<I>(self, name: &str, args: I, expected_args: usize) -> Self
-    where
-        I: IntoIterator,
-        I::Item: Into<Literal>;
-    fn push_function_implicit(self, name: &str) -> Self;
+    fn push_stack_keyword(self, keyword: &str, semicolon: bool) -> Self;
     fn push_variable(self, name: &str) -> Self;
 }
 
 pub trait VariableOps {
     fn variable(self, name: &str, typename: Type) -> Self;
-    fn move_to(self, name: &str) -> Self;
-    fn copy_to(self, name: &str) -> Self;
+    fn assign_to(self, name: &str, mode: PassMode) -> Self;
 }
 
 pub trait LoopOps {
@@ -92,16 +93,13 @@ impl VariableOps for TokenSequence {
             .push(TokenKind::Semicolon)
     }
 
-    fn move_to(self, name: &str) -> Self {
-        self.push(TokenKind::MoveAssign)
-            .push(TokenKind::Identifier(name.to_string()))
-            .push(TokenKind::Semicolon)
-    }
-
-    fn copy_to(self, name: &str) -> Self {
-        self.push(TokenKind::CopyAssign)
-            .push(TokenKind::Identifier(name.to_string()))
-            .push(TokenKind::Semicolon)
+    fn assign_to(self, name: &str, mode: PassMode) -> Self {
+        match mode {
+            PassMode::Copy => self.push(TokenKind::CopyAssign),
+            PassMode::Move => self.push(TokenKind::MoveAssign),
+        }
+        .push(TokenKind::Identifier(name.to_string()))
+        .push(TokenKind::Semicolon)
     }
 }
 
@@ -178,6 +176,15 @@ impl FunctionOps for TokenSequence {
     fn return_statement(mut self) -> Self {
         self.push(TokenKind::Return).push(TokenKind::Semicolon)
     }
+
+    fn call_function(self, name: &str, mode: PassMode) -> Self {
+        match mode {
+            PassMode::Copy => self.push(TokenKind::CopyCall),
+            PassMode::Move => self.push(TokenKind::MoveCall),
+        }
+        .push(TokenKind::Identifier(name.to_string()))
+        .push(TokenKind::Semicolon)
+    }
 }
 
 impl StackOps for TokenSequence {
@@ -201,30 +208,15 @@ impl StackOps for TokenSequence {
         self.push(op.into())
     }
 
-    fn push_function<I>(mut self, name: &str, args: I, expected_args: usize) -> Self
-    where
-        I: IntoIterator,
-        I::Item: Into<Literal>,
-    {
-        self = self.push(TokenKind::LeftParen);
-        let args: Vec<Literal> = args.into_iter().map(|arg| arg.into()).collect();
-        if args.len() < expected_args {
-            self = self.push(TokenKind::DotDotDot);
-        }
-        for arg in args {
-            self = self.push(TokenKind::Literal(arg));
-        }
-        self.push(TokenKind::RightParen)
-            .push(TokenKind::Identifier(name.to_string()))
-    }
-    fn push_function_implicit(mut self, name: &str) -> Self {
-        self.push(TokenKind::LeftParen)
-            .push(TokenKind::DotDotDot)
-            .push(TokenKind::RightParen)
-            .push(TokenKind::Identifier(name.to_string()))
-    }
-
     fn push_variable(self, name: &str) -> Self {
         self.push(TokenKind::Identifier(name.to_string()))
+    }
+
+    fn push_stack_keyword(mut self, keyword: &str, semicolon: bool) -> Self {
+        self = self.push(TokenKind::StackKeyword(keyword.to_string()));
+        if semicolon {
+            self = self.push(TokenKind::Semicolon);
+        }
+        self
     }
 }

@@ -27,11 +27,16 @@ impl From<bool> for Literal {
     }
 }
 
+pub const VALID_STACK_KEYWORDS: &[&str] = &[
+    "@pop", "@pop_all", "@dup", "@swap", "@over", "@rot", "@rrot", "@nip", "@tuck",
+];
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum TokenKind {
     // Keywords
     Literal(Literal),
     Identifier(String),
+    StackKeyword(String),
     Let,
     Fn,
     If,
@@ -179,6 +184,7 @@ impl fmt::Display for TokenKind {
             TokenKind::Identifier(_) => todo!(),
             TokenKind::CopyCall => todo!(),
             TokenKind::MoveCall => todo!(),
+            TokenKind::StackKeyword(_) => todo!(),
         }
     }
 }
@@ -288,7 +294,10 @@ impl TokenKind {
             TokenKind::Identifier(_) => {
                 panic!("[internal hfs error]: this is not how you convert identifiers to types")
             }
-            _ => panic!("[internal hfs error]: expected token that has a type, got {:?}", self),
+            _ => panic!(
+                "[internal hfs error]: expected token that has a type, got {:?}",
+                self
+            ),
         }
     }
     pub fn is_type(&self) -> bool {

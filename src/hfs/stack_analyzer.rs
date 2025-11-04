@@ -111,11 +111,11 @@ impl<'a> StackAnalyzer<'a> {
 
     fn resolve_top_level(&mut self, nodes: Vec<UnresolvedTopLevelId>) -> Vec<TopLevelId> {
         let mut resolved_nodes = Vec::<TopLevelId>::new();
-        for node in nodes {
+        for node in nodes.clone() {
             let new_node = match node {
                 UnresolvedTopLevelId::VariableDecl(id) => TopLevelId::VariableDecl(self.resolve_var_decl(id)),
                 UnresolvedTopLevelId::FunctionDecl(id) => TopLevelId::FunctionDecl(self.resolve_func_decl(id)),
-                UnresolvedTopLevelId::Statement(_)    => panic!("there are no top level statements."),
+                UnresolvedTopLevelId::Statement(id)    => TopLevelId::Statement(self.resolve_stmt(id)),
             };
             resolved_nodes.push(new_node);
         }

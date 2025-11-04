@@ -283,6 +283,9 @@ mod tests {
             .push_literal("test")
             .end_stack_block(true)
             .end_body()
+            .func_with("main", None, None)
+            .body()
+            .end_body()
             .build();
 
         assert_eq!(tokens, expected);
@@ -298,6 +301,9 @@ mod tests {
             .push_literal(4)
             .end_stack_block(true)
             .end_body()
+            .func_with("main", None, None)
+            .body()
+            .end_body()
             .build();
 
         assert_eq!(tokens, expected);
@@ -310,6 +316,9 @@ mod tests {
             .func_with("no_return_type", Some(vec![Type::Int]), None)
             .body()
             .push_stack_keyword("@pop", true)
+            .end_body()
+            .func_with("main", None, None)
+            .body()
             .end_body()
             .build();
         assert_eq!(tokens, expected);

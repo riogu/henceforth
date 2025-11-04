@@ -1,15 +1,17 @@
 fn fizz_buzz: (i32) -> (str) {
 	if @(15 % 0 ==) {
-		@("fizzbuzz") return;
+		@("fizzbuzz");
 	} else if @(3 % 0 ==) {
-		@("fizz") return;
+		@("fizz");
 	} else if @(5 % 0 ==) {
-		@("buzz") return;
+		@("buzz");
 	} else {
-		@((...)pop "no fizzbuzz") return;
+		@pop;
+		@("no fizzbuzz") return;
 	}
 }
 
 fn main: () -> () {
-	@((530)fizz_buzz (...)pop) return;
+	@(530) &> fizz_buzz;
+	@pop;
 }

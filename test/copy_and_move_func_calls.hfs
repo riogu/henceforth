@@ -1,0 +1,20 @@
+fn max: (i32 i32) -> (i32) {
+	if @(@swap @dup @rot >) {
+		return;
+	} else {
+		@swap @pop;
+	}
+}
+
+fn max3: (i32 i32 i32) -> (i32) {
+	@rrot;
+	&> max;
+	:= max;
+	@swap @pop @swap @pop;
+}
+
+fn main: () -> () {
+	@(50 10 30) &> max3;
+	@pop;
+	return;
+}

@@ -3,5 +3,4 @@ fn main: () -> () {
 	let b: f32;
 	let c: str;
 	let d: bool;
-	return;
 }

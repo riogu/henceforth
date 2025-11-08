@@ -208,6 +208,12 @@ impl<'a> AstArena<'a> {
         id
     }
 
+    pub fn alloc_assignment_expr(&mut self, expr: Expression, token: Token<'a>) -> ExprId {
+        let id = ExprId(self.exprs.len());
+        self.exprs.push(expr);
+        id
+    }
+
     pub fn alloc_stmt(&mut self, stmt: Statement, token: Token<'a>) -> StmtId {
         let id = StmtId(self.stmts.len());
         self.stmts.push(stmt);

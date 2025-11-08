@@ -330,7 +330,7 @@ impl<'a> StackAnalyzer<'a> {
                 } else {
                     self.arena.last_or_error("expected value in stack for copy assignment statement.")
                 };
-                let identifier = self.resolve_expr(identifier);
+                let identifier = self.resolve_var_assignment(identifier);
                 if let Expression::Identifier(Identifier::Function(func_id)) = self.arena.get_expr(identifier) {
                     panic!("cannot assign value to a function")
                 }
@@ -377,6 +377,18 @@ impl<'a> StackAnalyzer<'a> {
                 self.arena.alloc_stmt(Statement::FunctionCall { args: expressions, identifier: func_id, return_values, is_move}, token)
             }
         }
+    }
+
+    fn resolve_var_assignment(&mut self, id: UnresolvedExprId) -> ExprId {
+        let token = self.unresolved_arena.get_unresolved_expr_token(id);
+        match self.unresolved_arena.get_unresolved_expr(id) {
+            UnresolvedExpression::Identifier(identifier) => {
+                let identifier = self.scope_resolution_stack.find_identifier(&identifier);
+                self.arena.alloc_assignment_expr(Expression::Identifier(identifier), token);
+            },
+            _ => { panic!("you're assigning to something that isn't an identifier") }
+        }
+        ExprId(self.arena.exprs.len() - 1)
     }
 
     fn resolve_expr(&mut self, id: UnresolvedExprId) -> ExprId {

@@ -2,27 +2,27 @@
 
 mod hfs {
     pub mod ast;
-    pub mod unresolved_ast;
     pub mod builder;
+    pub mod interpreter;
     pub mod lexer;
     pub mod parser;
-    pub mod interpreter;
+    pub mod scope_stack;
+    pub mod stack_analyzer;
     pub mod token;
     pub mod types;
-    pub mod stack_analyzer;
-    pub mod scope_stack;
-    pub use stack_analyzer::*;
-    pub use scope_stack::*;
+    pub mod unresolved_ast;
     pub use ast::*;
-    pub use unresolved_ast::*;
     pub use builder::*;
+    pub use interpreter::*;
     pub use lexer::*;
     pub use parser::*;
-    pub use interpreter::*;
+    pub use scope_stack::*;
+    pub use stack_analyzer::*;
     pub use token::*;
     pub use types::*;
+    pub use unresolved_ast::*;
 }
-use clap::{Parser, arg};
+use clap::{arg, Parser};
 use std::path::PathBuf;
 
 #[derive(Parser, Debug, Clone)]

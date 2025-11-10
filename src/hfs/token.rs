@@ -133,7 +133,7 @@ impl From<Type> for TokenKind {
 
 use std::fmt;
 
-use crate::{hfs::ast::Type, hfs::builder::BuilderOperation};
+use crate::{hfs::ast::Type, hfs::builder::builder::BuilderOperation};
 
 impl fmt::Display for TokenKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

@@ -231,11 +231,11 @@ mod tests {
 
     use crate::hfs::{
         ast::Type,
-        builder::{
-            BuilderOperation, ControlFlowOps, FunctionOps, LoopOps, StackOps, TokenSequence,
+        builder::builder::{
+            Builder, BuilderOperation, ControlFlowOps, FunctionOps, LoopOps, PassMode, StackOps,
             VariableOps,
         },
-        PassMode,
+        lexer_builder::TokenSequence,
     };
 
     use super::*;

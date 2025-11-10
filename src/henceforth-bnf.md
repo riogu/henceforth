@@ -1,69 +1,71 @@
 ```bnf
-<program> ::= <top_level_node>*
+<program> ::= <top-level-node>*
 
-<top_level_node> ::= <var_decl>
-                   | <function_decl>
+<top-level-node> ::= <var-decl>
+                   | <function-decl>
                    | <statement>
 
-<var_decl> ::= "let" <identifier> ":" <type> ";"
+<var-decl> ::= "let" <identifier> ":" <type> ";"
 
-<function_decl> ::= "fn" <identifier> ":" <signature> <block_scope> 
+<function-decl> ::= "fn" <identifier> ":" <signature> <block-scope> 
 
-<signature> ::= "(" <type_list>? ")" "->" "(" <type_list>? ")"
+<signature> ::= "(" <type-list>? ")" "->" "(" <type-list>? ")"
 
-<type_list> ::= <type> ("," <type>)*
+<type-list> ::= <type> ("," <type>)*
 
 <type> ::= "i32" | "f32" | "bool" | "string"
 
-<statement> ::= <if_stmt>
-              | <while_stmt>
-              | <stack_block>
-              | <block_scope>
-              | <return_stmt>
-              | <break_stmt>
-              | <continue_stmt>
-              | <assignment_stmt>
-              | <function_call>
+<statement> ::= <if-stmt>
+              | <while-stmt>
+              | <stack-block>
+              | <block-scope>
+              | <return-stmt>
+              | <break-stmt>
+              | <continue-stmt>
+              | <assignment-stmt>
+              | <function-call>
+              | <stack-keyword>
               | ";"
 
-<if_stmt> ::= "if" <stack_block> <block_scope> <else_stmt>?
+<if-stmt> ::= "if" <stack-block> <block-scope> <else-stmt>?
 
-<else_stmt> ::= "else" "if" <stack_block>  <block_scope> <else_stmt>?
-              | "else" <block_scope> 
+<else-stmt> ::= "else" "if" <stack-block>  <block-scope> <else-stmt>?
+              | "else" <block-scope> 
 
-<while_stmt> ::= "while" <stack_block>  <block_scope> 
+<while-stmt> ::= "while" <stack-block>  <block-scope> 
 
-<stack_block> ::= "@" "(" <stack_expression>* ")"
+<stack-block> ::= "@" "(" <stack-expression>* ")"
 
-<block_scope> ::= "{" <top_level_node>* "}"
+<block-scope> ::= "{" <top-level-node>* "}"
 
-<return_stmt> ::= "return" ";"
+<return-stmt> ::= "return" ";"
 
-<break_stmt> ::= "break" ";"
+<break-stmt> ::= "break" ";"
 
-<continue_stmt> ::= "continue" ";"
+<continue-stmt> ::= "continue" ";"
 
-<assignment_stmt> ::= "&=" <identifier>
+<assignment-stmt> ::= "&=" <identifier>
                     | ":=" <identifier>
-<function_call> ::= "&>" <identifier>
+<function-call> ::= "&>" <identifier>
                   | ":>" <identifier>
 
-<stack_expression> ::= <stack_operation>
+<stack-expression> ::= <stack-operation>
                      | <identifier>
                      | <literal>
-                     | <tuple_expression>
+                     | <tuple-expression>
+                     | <stack-keyword>
 
 
-<tuple_expression> ::= "(" <stack_expression>* ")"
+<tuple-expression> ::= "(" <stack-expression>* ")"
 
-<tuple_type> ::= "(" <type_list> ")"
+<tuple-type> ::= "(" <type-list> ")"
 
-<stack_operation> ::= <binary_op>
-                    | <unary_op>
+<stack-operation> ::= <binary-op>
+                    | <unary-op>
 
-<binary_op> ::= "+" | "-" | "*" | "/" | ">" | "<" | "==" | "&&" | "||"
+<binary-op> ::= "+" | "-" | "*" | "/" | ">" | "<" | "==" | "&&" | "||"
 
-<unary_op> ::= "!" | "~"
+<unary-op> ::= "!" | "~"
 
 <literal> ::= <number> | <float> | <boolean> | <string>
 
@@ -76,4 +78,6 @@
 <boolean> ::= "true" | "false"
 
 <string> ::= '"' [^"]* '"'
+
+<stack-keyword> ::= @pop | @pop_all
 ```

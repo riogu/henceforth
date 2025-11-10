@@ -31,6 +31,14 @@ impl<'a> Parser<'a> {
             _ => panic!("expected identifier, got {:?}", token.kind),
         }
     }
+
+    fn expect_stack_keyword(&mut self) -> (String, Token<'a>) {
+        let token = self.tokens.next().expect("unexpected end of input");
+        match &token.kind {
+            TokenKind::StackKeyword(name) => (name.clone(), token),
+            _ => panic!("expected stack keyword, got {:?}", token.kind),
+        }
+    }
     fn expect_type(&mut self) -> TypeId {
         let token = self.tokens.peek().expect("unexpected end of input").clone();
         match &token.kind {
@@ -161,6 +169,9 @@ impl<'a> Parser<'a> {
             TokenKind::At => self.stack_block(),
             TokenKind::LeftBrace => self.block_scope(ScopeKind::Block),
             TokenKind::While => self.while_statement(),
+            TokenKind::StackKeyword(_) => {
+                unimplemented!()
+            }
             TokenKind::Break | TokenKind::Continue | TokenKind::Return => {
                 let token = self
                     .tokens
@@ -271,6 +282,9 @@ impl<'a> Parser<'a> {
             .clone();
         match kind {
             kind if kind.is_stack_operator() => self.stack_operation(),
+            TokenKind::StackKeyword(keyword) => {
+                todo!()
+            }
             TokenKind::Identifier(_) => {
                 let (name, token) = self.expect_identifier();
                 self.arena
@@ -409,5 +423,12 @@ impl<'a> Parser<'a> {
             },
             assign_tkn,
         )
+    }
+
+    // <stack-keyword> ::= @pop | @pop_all
+    fn stack_keyword(&mut self) -> UnresolvedStackKeywordId {
+        let (name, token) = self.expect_stack_keyword();
+        self.arena
+            .alloc_unresolved_stack_keyword(UnresolvedStackKeyword { name }, token)
     }
 }

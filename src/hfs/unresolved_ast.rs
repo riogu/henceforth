@@ -94,6 +94,11 @@ pub struct UnresolvedFunctionDeclaration {
     pub body: UnresolvedStmtId, // Uses unresolved ID
 }
 
+#[derive(Debug, Clone)]
+pub struct UnresolvedStackKeyword {
+    pub name: String,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct UnresolvedVarId(pub usize);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -102,6 +107,8 @@ pub struct UnresolvedFuncId(pub usize);
 pub struct UnresolvedExprId(pub usize);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct UnresolvedStmtId(pub usize);
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct UnresolvedStackKeywordId(pub usize);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum UnresolvedTopLevelId {
@@ -121,6 +128,7 @@ pub struct UnresolvedAstArena<'a> {
     pub(crate) unresolved_stmts: Vec<UnresolvedStatement>,
     pub(crate) unresolved_vars: Vec<UnresolvedVarDeclaration>,
     pub(crate) unresolved_functions: Vec<UnresolvedFunctionDeclaration>,
+    pub(crate) unresolved_stack_keywords: Vec<UnresolvedStackKeyword>,
     pub(crate) types: Vec<Type>,
 
     // Token storage
@@ -128,6 +136,7 @@ pub struct UnresolvedAstArena<'a> {
     pub(crate) unresolved_stmt_tokens: Vec<Token<'a>>,
     pub(crate) unresolved_var_tokens: Vec<Token<'a>>,
     pub(crate) unresolved_function_tokens: Vec<Token<'a>>,
+    pub(crate) unresolved_stack_keyword_tokens: Vec<Token<'a>>,
     pub(crate) type_tokens: Vec<Token<'a>>,
 }
 
@@ -216,6 +225,17 @@ impl<'a> UnresolvedAstArena<'a> {
         id
     }
 
+    pub fn alloc_unresolved_stack_keyword(
+        &mut self,
+        keyword: UnresolvedStackKeyword,
+        token: Token<'a>,
+    ) -> UnresolvedStackKeywordId {
+        let id = UnresolvedStackKeywordId(self.unresolved_stack_keywords.len());
+        self.unresolved_stack_keywords.push(keyword);
+        self.unresolved_stack_keyword_tokens.push(token);
+        id
+    }
+
     pub fn alloc_type(&mut self, hfs_type: Type, token: Token<'a>) -> TypeId {
         let id = TypeId(self.types.len());
         self.types.push(hfs_type);
@@ -240,6 +260,13 @@ impl<'a> UnresolvedAstArena<'a> {
         &self.unresolved_functions[id.0]
     }
 
+    pub fn get_unresolved_stack_keyword(
+        &self,
+        id: UnresolvedStackKeywordId,
+    ) -> &UnresolvedStackKeyword {
+        &self.unresolved_stack_keywords[id.0]
+    }
+
     pub fn get_type(&self, id: TypeId) -> &Type {
         &self.types[id.0]
     }
@@ -259,6 +286,10 @@ impl<'a> UnresolvedAstArena<'a> {
 
     pub fn get_unresolved_func_token(&self, id: UnresolvedFuncId) -> Token<'a> {
         self.unresolved_function_tokens[id.0].clone()
+    }
+
+    pub fn get_unresolved_stack_keyword_token(&self, id: UnresolvedStackKeywordId) -> Token<'a> {
+        self.unresolved_stack_keyword_tokens[id.0].clone()
     }
 
     pub fn get_type_token(&self, id: TypeId) -> Token<'a> {

@@ -448,5 +448,4 @@ impl<'a> StackAnalyzer<'a> {
             _ => panic!("missing semantic analysis for unary operation '{:?}'", op)
         }
     }
-
 }

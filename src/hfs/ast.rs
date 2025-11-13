@@ -1,9 +1,10 @@
 use crate::hfs::{token::*, RuntimeValue, ScopeKind};
 use std::collections::HashMap;
 
+// Grabs a signature (a b) -> (a b c) and creates a lambda that applies the stack keyword to a vector of runtme values
 macro_rules! value_effect {
     (_) => {
-        |_types: Vec<RuntimeValue>| -> Vec<RuntimeValue> {
+        |_: Vec<RuntimeValue>| -> Vec<RuntimeValue> {
             vec![]
         }
     };
@@ -23,7 +24,7 @@ macro_rules! value_effect {
 // Grabs a signature with the syntax (a b) -> (a b c) and creates a lambda that performs that operation with a vector of types
 macro_rules! type_effect {
     (_) => {
-        |_types: Vec<TypeId>| -> Vec<Expression> {
+        |_: Vec<TypeId>| -> Vec<Expression> {
             vec![]
         }
     };

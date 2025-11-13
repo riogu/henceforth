@@ -14,6 +14,7 @@ pub enum RuntimeValue {
     Bool(bool),
     Tuple(Vec<RuntimeValue>),
 }
+
 impl RuntimeValue {
     pub fn default(hfs_type: &Type) -> RuntimeValue {
         match hfs_type {
@@ -111,7 +112,7 @@ impl<'a> Interpreter<'a> {
     fn call_declared_function(
         &mut self,
         func_id: FuncId,
-        tuple_args: Vec<ExprId>,
+        tuple_args: Vec<RuntimeValue>,
     ) -> Vec<RuntimeValue> {
         self.call_stack.push(CallFrame {
             func_id,
@@ -233,13 +234,20 @@ impl<'a> Interpreter<'a> {
                 return_values,
                 is_move,
             } => {
+                let args: Vec<RuntimeValue> = args
+                    .iter()
+                    .map(|arg| self.interpret_expr(arg.clone()))
+                    .collect();
                 let return_values = self.call_declared_function(*identifier, args.clone());
                 for val in return_values {
                     // merge returned tuples into the caller's stack
                     self.curr_call_frame_mut().return_stack.push(val);
                 }
             }
-            Statement::StackKeyword { .. } => todo!(),
+            Statement::StackKeyword { name, .. } => {
+                let kw_declaration = self.arena.get_stack_keyword_from_name(name.as_str());
+                let effect = kw_declaration.value_effect;
+            }
         }
     }
 

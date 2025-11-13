@@ -1,9 +1,87 @@
 use crate::hfs::{token::*, ScopeKind};
 use std::collections::HashMap;
 
+// Grabs a signature with the syntax (a b) -> (a b c) and creates a lambda that performs that operation with a vector of types
+macro_rules! effect {
+    (_) => {
+        |_types: Vec<TypeId>| -> Vec<Expression> {
+            vec![]
+        }
+    };
+
+    (($($arg:ident)*) -> ($($return:ident)*)) => {
+        |types: Vec<TypeId>| -> Vec<Expression> {
+            let mut _idx = 0;
+            $(
+                let $arg = types[_idx].clone();
+                _idx += 1;
+            )*
+
+            vec![$(Expression::ReturnValue($return.clone())),*]
+        }
+    };
+}
+
 // ============================================================================
 // Type-safe ID types
 // ============================================================================
+
+const STACK_KEYWORDS: &[StackKeywordDeclaration] = &[
+    StackKeywordDeclaration {
+        name: "@pop",
+        expected_args_size: Some(1),
+        return_size: 0,
+        effect: effect![(a) -> ()],
+    },
+    StackKeywordDeclaration {
+        name: "@pop_all",
+        expected_args_size: None,
+        return_size: 0,
+        effect: effect![_],
+    },
+    StackKeywordDeclaration {
+        name: "@dup",
+        expected_args_size: Some(1),
+        return_size: 2,
+        effect: effect![(a) -> (a a)],
+    },
+    StackKeywordDeclaration {
+        name: "@swap",
+        expected_args_size: Some(2),
+        return_size: 2,
+        effect: effect![(a b) -> (b a)],
+    },
+    StackKeywordDeclaration {
+        name: "@over",
+        expected_args_size: Some(2),
+        return_size: 3,
+        effect: effect![(a b) -> (a b a)],
+    },
+    StackKeywordDeclaration {
+        name: "@rot",
+        expected_args_size: Some(3),
+        return_size: 3,
+        effect: effect![(a b c) -> (b c a)],
+    },
+    StackKeywordDeclaration {
+        name: "@rrot",
+        expected_args_size: Some(3),
+        return_size: 3,
+        effect: effect![(a b c) -> (c a b)],
+    },
+    StackKeywordDeclaration {
+        name: "@nip",
+        expected_args_size: Some(2),
+        return_size: 1,
+        effect: effect![(a b) -> (b)],
+    },
+    StackKeywordDeclaration {
+        name: "@tuck",
+        expected_args_size: Some(2),
+        return_size: 3,
+        effect: effect![(a b) -> (b a b)],
+    },
+];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct VarId(pub usize);
@@ -49,9 +127,16 @@ pub enum Expression {
     Operation(Operation),
     Identifier(Identifier),
     Literal(Literal),
-    Tuple { expressions: Vec<ExprId> },
+    Tuple {
+        expressions: Vec<ExprId>,
+    },
     Parameter(TypeId),   // will be converted into another expression
     ReturnValue(TypeId), // we replace this ExprId with another one when computed
+    StackKeyword {
+        name: String,
+        args: Vec<ExprId>,
+        return_values: Vec<ExprId>,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -76,6 +161,14 @@ pub struct FunctionDeclaration {
     pub return_type: TypeId, // either a tuple or a single type
     pub body: StmtId,
     pub params: Vec<ExprId>, // Vec<Expression::Parameter>
+}
+
+#[derive(Debug, Clone)]
+pub struct StackKeywordDeclaration<'a> {
+    pub name: &'a str,
+    pub expected_args_size: Option<usize>,
+    pub return_size: usize,
+    pub effect: fn(Vec<TypeId>) -> Vec<Expression>,
 }
 
 // ============================================================================
@@ -115,6 +208,11 @@ pub enum Statement {
         return_values: Vec<ExprId>,
         is_move: bool,
     },
+    StackKeyword {
+        name: String,
+        args: Vec<ExprId>,
+        return_values: Vec<ExprId>,
+    },
 }
 
 // -----------------------------------------------------------
@@ -127,6 +225,7 @@ pub enum Type {
     Float,
     Tuple(Vec<TypeId>),
 }
+
 impl Type {
     pub fn to_token(&self) -> TokenKind {
         match self {
@@ -208,7 +307,7 @@ impl<'a> AstArena<'a> {
         id
     }
 
-    pub fn alloc_assignment_expr(&mut self, expr: Expression, token: Token<'a>) -> ExprId {
+    pub fn alloc_assignment_identifier(&mut self, expr: Expression, token: Token<'a>) -> ExprId {
         let id = ExprId(self.exprs.len());
         self.exprs.push(expr);
         id
@@ -269,6 +368,14 @@ impl<'a> AstArena<'a> {
     }
     pub fn get_type(&self, id: TypeId) -> &Type {
         &self.types[id.0]
+    }
+
+    pub fn get_stack_keyword_from_name(&self, name: &str) -> &StackKeywordDeclaration {
+        if let Some(keyword) = STACK_KEYWORDS.iter().find(|keyword| keyword.name == name) {
+            keyword
+        } else {
+            panic!("invalid stack keyword");
+        }
     }
 
     // Mutable accessor methods

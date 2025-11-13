@@ -169,9 +169,7 @@ impl<'a> Parser<'a> {
             TokenKind::At => self.stack_block(),
             TokenKind::LeftBrace => self.block_scope(ScopeKind::Block),
             TokenKind::While => self.while_statement(),
-            TokenKind::StackKeyword(_) => {
-                unimplemented!()
-            }
+            TokenKind::StackKeyword(_) => self.stack_keyword_stmt(),
             TokenKind::Break | TokenKind::Continue | TokenKind::Return => {
                 let token = self
                     .tokens
@@ -282,9 +280,7 @@ impl<'a> Parser<'a> {
             .clone();
         match kind {
             kind if kind.is_stack_operator() => self.stack_operation(),
-            TokenKind::StackKeyword(keyword) => {
-                todo!()
-            }
+            TokenKind::StackKeyword(keyword) => self.stack_keyword_expr(),
             TokenKind::Identifier(_) => {
                 let (name, token) = self.expect_identifier();
                 self.arena
@@ -426,9 +422,15 @@ impl<'a> Parser<'a> {
     }
 
     // <stack-keyword> ::= @pop | @pop_all
-    fn stack_keyword(&mut self) -> UnresolvedStackKeywordId {
+    fn stack_keyword_expr(&mut self) -> UnresolvedExprId {
         let (name, token) = self.expect_stack_keyword();
         self.arena
-            .alloc_unresolved_stack_keyword(UnresolvedStackKeyword { name }, token)
+            .alloc_unresolved_expr(UnresolvedExpression::StackKeyword(name), token)
+    }
+    // <stack-keyword> ::= @pop | @pop_all
+    fn stack_keyword_stmt(&mut self) -> UnresolvedStmtId {
+        let (name, token) = self.expect_stack_keyword();
+        self.arena
+            .alloc_unresolved_stmt(UnresolvedStatement::StackKeyword(name), token)
     }
 }

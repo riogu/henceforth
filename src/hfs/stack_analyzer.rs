@@ -32,6 +32,15 @@ impl<'a> AstArena<'a> {
         (lhs, rhs)
     }
 
+    pub fn popn_or_error(&mut self, n: usize, msg: &str) -> Vec<ExprId> {
+        let mut popped: Vec<ExprId> = (0..n).map(|_| {
+            self.hfs_stack.pop().unwrap_or_else(|| panic!("{}", msg))
+        }).collect();
+        popped.reverse();
+        popped
+        
+    }
+
     pub fn validate_return_stack(&mut self, return_type: TypeId) {
         let Type::Tuple(return_types) = self.get_type(return_type) else { panic!("[internal error] functions only return tuples at the moment.") };
         let return_types = return_types.clone();
@@ -190,27 +199,27 @@ impl<'a> StackAnalyzer<'a> {
         match unresolved_stmt {
             UnresolvedStatement::If { body, else_stmt } => {
                 let stack_depth_before_branches = self.arena.hfs_stack.len();
-                
+    
                 // condition isnt included in the stack depth count
                 let cond = self.arena.pop_or_error("expected boolean on stack for if statement");
                 if !matches!(self.arena.get_type_of_expr(cond), Type::Bool) {
                     panic!("expected expression of type 'bool' in if statement condition") 
                 }
-                
+    
                 // Analyze if body
                 let if_depth_before = self.arena.hfs_stack.len();
                 let body = self.resolve_stmt(body);
                 let if_depth_after = self.arena.hfs_stack.len();
 
                 self.arena.hfs_stack.push(cond);
-                
+    
                 let else_stmt = match else_stmt {
                     Some(UnresolvedElseStmt::Else(stmt_id)) => {
                         // Reset stack to pre-if state for else branch
                         self.arena.hfs_stack.truncate(stack_depth_before_branches);
                         let else_body = self.resolve_stmt(stmt_id);
                         let else_depth_after = self.arena.hfs_stack.len();
-                        
+            
                         // Both branches must have same stack effect
                         if if_depth_after != else_depth_after {
                             panic!(
@@ -236,13 +245,13 @@ impl<'a> StackAnalyzer<'a> {
                         None
                     }
                 };
-                
+    
                 self.arena.alloc_stmt(Statement::If { cond, body, else_stmt }, token)
             }
             UnresolvedStatement::While { body } => {
 
                 // TODO: decide how while loops should work. consume on entry or not? 
-                
+    
                 let cond = self.arena.pop_or_error("expected value on stack for while loop argument");
                 // condition isnt included in the stack depth count since its popped when entering
                 // each while loop (our stack state is left right after the condition is popped)
@@ -251,12 +260,12 @@ impl<'a> StackAnalyzer<'a> {
                 if !matches!(self.arena.get_type_of_expr(cond), Type::Bool) {
                     panic!("expected expression of type 'bool' in while loop condition") 
                 }
-                
+    
                 // Analyze the body
                 let body = self.resolve_stmt(body);
 
                 self.arena.hfs_stack.push(cond);
-                
+    
                 // Enforce stack balance
                 let stack_depth_after = self.arena.hfs_stack.len();
                 if stack_depth_before != stack_depth_after {
@@ -266,7 +275,7 @@ impl<'a> StackAnalyzer<'a> {
                         stack_depth_after
                     );
                 }
-                
+    
                 self.arena.alloc_stmt(Statement::While { cond, body }, token)
             }
             UnresolvedStatement::StackBlock(unresolved_expr_ids) => {
@@ -337,10 +346,6 @@ impl<'a> StackAnalyzer<'a> {
                 self.arena.alloc_stmt(Statement::Assignment { value, identifier, is_move }, token)
             }
             UnresolvedStatement::FunctionCall { identifier, is_move } => {
-                todo!();
-                // TODO: this should:
-                // - find function or panic
-                // - from the arguments deduce how much we should pop the stack
 
                 // just checks if we actually had a function
                 let identifier = self.resolve_expr(identifier);
@@ -353,7 +358,7 @@ impl<'a> StackAnalyzer<'a> {
 
                 let Type::Tuple(param_types) = self.arena.get_type(func_decl.param_type) else { panic!("[internal error] functions only recieve tuples at the moment.") };
                 let mut expressions = Vec::<ExprId>::new(); // TODO: fill this
-                let arg_types = Vec::<TypeId>::new();
+                let mut arg_types = Vec::<TypeId>::new();
                 for _ in 0..param_types.len() {
                     let arg_expr = self.arena.pop_or_error("expected more elements on stack for function call");
                     arg_types.push(self.arena.get_type_id_of_expr(arg_expr));
@@ -376,6 +381,35 @@ impl<'a> StackAnalyzer<'a> {
                 // function calls dont go to the stack
                 self.arena.alloc_stmt(Statement::FunctionCall { args: expressions, identifier: func_id, return_values, is_move}, token)
             }
+            UnresolvedStatement::StackKeyword(name) => {
+                let kw_declaration = self.arena.get_stack_keyword_from_name(name.as_str());
+
+                // Copy out the function pointer so we dont have mutable borrow while there is an immutable borrow 
+                let effect = kw_declaration.effect;
+
+                let args = match kw_declaration.expected_args_size {
+                    Some(n) => self.arena.popn_or_error(n, format!("expected {} arguments for stack keyword {}", n, kw_declaration.name).as_str()),
+                    None => self.arena.pop_entire_hfs_stack(), // for @pop_all
+                };
+                // simulate stack
+                let simulated_stack: Vec<TypeId> = args.iter().map(|id| self.arena.get_type_id_of_expr(*id)).collect();
+                let return_values = effect(simulated_stack);
+                let mut return_value_ids = Vec::new();
+                return_values
+                    .iter()
+                    .for_each(|ret| {
+                        if let Expression::ReturnValue(id) = ret {
+                            let return_val_id = self
+                                .arena
+                                .alloc_and_push_to_hfs_stack(ret.clone(), self.arena.get_type_token(*id).clone());
+                            return_value_ids.push(return_val_id);
+                        } else {
+                            panic!("[internal error] stack keyword effect should return a Expression::ReturnValue")
+                        }
+                });
+                self.arena.alloc_stmt(Statement::StackKeyword { name, args, return_values: return_value_ids }, token)
+            
+            },
         }
     }
 
@@ -384,7 +418,7 @@ impl<'a> StackAnalyzer<'a> {
         match self.unresolved_arena.get_unresolved_expr(id) {
             UnresolvedExpression::Identifier(identifier) => {
                 let identifier = self.scope_resolution_stack.find_identifier(&identifier);
-                self.arena.alloc_assignment_expr(Expression::Identifier(identifier), token);
+                self.arena.alloc_assignment_identifier(Expression::Identifier(identifier), token);
             },
             _ => { panic!("you're assigning to something that isn't an identifier") }
         }
@@ -402,7 +436,6 @@ impl<'a> StackAnalyzer<'a> {
             UnresolvedExpression::Literal(literal) => {
                 self.arena.alloc_and_push_to_hfs_stack(Expression::Literal(literal), token)
             }
-
             UnresolvedExpression::Tuple { expressions } => { 
                 // the tuple's type is formed recursively whenever someone wants it 
                 // by calling arena.get_type_of_expr(tuple_expr_id); (dont create it here)
@@ -417,6 +450,37 @@ impl<'a> StackAnalyzer<'a> {
                 }
                 self.arena.alloc_and_push_to_hfs_stack(Expression::Tuple { expressions: expr_ids }, token)
             }
+            UnresolvedExpression::StackKeyword(name) => {
+                let kw_declaration = self.arena.get_stack_keyword_from_name(name.as_str());
+
+                // Copy out the function pointer so we dont have mutable borrow while there is an immutable borrow 
+                let effect = kw_declaration.effect;
+
+                let args = match kw_declaration.expected_args_size {
+                    Some(n) => self.arena.popn_or_error(n, format!("expected {} arguments for stack keyword {}", n, kw_declaration.name).as_str()),
+                    None => self.arena.pop_entire_hfs_stack(), // for @pop_all
+                };
+                // simulate stack
+                let simulated_stack: Vec<TypeId> = args.iter().map(|id| self.arena.get_type_id_of_expr(*id)).collect();
+                let return_values = effect(simulated_stack);
+                let mut return_value_ids = Vec::new();
+                return_values
+                    .iter()
+                    .for_each(|ret| {
+                        if let Expression::ReturnValue(id) = ret {
+                            let return_val_id = self
+                                .arena
+                                .alloc_and_push_to_hfs_stack(ret.clone(), self.arena.get_type_token(*id).clone());
+                            return_value_ids.push(return_val_id);
+                        } else {
+                            panic!("[internal error] stack keyword effect should return a Expression::ReturnValue")
+                        }
+                });
+            
+                let id = self.arena.alloc_and_push_to_hfs_stack(Expression::StackKeyword { name, args, return_values: return_value_ids }, token);
+                self.arena.pop_or_error("could not pop stack keyword");
+                id
+            },
         }
     }
 

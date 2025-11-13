@@ -45,10 +45,8 @@ impl<'a> AstArena<'a> {
     pub fn get_type_id_of_expr(&mut self, expr_id: ExprId) -> TypeId {
         match self.get_expr(expr_id).clone() {
             Expression::Operation(operation) => self.get_type_of_operation(&operation),
-
             Expression::Identifier(identifier) => match identifier {
-                Identifier::GlobalVar(var_id) 
-                | Identifier::Variable(var_id) => {
+                Identifier::GlobalVar(var_id) | Identifier::Variable(var_id) => {
                     let var = self.get_var(var_id);
                     var.hfs_type
                 }
@@ -57,7 +55,6 @@ impl<'a> AstArena<'a> {
                     func.return_type
                 }
             },
-
             Expression::Literal(literal) => match literal {
                 Literal::Integer(_) => self.int_type(),
                 Literal::Float(_) => self.float_type(),
@@ -76,10 +73,9 @@ impl<'a> AstArena<'a> {
                 let tuple_type = Type::Tuple(element_types);
                 self.alloc_type(tuple_type, token)
             }
-
             Expression::Parameter(type_id) => type_id,
-
             Expression::ReturnValue(type_id) => type_id,
+            Expression::StackKeyword { .. } => todo!(),
         }
     }
     pub fn get_type_of_var(&self, var_id: VarId) -> &Type {

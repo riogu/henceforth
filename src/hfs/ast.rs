@@ -2,7 +2,7 @@ use crate::hfs::{token::*, ScopeKind};
 use std::collections::HashMap;
 
 // Grabs a signature with the syntax (a b) -> (a b c) and creates a lambda that performs that operation with a vector of types
-macro_rules! effect {
+macro_rules! type_effect {
     (_) => {
         |_types: Vec<TypeId>| -> Vec<Expression> {
             vec![]
@@ -31,55 +31,55 @@ const STACK_KEYWORDS: &[StackKeywordDeclaration] = &[
         name: "@pop",
         expected_args_size: Some(1),
         return_size: 0,
-        effect: effect![(a) -> ()],
+        effect: type_effect![(a) -> ()],
     },
     StackKeywordDeclaration {
         name: "@pop_all",
         expected_args_size: None,
         return_size: 0,
-        effect: effect![_],
+        effect: type_effect![_],
     },
     StackKeywordDeclaration {
         name: "@dup",
         expected_args_size: Some(1),
         return_size: 2,
-        effect: effect![(a) -> (a a)],
+        effect: type_effect![(a) -> (a a)],
     },
     StackKeywordDeclaration {
         name: "@swap",
         expected_args_size: Some(2),
         return_size: 2,
-        effect: effect![(a b) -> (b a)],
+        effect: type_effect![(a b) -> (b a)],
     },
     StackKeywordDeclaration {
         name: "@over",
         expected_args_size: Some(2),
         return_size: 3,
-        effect: effect![(a b) -> (a b a)],
+        effect: type_effect![(a b) -> (a b a)],
     },
     StackKeywordDeclaration {
         name: "@rot",
         expected_args_size: Some(3),
         return_size: 3,
-        effect: effect![(a b c) -> (b c a)],
+        effect: type_effect![(a b c) -> (b c a)],
     },
     StackKeywordDeclaration {
         name: "@rrot",
         expected_args_size: Some(3),
         return_size: 3,
-        effect: effect![(a b c) -> (c a b)],
+        effect: type_effect![(a b c) -> (c a b)],
     },
     StackKeywordDeclaration {
         name: "@nip",
         expected_args_size: Some(2),
         return_size: 1,
-        effect: effect![(a b) -> (b)],
+        effect: type_effect![(a b) -> (b)],
     },
     StackKeywordDeclaration {
         name: "@tuck",
         expected_args_size: Some(2),
         return_size: 3,
-        effect: effect![(a b) -> (b a b)],
+        effect: type_effect![(a b) -> (b a b)],
     },
 ];
 
@@ -411,5 +411,19 @@ impl<'a> AstArena<'a> {
 
     pub fn get_type_token(&self, id: TypeId) -> &Token<'a> {
         &self.type_tokens[id.0]
+    }
+
+    pub fn get_stack_change(
+        &self,
+        stack_start: Vec<ExprId>,
+        mut hfs_stack: Vec<ExprId>,
+    ) -> Vec<ExprId> {
+        let elements_to_delete = hfs_stack
+            .iter()
+            .zip(&stack_start)
+            .take_while(|(a, b)| a == b)
+            .count();
+        hfs_stack.drain(0..elements_to_delete);
+        hfs_stack
     }
 }

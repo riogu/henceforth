@@ -279,21 +279,22 @@ impl<'a> StackAnalyzer<'a> {
                 self.arena.alloc_stmt(Statement::While { cond, body }, token)
             }
             UnresolvedStatement::StackBlock(unresolved_expr_ids) => {
-                let stack_start = self.arena.hfs_stack.len();
+                let stack_start = self.arena.hfs_stack.clone();
 
                 for expr_id in unresolved_expr_ids {
                     self.resolve_expr(expr_id);
                 }
-                // subtle detail here that is extremely important:
-                // when we resolve expressions from inside our stack block,
-                // we sometimes "consume" the stack state, for example in additions:
-                // @(1 2 +); // here '+' "grabs" 1 2 into its own node.
-                // that means in terms of hfs_stack state, we only have 1 element 
-                // on the stack. the other 2 have been consumed.
-                // so we just let expressions resolve themselves, and then we store
-                // whatever is now on the stack after resolving.
+                // when were resolving a stack block, we can consume the previous stack state
+                // e.g: if we had:
+                // @(1 2 3);
+                // @(+);
+                // we consumed the 2 and the 3,
+                // so to find what to push, we grab the initial stack state, and on a cloned version of the current stack,
+                // we pop until they differ, so if we had [1, 2, 3] and [1, Add(2, 3)]
+                // we would pop the 1 ending up with [Add(2, 3)]
                 let mut expr_ids = Vec::<ExprId>::new();
-                for &expr_id in &self.arena.hfs_stack[stack_start..] {
+                let stack_change = self.arena.get_stack_change(stack_start, self.arena.hfs_stack.clone());
+                for &expr_id in &stack_change {
                     expr_ids.push(expr_id);
                 }
                 self.arena.alloc_stmt(Statement::StackBlock(expr_ids), token)

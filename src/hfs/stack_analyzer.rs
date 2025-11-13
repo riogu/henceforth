@@ -386,7 +386,7 @@ impl<'a> StackAnalyzer<'a> {
                 let kw_declaration = self.arena.get_stack_keyword_from_name(name.as_str());
 
                 // Copy out the function pointer so we dont have mutable borrow while there is an immutable borrow 
-                let effect = kw_declaration.effect;
+                let effect = kw_declaration.type_effect;
 
                 let args = match kw_declaration.expected_args_size {
                     Some(n) => self.arena.popn_or_error(n, format!("expected {} arguments for stack keyword {}", n, kw_declaration.name).as_str()),
@@ -455,7 +455,7 @@ impl<'a> StackAnalyzer<'a> {
                 let kw_declaration = self.arena.get_stack_keyword_from_name(name.as_str());
 
                 // Copy out the function pointer so we dont have mutable borrow while there is an immutable borrow 
-                let effect = kw_declaration.effect;
+                let effect = kw_declaration.type_effect;
 
                 let args = match kw_declaration.expected_args_size {
                     Some(n) => self.arena.popn_or_error(n, format!("expected {} arguments for stack keyword {}", n, kw_declaration.name).as_str()),

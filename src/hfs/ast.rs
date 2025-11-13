@@ -1,6 +1,25 @@
-use crate::hfs::{token::*, ScopeKind};
+use crate::hfs::{token::*, RuntimeValue, ScopeKind};
 use std::collections::HashMap;
 
+macro_rules! value_effect {
+    (_) => {
+        |_types: Vec<RuntimeValue>| -> Vec<RuntimeValue> {
+            vec![]
+        }
+    };
+
+    (($($arg:ident)*) -> ($($return:ident)*)) => {
+        |values: Vec<RuntimeValue>| -> Vec<RuntimeValue> {
+            let mut _idx = 0;
+            $(
+                let $arg = values[_idx].clone();
+                _idx += 1;
+            )*
+
+            vec![$($return.clone()),*]
+        }
+    };
+}
 // Grabs a signature with the syntax (a b) -> (a b c) and creates a lambda that performs that operation with a vector of types
 macro_rules! type_effect {
     (_) => {
@@ -31,55 +50,64 @@ const STACK_KEYWORDS: &[StackKeywordDeclaration] = &[
         name: "@pop",
         expected_args_size: Some(1),
         return_size: 0,
-        effect: type_effect![(a) -> ()],
+        type_effect: type_effect![(a) -> ()],
+        value_effect: value_effect![(a) -> ()],
     },
     StackKeywordDeclaration {
         name: "@pop_all",
         expected_args_size: None,
         return_size: 0,
-        effect: type_effect![_],
+        type_effect: type_effect![_],
+        value_effect: value_effect![_],
     },
     StackKeywordDeclaration {
         name: "@dup",
         expected_args_size: Some(1),
         return_size: 2,
-        effect: type_effect![(a) -> (a a)],
+        type_effect: type_effect![(a) -> (a a)],
+        value_effect: value_effect![(a) -> (a a)],
     },
     StackKeywordDeclaration {
         name: "@swap",
         expected_args_size: Some(2),
         return_size: 2,
-        effect: type_effect![(a b) -> (b a)],
+        type_effect: type_effect![(a b) -> (b a)],
+        value_effect: value_effect![(a b) -> (b a)],
     },
     StackKeywordDeclaration {
         name: "@over",
         expected_args_size: Some(2),
         return_size: 3,
-        effect: type_effect![(a b) -> (a b a)],
+        type_effect: type_effect![(a b) -> (a b a)],
+        value_effect: value_effect![(a b) -> (a b a)],
     },
     StackKeywordDeclaration {
         name: "@rot",
         expected_args_size: Some(3),
         return_size: 3,
-        effect: type_effect![(a b c) -> (b c a)],
+        type_effect: type_effect![(a b c) -> (b c a)],
+        value_effect: value_effect![(a b c) -> (b c a)],
     },
     StackKeywordDeclaration {
         name: "@rrot",
         expected_args_size: Some(3),
         return_size: 3,
-        effect: type_effect![(a b c) -> (c a b)],
+        type_effect: type_effect![(a b c) -> (c a b)],
+        value_effect: value_effect![(a b c) -> (c a b)],
     },
     StackKeywordDeclaration {
         name: "@nip",
         expected_args_size: Some(2),
         return_size: 1,
-        effect: type_effect![(a b) -> (b)],
+        type_effect: type_effect![(a b) -> (b)],
+        value_effect: value_effect![(a b) -> (b)],
     },
     StackKeywordDeclaration {
         name: "@tuck",
         expected_args_size: Some(2),
         return_size: 3,
-        effect: type_effect![(a b) -> (b a b)],
+        type_effect: type_effect![(a b) -> (b a b)],
+        value_effect: value_effect![(a b) -> (b a b)],
     },
 ];
 
@@ -168,7 +196,8 @@ pub struct StackKeywordDeclaration<'a> {
     pub name: &'a str,
     pub expected_args_size: Option<usize>,
     pub return_size: usize,
-    pub effect: fn(Vec<TypeId>) -> Vec<Expression>,
+    pub type_effect: fn(Vec<TypeId>) -> Vec<Expression>,
+    pub value_effect: fn(Vec<RuntimeValue>) -> Vec<RuntimeValue>,
 }
 
 // ============================================================================

@@ -1,4 +1,0 @@
-fn main: () -> () {
-	@(5.0 "string" 1);
-	@rrot @pop_all;
-}

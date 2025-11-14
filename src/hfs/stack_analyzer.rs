@@ -346,8 +346,8 @@ impl<'a> StackAnalyzer<'a> {
                 } else {
                     self.arena.last_or_error("expected value in stack for copy assignment statement.")
                 };
-                let var_id = self.resolve_var_assignment_identifier(identifier, *self.arena.get_expr_provenance(value));
-                self.arena.alloc_stmt(Statement::Assignment { value, identifier: var_id, is_move }, token)
+                let identifier  = self.resolve_var_assignment_identifier(identifier, *self.arena.get_expr_provenance(value));
+                self.arena.alloc_stmt(Statement::Assignment { value, identifier, is_move }, token)
             }
             UnresolvedStatement::FunctionCall { identifier, is_move } => {
                 // just checks if we actually had a function and finds the identifier
@@ -413,7 +413,7 @@ impl<'a> StackAnalyzer<'a> {
         }
     }
 
-    fn resolve_var_assignment_identifier(&mut self, id: UnresolvedExprId, provenance: ExprProvenance) -> VarId {
+    fn resolve_var_assignment_identifier(&mut self, id: UnresolvedExprId, provenance: ExprProvenance) -> Identifier {
         // neither this or func_call identifier allocate an expression
         let token = self.unresolved_arena.get_unresolved_expr_token(id);
         match self.unresolved_arena.get_unresolved_expr(id) {
@@ -423,7 +423,7 @@ impl<'a> StackAnalyzer<'a> {
                     Identifier::GlobalVar(var_id) | Identifier::Variable(var_id) => {
                         self.arena.curr_var_provenances[var_id.0] = provenance;
                         // note that solving an identifier updates the provenance
-                        var_id
+                        identifier
                     }
                     Identifier::Function(_) => panic!("cannot assign value to a function")
                 }

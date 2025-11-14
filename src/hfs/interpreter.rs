@@ -110,6 +110,7 @@ impl<'a> Interpreter<'a> {
             locals: HashMap::new(),
             local_hfs_stack: Vec::new(),
             flow_state: CtrlFlowState::Normal,
+            expr_values: HashMap::new(),
         });
 
         let func = self.arena.get_func(func_id);
@@ -195,16 +196,9 @@ impl<'a> Interpreter<'a> {
             Statement::Return => self.curr_call_frame_mut().flow_state = CtrlFlowState::Return,
             Statement::Break => self.curr_call_frame_mut().flow_state = CtrlFlowState::Break,
             Statement::Continue => self.curr_call_frame_mut().flow_state = CtrlFlowState::Continue,
-            Statement::Assignment {
-                value,
-                identifier,
-                is_move,
-            } => {
+            Statement::Assignment { value, identifier, is_move } => {
                 let new_value = self.interpret_expr(*value);
-                let Expression::Identifier(id) = self.arena.get_expr(*identifier) else {
-                    panic!()
-                };
-                match id {
+                match identifier {
                     Identifier::GlobalVar(var_id) => self.globals.insert(*var_id, new_value),
                     Identifier::Variable(var_id) => {
                         self.curr_local_vars_mut().insert(*var_id, new_value)
@@ -250,7 +244,7 @@ impl<'a> Interpreter<'a> {
                 }
                 RuntimeValue::Tuple(tuple_values)
             }
-            Expression::Parameter(type_id) => {
+            Expression::Parameter { index, type_id } => {
                 // Parameters should be pre-populated in the call frame when the function is called
                 // This node shouldn't be encountered during interpretation if resolved properly
                 panic!("Parameter nodes should be replaced by semantic analyzer")

@@ -238,7 +238,7 @@ pub enum Statement {
     Empty,
     Assignment {
         value: ExprId,
-        identifier: VarId,
+        identifier: Identifier,
         is_move: bool,
     },
     FunctionCall {

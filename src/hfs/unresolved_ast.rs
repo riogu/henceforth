@@ -48,12 +48,12 @@ pub enum UnresolvedExpression {
 #[derive(Debug, Clone)]
 pub enum UnresolvedStatement {
     If {
-        // cond comes from stack
+        cond: UnresolvedStmtId,
         body: UnresolvedStmtId,
         else_stmt: Option<UnresolvedElseStmt>,
     },
     While {
-        // cond comes from stack
+        cond: UnresolvedStmtId,
         body: UnresolvedStmtId,
     },
     StackBlock(Vec<UnresolvedExprId>),

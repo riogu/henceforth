@@ -197,8 +197,10 @@ impl<'a> StackAnalyzer<'a> {
         let unresolved_stmt = self.unresolved_arena.get_unresolved_stmt(id).clone();
         
         match unresolved_stmt {
-            UnresolvedStatement::If { body, else_stmt } => {
-                let stack_depth_before_branches = self.arena.hfs_stack.len();
+            UnresolvedStatement::If { body, else_stmt, cond } => {
+                let stack_before_branches = self.arena.hfs_stack.clone();
+                // actually adds the condition to the hfs_stack, because the stack analyzer only "sees" the if statement itself
+                self.resolve_stmt(cond);
     
                 // condition isnt included in the stack depth count
                 let cond = self.arena.pop_or_error("expected boolean on stack for if statement");
@@ -216,7 +218,7 @@ impl<'a> StackAnalyzer<'a> {
                 let else_stmt = match else_stmt {
                     Some(UnresolvedElseStmt::Else(stmt_id)) => {
                         // Reset stack to pre-if state for else branch
-                        self.arena.hfs_stack.truncate(stack_depth_before_branches);
+                        self.arena.hfs_stack = stack_before_branches;
                         let else_body = self.resolve_stmt(stmt_id);
                         let else_depth_after = self.arena.hfs_stack.len();
             
@@ -231,14 +233,14 @@ impl<'a> StackAnalyzer<'a> {
                         Some(ElseStmt::Else(else_body))
                     },
                     Some(UnresolvedElseStmt::ElseIf(stmt_id)) => {
-                        self.arena.hfs_stack.truncate(if_depth_before);
+                        self.arena.hfs_stack = stack_before_branches;
                         Some(ElseStmt::ElseIf(self.resolve_stmt(stmt_id)))
                     },
                     None => {
                         // If no else, the if body must have net-zero stack effect
                         if if_depth_before != if_depth_after {
                             panic!(
-                                "if statement without else clause must have net-zero stack effect, but changed stack by {}",
+                                "if statement must have net-zero stack effect, but changed stack by {}",
                                 (if_depth_after as i32) - (if_depth_before as i32)
                             );
                         }
@@ -248,9 +250,10 @@ impl<'a> StackAnalyzer<'a> {
     
                 self.arena.alloc_stmt(Statement::If { cond, body, else_stmt }, token)
             }
-            UnresolvedStatement::While { body } => {
+            UnresolvedStatement::While { body, cond } => {
 
                 // TODO: decide how while loops should work. consume on entry or not? 
+                self.resolve_stmt(cond);
     
                 let cond = self.arena.pop_or_error("expected value on stack for while loop argument");
                 // condition isnt included in the stack depth count since its popped when entering
@@ -264,7 +267,6 @@ impl<'a> StackAnalyzer<'a> {
                 // Analyze the body
                 let body = self.resolve_stmt(body);
 
-                self.arena.hfs_stack.push(cond);
     
                 // Enforce stack balance
                 let stack_depth_after = self.arena.hfs_stack.len();
@@ -350,6 +352,7 @@ impl<'a> StackAnalyzer<'a> {
 
                 // just checks if we actually had a function
                 let identifier = self.resolve_expr(identifier);
+                self.arena.pop_or_error("could not pop function identifier from stack");
                 let Expression::Identifier(Identifier::Function(func_id)) = self.arena.get_expr(identifier).clone() else {
                     if let Expression::Identifier(Identifier::Variable(var_id)) = self.arena.get_expr(identifier) {
                         panic!("variable '{}' cannot be called as a function.", self.arena.get_var(*var_id).name) 
@@ -363,7 +366,7 @@ impl<'a> StackAnalyzer<'a> {
                 for _ in 0..param_types.len() {
                     let arg_expr = self.arena.pop_or_error("expected more elements on stack for function call");
                     arg_types.push(self.arena.get_type_id_of_expr(arg_expr));
-                    expressions.push(arg_expr);
+                        expressions.push(arg_expr);
                 }
                 let arg_type_id = self.arena.alloc_type(
                     Type::Tuple(arg_types),

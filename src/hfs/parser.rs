@@ -209,11 +209,17 @@ impl<'a> Parser<'a> {
     // <if_stmt> ::= "if" <stack_block> "{" <block_scope> "}" <else_stmt>?
     fn if_statement(&mut self) -> UnresolvedStmtId {
         let token = self.expect(TokenKind::If);
-        self.stack_block();
+        let cond = self.stack_block();
         let body = self.block_scope(ScopeKind::IfStmt);
         let else_stmt = self.else_statement();
-        self.arena
-            .alloc_unresolved_stmt(UnresolvedStatement::If { body, else_stmt }, token)
+        self.arena.alloc_unresolved_stmt(
+            UnresolvedStatement::If {
+                cond,
+                body,
+                else_stmt,
+            },
+            token,
+        )
     }
 
     // <else_stmt> ::= "else" "if" <stack_block>  <block_scope> <else_stmt>?
@@ -245,10 +251,10 @@ impl<'a> Parser<'a> {
     // <while_stmt> ::= "while" <stack_block> "{" <scope_block> "}"
     fn while_statement(&mut self) -> UnresolvedStmtId {
         let token = self.expect(TokenKind::While);
-        self.stack_block();
+        let cond = self.stack_block();
         let body = self.block_scope(ScopeKind::WhileLoop);
         self.arena
-            .alloc_unresolved_stmt(UnresolvedStatement::While { body }, token)
+            .alloc_unresolved_stmt(UnresolvedStatement::While { cond, body }, token)
     }
 
     // <stack_block> ::= "@" "(" <expression>* ")"

@@ -159,8 +159,11 @@ pub enum Expression {
     Tuple {
         expressions: Vec<ExprId>,
     },
-    Parameter(TypeId),   // will be converted into another expression
-    ReturnValue(TypeId), // we replace this ExprId with another one when computed
+    Parameter {
+        index: usize,     // Which parameter (0, 1, 2...)
+        hfs_type: TypeId, // Parameter type
+    },
+    ReturnValue(TypeId),  // we replace this ExprId with another one when computed
     StackKeyword {
         name: String,
         args: Vec<ExprId>,
@@ -173,6 +176,11 @@ pub enum TopLevelId {
     VariableDecl(VarId),
     FunctionDecl(FuncId),
     Statement(StmtId),
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ExprProvenance {
+    CompiletimeValue,     // Constant or literal
+    RuntimeValue,         // Needs computation at runtime
 }
 
 // ============================================================================
@@ -189,8 +197,9 @@ pub struct FunctionDeclaration {
     pub param_type: TypeId,  // either a tuple or a single type
     pub return_type: TypeId, // either a tuple or a single type
     pub body: StmtId,
-    pub params: Vec<ExprId>, // Vec<Expression::Parameter>
+    pub parameter_exprs: Vec<ExprId>, // Vec<Expression::Parameter>
 }
+
 
 #[derive(Debug, Clone)]
 pub struct StackKeywordDeclaration<'a> {
@@ -229,7 +238,7 @@ pub enum Statement {
     Empty,
     Assignment {
         value: ExprId,
-        identifier: ExprId,
+        identifier: VarId,
         is_move: bool,
     },
     FunctionCall {
@@ -277,6 +286,7 @@ pub struct AstArena<'a> {
     pub(crate) stmts: Vec<Statement>,
     pub(crate) vars: Vec<VarDeclaration>,
     pub(crate) functions: Vec<FunctionDeclaration>,
+    
     pub(crate) types: Vec<Type>,
 
     // Token storage (parallel arrays)
@@ -290,6 +300,13 @@ pub struct AstArena<'a> {
 
     // Type deduplication cache
     type_cache: HashMap<Type, TypeId>,
+    // compile-time analysis
+    // expr provenances shouldn't change after creation
+    pub expr_provenances: Vec<ExprProvenance>, // indexed by ExprId 
+    // variables should continuously change their provenance for analysis
+    pub curr_var_provenances: Vec<ExprProvenance>, // indexed by VarId
+    pub curr_func_call_provenances: Vec<ExprProvenance>, // indexed by FuncId
+    // 
 }
 
 // had to move this here because i wanted to the arena's private members to be available to the parser
@@ -297,13 +314,7 @@ pub struct AstArena<'a> {
 impl<'a> AstArena<'a> {
     pub fn new() -> Self {
         let mut arena = Self::default();
-        arena.alloc_type_uncached(
-            Type::Int,
-            Token {
-                kind: TokenKind::Int,
-                source_info: SourceInfo::new(0, 0, 0, "Int"),
-            },
-        );
+        arena.alloc_type_uncached( Type::Int, Token { kind: TokenKind::Int, source_info: SourceInfo::new(0, 0, 0, "Int"), },);
         arena.alloc_type_uncached(
             Type::Float,
             Token {
@@ -328,20 +339,27 @@ impl<'a> AstArena<'a> {
         arena
     }
 
-    pub fn alloc_and_push_to_hfs_stack(&mut self, expr: Expression, token: Token<'a>) -> ExprId {
+     pub fn alloc_and_push_to_hfs_stack(&mut self, expr: Expression, provenance: ExprProvenance,  token: Token<'a>) -> ExprId {
         // theres no reason to not push to the stack when making a new expression
         // so this is the only method available
         let id = ExprId(self.exprs.len());
         self.exprs.push(expr);
         self.hfs_stack.push(id);
+        self.expr_provenances.push(provenance);
         id
     }
-
-    pub fn alloc_assignment_identifier(&mut self, expr: Expression, token: Token<'a>) -> ExprId {
-        let id = ExprId(self.exprs.len());
-        self.exprs.push(expr);
-        id
-    }
+    // pub fn alloc_assignment_identifier(&mut self, identifier: Identifier, provenance: ExprProvenance, token: Token<'a>) -> ExprId {
+    //     let id = ExprId(self.exprs.len());
+    //     self.exprs.push(Expression::Identifier(identifier));
+    //     self.expr_provenances.push(provenance);
+    //     // also needs to map identifiers to their new provenance (new value's provenance)
+    //     // note that this is an easy way to check for loss of compile time in values
+    //     match identifier {
+    //         Identifier::GlobalVar(var_id) | Identifier::Variable(var_id) => self.curr_var_provenances[var_id.0] = provenance,
+    //         Identifier::Function(func_id) => self.curr_func_call_provenances[func_id.0] = provenance,
+    //     }
+    //     id
+    // }
 
     pub fn alloc_stmt(&mut self, stmt: Statement, token: Token<'a>) -> StmtId {
         let id = StmtId(self.stmts.len());
@@ -352,12 +370,21 @@ impl<'a> AstArena<'a> {
     pub fn alloc_var(&mut self, var: VarDeclaration, token: Token<'a>) -> VarId {
         let id = VarId(self.vars.len());
         self.vars.push(var);
+        self.curr_var_provenances.push(ExprProvenance::CompiletimeValue);
+        // by default, variables start as compile time variables.
+        // this is changed throughout semantic analysis, they could become runtime 
+        // if they are assigned a RuntimeValue (they can regain compile time if we reassign them)
+        // its to track variable state for semantic analysis
         id
     }
 
     pub fn alloc_function(&mut self, func: FunctionDeclaration, token: Token<'a>) -> FuncId {
         let id = FuncId(self.functions.len());
         self.functions.push(func);
+        // we assume a function call is runtime by default (im not gonna invest too much on this)
+        // this isnt really used extensively, its here to match variables if we want it later for
+        // compile-time analysis of functions and other things
+        self.curr_func_call_provenances.push(ExprProvenance::RuntimeValue);
         id
     }
 
@@ -383,6 +410,18 @@ impl<'a> AstArena<'a> {
         StmtId(self.stmts.len())
     }
 
+    //---------------------------------------------------------------------------------
+    // provenance methods
+    pub fn get_expr_provenance(&self, expr: ExprId) -> &ExprProvenance {
+        &self.expr_provenances[expr.0]
+    }
+    pub fn get_identifier_provenance(&self, id: Identifier) -> &ExprProvenance {
+        match id {
+            Identifier::GlobalVar(var_id) | Identifier::Variable(var_id) => &self.curr_var_provenances[var_id.0],
+            Identifier::Function(func_id) => &self.curr_func_call_provenances[func_id.0],
+        }
+    }
+    //---------------------------------------------------------------------------------
     // Immutable accessor methods
     pub fn get_expr(&self, id: ExprId) -> &Expression {
         &self.exprs[id.0]
@@ -400,7 +439,7 @@ impl<'a> AstArena<'a> {
         &self.types[id.0]
     }
 
-    pub fn get_stack_keyword_from_name(&self, name: &str) -> &StackKeywordDeclaration {
+    pub fn get_stack_keyword_from_name(&self, name: &str) -> &StackKeywordDeclaration<'a> {
         if let Some(keyword) = STACK_KEYWORDS.iter().find(|keyword| keyword.name == name) {
             keyword
         } else {
@@ -443,16 +482,8 @@ impl<'a> AstArena<'a> {
         &self.type_tokens[id.0]
     }
 
-    pub fn get_stack_change(
-        &self,
-        stack_start: Vec<ExprId>,
-        mut hfs_stack: Vec<ExprId>,
-    ) -> Vec<ExprId> {
-        let elements_to_delete = hfs_stack
-            .iter()
-            .zip(&stack_start)
-            .take_while(|(a, b)| a == b)
-            .count();
+    pub fn get_stack_change( &self, stack_start: Vec<ExprId>, mut hfs_stack: Vec<ExprId>,) -> Vec<ExprId> {
+        let elements_to_delete = hfs_stack .iter() .zip(&stack_start) .take_while(|(a, b)| a == b) .count();
         hfs_stack.drain(0..elements_to_delete);
         hfs_stack
     }

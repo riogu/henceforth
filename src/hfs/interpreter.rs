@@ -36,8 +36,9 @@ enum CtrlFlowState {
 pub struct CallFrame {
     func_id: FuncId,
     locals: HashMap<VarId, RuntimeValue>,
-    return_stack: Vec<RuntimeValue>,
+    local_hfs_stack: Vec<RuntimeValue>,
     flow_state: CtrlFlowState,
+    pub expr_values: HashMap<ExprId, RuntimeValue>,
 }
 
 //---------------------------------------------------------------------------
@@ -99,25 +100,15 @@ impl<'a> Interpreter<'a> {
     }
 
     fn interpret_var_decl(&mut self, var_id: VarId) {
-        let call_frame = self
-            .call_stack
-            .last_mut()
-            .expect("[internal error] invalid call stack");
-        call_frame.locals.insert(
-            var_id,
-            RuntimeValue::default(self.arena.get_type_of_var(var_id)),
-        );
+        let call_frame = self .call_stack .last_mut() .expect("[internal error] invalid call stack");
+        call_frame.locals.insert( var_id, RuntimeValue::default(self.arena.get_type_of_var(var_id)),);
     }
 
-    fn call_declared_function(
-        &mut self,
-        func_id: FuncId,
-        tuple_args: Vec<RuntimeValue>,
-    ) -> Vec<RuntimeValue> {
+    fn call_declared_function( &mut self, func_id: FuncId, tuple_args: Vec<RuntimeValue>,) -> Vec<RuntimeValue> {
         self.call_stack.push(CallFrame {
             func_id,
             locals: HashMap::new(),
-            return_stack: Vec::new(),
+            local_hfs_stack: Vec::new(),
             flow_state: CtrlFlowState::Normal,
         });
 
@@ -125,7 +116,7 @@ impl<'a> Interpreter<'a> {
         self.interpret_stmt(func.body);
 
         // if we have nothing to return, we return an empty vector (will be iterated anyway)
-        self.call_stack.pop().expect("pushed above").return_stack
+        self.call_stack.pop().expect("pushed above").local_hfs_stack
         // TODO: decide how we pass values to the caller (depends on how we manage the stack
         // tracking)
         // if we solve it in StackAnalyzer for each branch, the code can "just run" here because
@@ -134,11 +125,7 @@ impl<'a> Interpreter<'a> {
 
     fn interpret_stmt(&mut self, stmt_id: StmtId) {
         match self.arena.get_stmt(stmt_id) {
-            Statement::If {
-                cond,
-                body,
-                else_stmt,
-            } => {
+            Statement::If { cond, body, else_stmt } => {
                 let RuntimeValue::Bool(if_cond) = self.interpret_expr(*cond) else {
                     panic!("expected boolean value on stack for if statement condition")
                 };
@@ -186,7 +173,7 @@ impl<'a> Interpreter<'a> {
             Statement::StackBlock(expressions) => {
                 for expr_id in expressions {
                     let val = self.interpret_expr(*expr_id);
-                    self.curr_call_frame_mut().return_stack.push(val);
+                    self.curr_call_frame_mut().local_hfs_stack.push(val);
                 }
             }
             Statement::BlockScope(top_level_nodes, scope_kind) => {
@@ -241,7 +228,7 @@ impl<'a> Interpreter<'a> {
                 let return_values = self.call_declared_function(*identifier, args.clone());
                 for val in return_values {
                     // merge returned tuples into the caller's stack
-                    self.curr_call_frame_mut().return_stack.push(val);
+                    self.curr_call_frame_mut().local_hfs_stack.push(val);
                 }
             }
             Statement::StackKeyword { name, .. } => {

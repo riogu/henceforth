@@ -161,7 +161,7 @@ pub enum Expression {
     },
     Parameter {
         index: usize,     // Which parameter (0, 1, 2...)
-        hfs_type: TypeId, // Parameter type
+        type_id: TypeId, // Parameter type
     },
     ReturnValue(TypeId),  // we replace this ExprId with another one when computed
     StackKeyword {

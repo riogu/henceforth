@@ -156,7 +156,7 @@ impl<'a> StackAnalyzer<'a> {
             if let Type::Tuple(param_types) = self.unresolved_arena.get_type(unresolved_func.param_type) {
                 for (index, param_type) in param_types.iter().enumerate() { // function parameter type is always a tuple
                     let token = self.unresolved_arena.get_type_token(*param_type);
-                    params.push(self.arena.alloc_and_push_to_hfs_stack(Expression::Parameter{index, hfs_type: *param_type},
+                    params.push(self.arena.alloc_and_push_to_hfs_stack(Expression::Parameter{index, type_id: *param_type},
                                                                        ExprProvenance::RuntimeValue,token))
                 }
             }

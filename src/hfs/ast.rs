@@ -12,9 +12,10 @@ use std::collections::HashMap;
 // ============================================================================
 
 #[derive(Debug, Clone, Copy)]
-pub enum VariableIdentifier {
+pub enum Identifier {
     GlobalVar(VarId),
     Variable(VarId),
+    Function(FuncId),
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -38,7 +39,7 @@ pub enum Operation {
 #[derive(Debug, Clone)]
 pub enum Expression {
     Operation(Operation),
-    Identifier(VariableIdentifier),
+    Identifier(Identifier),
     Literal(Literal),
     Tuple {
         expressions: Vec<ExprId>,

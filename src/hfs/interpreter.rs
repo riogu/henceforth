@@ -218,6 +218,11 @@ impl<'a> Interpreter<'a> {
     }
 
     fn interpret_expr(&mut self, expr_id: ExprId) -> RuntimeValue {
+        // FIXME: we need to use ExprProvenance here:
+        // we need to first check if a runtime value already exists, this commonly happens anyways
+        // by ExprId that are used multiple times (which is quite common)
+        // and we also should convert the compile time values to runtimevalues directly.
+        // dont forget to add a "get or generate" logic at the start here
         match self.arena.get_expr(expr_id) {
             Expression::Operation(op) => self.interpret_operation(op),
             Expression::Identifier(id) => self.interpret_identifier(id),

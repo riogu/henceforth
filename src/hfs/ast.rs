@@ -12,10 +12,9 @@ use std::collections::HashMap;
 // ============================================================================
 
 #[derive(Debug, Clone, Copy)]
-pub enum Identifier {
+pub enum VariableIdentifier {
     GlobalVar(VarId),
     Variable(VarId),
-    Function(FuncId),
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -39,7 +38,7 @@ pub enum Operation {
 #[derive(Debug, Clone)]
 pub enum Expression {
     Operation(Operation),
-    Identifier(Identifier),
+    Identifier(VariableIdentifier),
     Literal(Literal),
     Tuple {
         expressions: Vec<ExprId>,
@@ -83,7 +82,7 @@ pub struct FunctionDeclaration {
     pub param_type: TypeId,  // either a tuple or a single type
     pub return_type: TypeId, // either a tuple or a single type
     pub body: StmtId,
-    pub parameter_exprs: Vec<ExprId>, // Vec<Expression::Parameter>
+    pub parameter_exprs: Vec<ExprId>, 
 }
 
 

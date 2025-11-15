@@ -1,35 +1,69 @@
 ## Code examples
 ```cpp
-import hfs;
-
-
-
+// example of the CFG IR language
 fn foo: (i32 i32 str) -> (i32 i32 i32) {
-
+  start:
     let var: f32;
-    @(3.0) &= var;
+    assign var, 3.0; 
+    jump if_block_0, (); // jumping with no values
+    if_cond_0:
+        branch var < 2.0, if_block_0, else_if_cond_0;
+        if_block_0:
+            let var1: i32;
+            push (69);
+            assign var1, 3;
+            let var2: i32;
+            push (69);
+            assign var2, 3;
+            jump end, (69 69);   // this came from tracking state in analysis
+    else_if_cond_0:
+        branch var < 2.0, else_if_block_0, else_if_cond_1;
+        else_if_block_0:
+            branch -420 < 5, 
+            push (0 0 0);
+            jump end, (0 0 0);   // this came from tracking state in analysis
+    else_if_cond_1:
+        branch var < 2.0, else_if_block_0, else_cond_0;
+        else_if_block_1:
+            branch -420 < 5, 
+            push (1 1 1);
+            jump end, (1 1 1);   // this came from tracking state in analysis
+    else_cond_0:
+        else_block_0:
+            push (420 420 420);
+            jump end, (420 420 420); // this came from tracking state in analysis
+  end:
+    // here, phi will either deconstruct the arguments, or literally return a tuple
+    // either way thats more implementation details than anything
+    return phi (if_block_0, else_if_block_0, else_if_block_1, else_block_0);
+}
+
+// same code but in henceforth
+fn foo: (i32 i32) -> (i32 i32 i32) {
+    @pop @pop;
+    let var: f32; @(3.0) &= var;
+
     if @(var 2.0 <) {
-        let var: i32;
-        @(69) &= var;
-        {
-            let var: i32;
-            @(69) &= var;
-        }
+        let var1: i32; 
+        @(69 3)
+        &= var1;
+        let var2: i32;
+        @(69 3)
+        &= var2;
         @(69);
+    } else if @(-420 5 >) { // always false just for demonstration
+        @(0 0 0);
+    } else if @(-69 69 >) { // always false just for demonstration
+        @(1 1 1);
     } else {
-        @pop @(420);
+        @pop @(420 420 420);
     }
 }
-
-fn foo: (i32 i32 str) -> (i32 i32 i32) { ... }
 fn main: () -> (i32) {
-    // 4 syntax ideas
-    @(1 2 "stringthing") &> foo -> let (a: i32 b: i32 c: i32);
-    @(1 2 "stringthing") &> foo -> let (a b c);
-    @(1 2 "stringthing") &> foo -> let var: (i32 i32 i32);
-    @(1 2 "stringthing") &> foo -> let var;
-    @pop2;
+    @(1 2) &> foo;
+    @pop @pop;
 }
+
 
 
 fn func: (i32 i32 f32) -> (str i32 i32 i32) {

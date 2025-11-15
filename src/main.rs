@@ -9,6 +9,7 @@ mod hfs {
     pub mod scope_stack;
     pub mod stack_analyzer;
     pub mod cfg_builder;
+    pub mod hfs_mir;
     pub mod token;
     pub mod types;
     pub mod unresolved_ast;
@@ -20,6 +21,7 @@ mod hfs {
     pub use scope_stack::*;
     pub use stack_analyzer::*;
     pub use cfg_builder::*;
+    pub use hfs_mir::*;
     pub use token::*;
     pub use types::*;
     pub use unresolved_ast::*;

@@ -1,21 +1,19 @@
 use crate::hfs::{ast::*, Literal};
 /*
-=================================================================================================
-Controlflow Graph IR Pass (HFS Medium IR):
-    Check CFG-to-LLVM-IR-example.md/ll for a detailed example
-=================================================================================================
-IR that is built from the AST that includes CFG information and flattens control flow constructs
- this IR doesn't know that the HFS Stack exists at all. there is no StackBlock here.
- this is because everyone that wanted a given stack value has been given that ExprId in the AST. 
-LLVM also doesn't care either, in their SSA an 'add' is also its own register
-So we would generate it without really caring who uses it too.
- (though we must take that register and use it for the next computation, but its isolated much
- like our stack expressions were in henceforth. at this point, henceforth doesn't exist as much)
-
-The key here is that we dont care about the AST's Statement nodes after this pass.
- and there isn't a Tree structure anymore either. CFG dependencies are established and each block 
- knows where to go next (its a graph). 
-
+// =================================================================================================
+// Control Flow Graph IR Pass (HFS MIR - Medium-level IR)
+//     See HFS-MIR-to-LLVM-IR-example.md for an example
+// =================================================================================================
+// MIR is a graph-based IR that represents flattened control flow.
+//
+// Key properties:
+// - Stack semantics eliminated: all values are explicitly named (InstId)
+// - Control flow linearized: if/while/etc become blocks + branches/jumps
+// - SSA-friendly: each instruction produces a single named value (if there is a value)
+// - Graph structure: blocks connected by explicit control flow edges
+// - Statement-free: AST's Statement nodes are entirely eliminated and turned into instructions
+//
+// This IR maps cleanly to LLVM IR and is ready for lowering or interpretation.
 */
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)] pub struct BlockId(pub usize);

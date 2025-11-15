@@ -43,7 +43,8 @@ fn foo: (i32 i32 str) -> (i32 i32 i32) {
     end_while_0:
         jump end;
   end:
-    r
+    return %inst5; // we know inst5 has the values we want
+    // lets say it didnt: we might first build a local variable that contains our values
 }
 
 // same code but in henceforth

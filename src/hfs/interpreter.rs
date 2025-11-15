@@ -36,7 +36,6 @@ enum CtrlFlowState {
 pub struct CallFrame {
     func_id: FuncId,
     locals: HashMap<VarId, RuntimeValue>,
-    local_hfs_stack: Vec<RuntimeValue>,
     flow_state: CtrlFlowState,
     pub expr_values: HashMap<ExprId, RuntimeValue>,
 }
@@ -104,11 +103,10 @@ impl<'a> Interpreter<'a> {
         call_frame.locals.insert( var_id, RuntimeValue::default(self.arena.get_type_of_var(var_id)),);
     }
 
-    fn call_declared_function( &mut self, func_id: FuncId, tuple_args: Vec<RuntimeValue>,) -> Vec<RuntimeValue> {
+    fn call_declared_function( &mut self, func_id: FuncId, tuple_args: Vec<RuntimeValue>) -> Vec<RuntimeValue> {
         self.call_stack.push(CallFrame {
             func_id,
             locals: HashMap::new(),
-            local_hfs_stack: Vec::new(),
             flow_state: CtrlFlowState::Normal,
             expr_values: HashMap::new(),
         });
@@ -116,12 +114,9 @@ impl<'a> Interpreter<'a> {
         let func = self.arena.get_func(func_id);
         self.interpret_stmt(func.body);
 
+        todo!()
         // if we have nothing to return, we return an empty vector (will be iterated anyway)
-        self.call_stack.pop().expect("pushed above").local_hfs_stack
-        // TODO: decide how we pass values to the caller (depends on how we manage the stack
-        // tracking)
-        // if we solve it in StackAnalyzer for each branch, the code can "just run" here because
-        // the user was forced to keep the size of the stack consistent anyways.
+        // self.call_stack.pop().expect("pushed above").local_hfs_stack
     }
 
     fn interpret_stmt(&mut self, stmt_id: StmtId) {
@@ -174,7 +169,8 @@ impl<'a> Interpreter<'a> {
             Statement::StackBlock(expressions) => {
                 for expr_id in expressions {
                     let val = self.interpret_expr(*expr_id);
-                    self.curr_call_frame_mut().local_hfs_stack.push(val);
+                    todo!("make stack merges actually do anything");
+                    // self.curr_call_frame_mut().local_hfs_stack.push(val);
                 }
             }
             Statement::BlockScope(top_level_nodes, scope_kind) => {
@@ -209,25 +205,14 @@ impl<'a> Interpreter<'a> {
                 };
             }
             Statement::Empty => {}
-            Statement::FunctionCall {
-                args,
-                identifier,
-                return_values,
-                is_move,
-            } => {
-                let args: Vec<RuntimeValue> = args
-                    .iter()
-                    .map(|arg| self.interpret_expr(arg.clone()))
-                    .collect();
+            Statement::FunctionCall { args, identifier, is_move, } => {
+                let args: Vec<RuntimeValue> = args.iter().map(|arg| self.interpret_expr(arg.clone())).collect();
                 let return_values = self.call_declared_function(*identifier, args.clone());
                 for val in return_values {
                     // merge returned tuples into the caller's stack
-                    self.curr_call_frame_mut().local_hfs_stack.push(val);
+                    todo!("make stack merges actually do anything");
+                    // self.curr_call_frame_mut().local_hfs_stack.push(val);
                 }
-            }
-            Statement::StackKeyword { name, .. } => {
-                let kw_declaration = self.arena.get_stack_keyword_from_name(name.as_str());
-                let effect = kw_declaration.value_effect;
             }
         }
     }
@@ -248,12 +233,6 @@ impl<'a> Interpreter<'a> {
                 // Parameters should be pre-populated in the call frame when the function is called
                 // This node shouldn't be encountered during interpretation if resolved properly
                 panic!("Parameter nodes should be replaced by semantic analyzer")
-            }
-            Expression::ReturnValue(type_id) => {
-                // This should point to a specific value that was computed
-                // If the semantic analyzer properly resolved it, what does it point to?
-                // Do you need an ExprId field here?
-                todo!("What does ReturnValue contain after semantic analysis?")
             }
             Expression::StackKeyword { .. } => todo!(),
         }

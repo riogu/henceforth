@@ -1,127 +1,11 @@
 use crate::hfs::{token::*, RuntimeValue, ScopeKind};
 use std::collections::HashMap;
 
-// Grabs a signature (a b) -> (a b c) and creates a lambda that applies the stack keyword to a vector of runtme values
-macro_rules! value_effect {
-    (_) => {
-        |_: Vec<RuntimeValue>| -> Vec<RuntimeValue> {
-            vec![]
-        }
-    };
-
-    (($($arg:ident)*) -> ($($return:ident)*)) => {
-        |values: Vec<RuntimeValue>| -> Vec<RuntimeValue> {
-            let mut _idx = 0;
-            $(
-                let $arg = values[_idx].clone();
-                _idx += 1;
-            )*
-
-            vec![$($return.clone()),*]
-        }
-    };
-}
-// Grabs a signature with the syntax (a b) -> (a b c) and creates a lambda that performs that operation with a vector of types
-macro_rules! type_effect {
-    (_) => {
-        |_: Vec<TypeId>| -> Vec<Expression> {
-            vec![]
-        }
-    };
-
-    (($($arg:ident)*) -> ($($return:ident)*)) => {
-        |types: Vec<TypeId>| -> Vec<Expression> {
-            let mut _idx = 0;
-            $(
-                let $arg = types[_idx].clone();
-                _idx += 1;
-            )*
-
-            vec![$(Expression::ReturnValue($return.clone())),*]
-        }
-    };
-}
-
-// ============================================================================
-// Type-safe ID types
-// ============================================================================
-
-const STACK_KEYWORDS: &[StackKeywordDeclaration] = &[
-    StackKeywordDeclaration {
-        name: "@pop",
-        expected_args_size: Some(1),
-        return_size: 0,
-        type_effect: type_effect![(a) -> ()],
-        value_effect: value_effect![(a) -> ()],
-    },
-    StackKeywordDeclaration {
-        name: "@pop_all",
-        expected_args_size: None,
-        return_size: 0,
-        type_effect: type_effect![_],
-        value_effect: value_effect![_],
-    },
-    StackKeywordDeclaration {
-        name: "@dup",
-        expected_args_size: Some(1),
-        return_size: 2,
-        type_effect: type_effect![(a) -> (a a)],
-        value_effect: value_effect![(a) -> (a a)],
-    },
-    StackKeywordDeclaration {
-        name: "@swap",
-        expected_args_size: Some(2),
-        return_size: 2,
-        type_effect: type_effect![(a b) -> (b a)],
-        value_effect: value_effect![(a b) -> (b a)],
-    },
-    StackKeywordDeclaration {
-        name: "@over",
-        expected_args_size: Some(2),
-        return_size: 3,
-        type_effect: type_effect![(a b) -> (a b a)],
-        value_effect: value_effect![(a b) -> (a b a)],
-    },
-    StackKeywordDeclaration {
-        name: "@rot",
-        expected_args_size: Some(3),
-        return_size: 3,
-        type_effect: type_effect![(a b c) -> (b c a)],
-        value_effect: value_effect![(a b c) -> (b c a)],
-    },
-    StackKeywordDeclaration {
-        name: "@rrot",
-        expected_args_size: Some(3),
-        return_size: 3,
-        type_effect: type_effect![(a b c) -> (c a b)],
-        value_effect: value_effect![(a b c) -> (c a b)],
-    },
-    StackKeywordDeclaration {
-        name: "@nip",
-        expected_args_size: Some(2),
-        return_size: 1,
-        type_effect: type_effect![(a b) -> (b)],
-        value_effect: value_effect![(a b) -> (b)],
-    },
-    StackKeywordDeclaration {
-        name: "@tuck",
-        expected_args_size: Some(2),
-        return_size: 3,
-        type_effect: type_effect![(a b) -> (b a b)],
-        value_effect: value_effect![(a b) -> (b a b)],
-    },
-];
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct VarId(pub usize);
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct FuncId(pub usize);
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct ExprId(pub usize);
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct StmtId(pub usize);
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct TypeId(pub usize);
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)] pub struct VarId(pub usize);
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)] pub struct FuncId(pub usize);
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)] pub struct ExprId(pub usize);
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)] pub struct StmtId(pub usize);
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)] pub struct TypeId(pub usize);
 
 // ============================================================================
 // AST Node Structures
@@ -133,6 +17,7 @@ pub enum Identifier {
     Variable(VarId),
     Function(FuncId),
 }
+
 #[derive(Debug, Clone, Copy)]
 pub enum Operation {
     Add(ExprId, ExprId),
@@ -163,12 +48,13 @@ pub enum Expression {
         index: usize,     // Which parameter (0, 1, 2...)
         type_id: TypeId, // Parameter type
     },
-    ReturnValue(TypeId),  // we replace this ExprId with another one when computed
-    StackKeyword {
-        name: String,
-        args: Vec<ExprId>,
-        return_values: Vec<ExprId>,
-    },
+    StackKeyword(StackKeyword),
+}
+
+#[derive(Debug, Clone)]
+struct StackKeyword {
+    name: String,
+    args: Vec<ExprId>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -244,13 +130,7 @@ pub enum Statement {
     FunctionCall {
         args: Vec<ExprId>,
         identifier: FuncId,
-        return_values: Vec<ExprId>,
         is_move: bool,
-    },
-    StackKeyword {
-        name: String,
-        args: Vec<ExprId>,
-        return_values: Vec<ExprId>,
     },
 }
 
@@ -306,7 +186,6 @@ pub struct AstArena<'a> {
     // variables should continuously change their provenance for analysis
     pub curr_var_provenances: Vec<ExprProvenance>, // indexed by VarId
     pub curr_func_call_provenances: Vec<ExprProvenance>, // indexed by FuncId
-    // 
 }
 
 // had to move this here because i wanted to the arena's private members to be available to the parser
@@ -348,18 +227,6 @@ impl<'a> AstArena<'a> {
         self.expr_provenances.push(provenance);
         id
     }
-    // pub fn alloc_assignment_identifier(&mut self, identifier: Identifier, provenance: ExprProvenance, token: Token<'a>) -> ExprId {
-    //     let id = ExprId(self.exprs.len());
-    //     self.exprs.push(Expression::Identifier(identifier));
-    //     self.expr_provenances.push(provenance);
-    //     // also needs to map identifiers to their new provenance (new value's provenance)
-    //     // note that this is an easy way to check for loss of compile time in values
-    //     match identifier {
-    //         Identifier::GlobalVar(var_id) | Identifier::Variable(var_id) => self.curr_var_provenances[var_id.0] = provenance,
-    //         Identifier::Function(func_id) => self.curr_func_call_provenances[func_id.0] = provenance,
-    //     }
-    //     id
-    // }
 
     pub fn alloc_stmt(&mut self, stmt: Statement, token: Token<'a>) -> StmtId {
         let id = StmtId(self.stmts.len());
@@ -483,8 +350,119 @@ impl<'a> AstArena<'a> {
     }
 
     pub fn get_stack_change( &self, stack_start: Vec<ExprId>, mut hfs_stack: Vec<ExprId>,) -> Vec<ExprId> {
-        let elements_to_delete = hfs_stack .iter() .zip(&stack_start) .take_while(|(a, b)| a == b) .count();
+        let elements_to_delete = hfs_stack.iter().zip(&stack_start).take_while(|(a, b)| a == b).count();
         hfs_stack.drain(0..elements_to_delete);
         hfs_stack
     }
 }
+
+// Grabs a signature (a b) -> (a b c) and creates a lambda that applies the stack keyword to a vector of runtme values
+macro_rules! value_effect {
+    (_) => {
+        |_: Vec<RuntimeValue>| -> Vec<RuntimeValue> {
+            vec![]
+        }
+    };
+
+    (($($arg:ident)*) -> ($($return:ident)*)) => {
+        |values: Vec<RuntimeValue>| -> Vec<RuntimeValue> {
+            let mut _idx = 0;
+            $(
+                let $arg = values[_idx].clone();
+                _idx += 1;
+            )*
+
+            vec![$($return.clone()),*]
+        }
+    };
+}
+// Grabs a signature with the syntax (a b) -> (a b c) and creates a lambda that performs that operation with a vector of types
+macro_rules! type_effect {
+    (_) => {
+        |_: Vec<TypeId>| -> Vec<Expression> {
+            vec![]
+        }
+    };
+
+    (($($arg:ident)*) -> ($($return:ident)*)) => {
+        |types: Vec<TypeId>| -> Vec<Expression> {
+            let mut _idx = 0;
+            $(
+                let $arg = types[_idx].clone();
+                _idx += 1;
+            )*
+
+            vec![$(Expression::ReturnValue($return.clone())),*]
+        }
+    };
+}
+
+// ============================================================================
+// Type-safe ID types
+// ============================================================================
+
+const STACK_KEYWORDS: &[StackKeywordDeclaration] = &[
+    StackKeywordDeclaration {
+        name: "@pop",
+        expected_args_size: Some(1),
+        return_size: 0,
+        type_effect: type_effect![(a) -> ()],
+        value_effect: value_effect![(a) -> ()],
+    },
+    StackKeywordDeclaration {
+        name: "@pop_all",
+        expected_args_size: None,
+        return_size: 0,
+        type_effect: type_effect![_],
+        value_effect: value_effect![_],
+    },
+    StackKeywordDeclaration {
+        name: "@dup",
+        expected_args_size: Some(1),
+        return_size: 2,
+        type_effect: type_effect![(a) -> (a a)],
+        value_effect: value_effect![(a) -> (a a)],
+    },
+    StackKeywordDeclaration {
+        name: "@swap",
+        expected_args_size: Some(2),
+        return_size: 2,
+        type_effect: type_effect![(a b) -> (b a)],
+        value_effect: value_effect![(a b) -> (b a)],
+    },
+    StackKeywordDeclaration {
+        name: "@over",
+        expected_args_size: Some(2),
+        return_size: 3,
+        type_effect: type_effect![(a b) -> (a b a)],
+        value_effect: value_effect![(a b) -> (a b a)],
+    },
+    StackKeywordDeclaration {
+        name: "@rot",
+        expected_args_size: Some(3),
+        return_size: 3,
+        type_effect: type_effect![(a b c) -> (b c a)],
+        value_effect: value_effect![(a b c) -> (b c a)],
+    },
+    StackKeywordDeclaration {
+        name: "@rrot",
+        expected_args_size: Some(3),
+        return_size: 3,
+        type_effect: type_effect![(a b c) -> (c a b)],
+        value_effect: value_effect![(a b c) -> (c a b)],
+    },
+    StackKeywordDeclaration {
+        name: "@nip",
+        expected_args_size: Some(2),
+        return_size: 1,
+        type_effect: type_effect![(a b) -> (b)],
+        value_effect: value_effect![(a b) -> (b)],
+    },
+    StackKeywordDeclaration {
+        name: "@tuck",
+        expected_args_size: Some(2),
+        return_size: 3,
+        type_effect: type_effect![(a b) -> (b a b)],
+        value_effect: value_effect![(a b) -> (b a b)],
+    },
+];

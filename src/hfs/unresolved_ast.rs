@@ -72,7 +72,6 @@ pub enum UnresolvedStatement {
         is_move: bool, // true for &>, false for :>
                        // value comes from stack
     },
-    StackKeyword(String),
 }
 
 #[derive(Debug, Clone)]

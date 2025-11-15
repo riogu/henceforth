@@ -148,6 +148,14 @@ impl<'a> StackAnalyzer<'a> {
     }
 
     fn resolve_func_decl(&mut self, id: UnresolvedFuncId) -> FuncId {
+        // FIXME: keep track of the current function declaration 
+        // and distribute the parameter_exprs to people that utilize the stack
+        // that came from the function arguments
+        // later map these ExprId to runtime values when we call the function
+        // and keep remapping those values every call
+        // so they can be used as keys to runtime values later because the body 
+        // holds these exprids and requests the runtime value using them
+        // they work as unique identifiers for the parameters basically
         let token = self.unresolved_arena.get_unresolved_func_token(id);
         let (name, param_type, return_type, unresolved_body, parameter_exprs) = {
             let unresolved_func = &self.unresolved_arena.get_unresolved_func(id);
@@ -183,9 +191,16 @@ impl<'a> StackAnalyzer<'a> {
         let func_id = self.push_function_and_scope_and_alloc(&name, func, token); 
         let body = self.resolve_stmt(unresolved_body);
         //------------------------------------------------------------
+        // TODO: when you add the CFG you want every block to end at the same "end" block which is
+        // just the end of the function unless its a return statement/break, etc (llvm has ret
+        // instructions). that means its up to YOU in the CFG pass to validate the stack sizes and
+        // while you are at it, maybe the types too. so you should use validate_return_stack()
+        // yourself whenever you find out that we are "leaving" a function.
+        // one REALLY good approach is to have every block always go to our "end" block. llvm will
+        // likely optimize that away and simplifies stuff.
         self.arena.validate_return_stack(self.scope_resolution_stack.get_curr_func_return_type());
         self.scope_resolution_stack.pop();
-        self.arena.hfs_stack.clear(); // context should be reset after each function!
+        self.arena.pop_entire_hfs_stack(); // context should be reset after each function!
         func_id
     }
     // this method should be used since it guarantees that we set up everything right
@@ -346,7 +361,7 @@ impl<'a> StackAnalyzer<'a> {
                 } else {
                     self.arena.last_or_error("expected value in stack for copy assignment statement.")
                 };
-                let identifier  = self.resolve_var_assignment_identifier(identifier, *self.arena.get_expr_provenance(value));
+                let identifier = self.resolve_var_assignment_identifier(identifier, *self.arena.get_expr_provenance(value));
                 self.arena.alloc_stmt(Statement::Assignment { value, identifier, is_move }, token)
             }
             UnresolvedStatement::FunctionCall { identifier, is_move } => {
@@ -360,7 +375,7 @@ impl<'a> StackAnalyzer<'a> {
                 for _ in 0..param_types.len() {
                     let arg_expr = self.arena.pop_or_error("expected more elements on stack for function call");
                     arg_types.push(self.arena.get_type_id_of_expr(arg_expr));
-                        expressions.push(arg_expr);
+                    expressions.push(arg_expr);
                 }
                 let arg_type_id = self.arena.alloc_type(
                     Type::Tuple(arg_types),
@@ -371,45 +386,9 @@ impl<'a> StackAnalyzer<'a> {
 
                 // now make sure the stack is updated based on the return type of the function
                 let Type::Tuple(return_types) = self.arena.get_type(func_decl.return_type) else { panic!("[internal error] functions only return tuples at the moment.") };
-                let mut return_values = Vec::<ExprId>::new();
-                for ret_type in return_types.clone() {
-                    let token = self.arena.get_type_token(ret_type).clone();
-                    return_values.push(self.arena.alloc_and_push_to_hfs_stack(Expression::ReturnValue(ret_type),
-                                                                              ExprProvenance::RuntimeValue, token));
-                }
                 // function calls dont go to the stack
-                self.arena.alloc_stmt(Statement::FunctionCall { args: expressions, identifier: func_id, return_values, is_move}, token)
+                self.arena.alloc_stmt(Statement::FunctionCall { args: expressions, identifier: func_id, is_move}, token)
             }
-            UnresolvedStatement::StackKeyword(name) => {
-                let kw_declaration = self.arena.get_stack_keyword_from_name(name.as_str());
-
-                // Copy out the function pointer so we dont have mutable borrow while there is an immutable borrow 
-                let effect = kw_declaration.type_effect;
-
-                let args = match kw_declaration.expected_args_size {
-                    Some(n) => self.arena.popn_or_error(n, format!("expected {} arguments for stack keyword {}", n, kw_declaration.name).as_str()),
-                    None => self.arena.pop_entire_hfs_stack(), // for @pop_all
-                };
-                // simulate stack
-                let simulated_stack: Vec<TypeId> = args.iter().map(|id| self.arena.get_type_id_of_expr(*id)).collect();
-                let return_values = effect(simulated_stack);
-                let mut return_value_ids = Vec::new();
-                return_values
-                    .iter()
-                    .for_each(|ret| {
-                        if let Expression::ReturnValue(id) = ret {
-                            let return_val_id = self
-                                .arena
-                                .alloc_and_push_to_hfs_stack(ret.clone(), ExprProvenance::RuntimeValue,
-                                                                          self.arena.get_type_token(*id).clone());
-                            return_value_ids.push(return_val_id);
-                        } else {
-                            panic!("[internal error] stack keyword effect should return a Expression::ReturnValue")
-                        }
-                });
-                self.arena.alloc_stmt(Statement::StackKeyword { name, args, return_values: return_value_ids }, token)
-            
-            },
         }
     }
 
@@ -495,28 +474,29 @@ impl<'a> StackAnalyzer<'a> {
                     Some(n) => self.arena.popn_or_error(n, format!("expected {} arguments for stack keyword {}", n, kw_declaration.name).as_str()),
                     None => self.arena.pop_entire_hfs_stack(), // for @pop_all
                 };
-                // simulate stack
-                let simulated_stack: Vec<TypeId> = args.iter().map(|id| self.arena.get_type_id_of_expr(*id)).collect();
-                let return_values = effect(simulated_stack);
-                let mut return_value_ids = Vec::new();
-                return_values
-                    .iter()
-                    .for_each(|ret| {
-                        if let Expression::ReturnValue(id) = ret {
-                            let return_val_id = self
-                                .arena
-                                .alloc_and_push_to_hfs_stack(ret.clone(), ExprProvenance::RuntimeValue,
-                                                             self.arena.get_type_token(*id).clone());
-                            return_value_ids.push(return_val_id);
-                        } else {
-                            panic!("[internal error] stack keyword effect should return a Expression::ReturnValue")
-                        }
-                });
-            
-                let id = self.arena.alloc_and_push_to_hfs_stack(Expression::StackKeyword { name, args, return_values: return_value_ids },
-                                                                ExprProvenance::RuntimeValue, token);
-                self.arena.pop_or_error("could not pop stack keyword");
-                id
+                todo!();
+                // // simulate stack
+                // let simulated_stack: Vec<TypeId> = args.iter().map(|id| self.arena.get_type_id_of_expr(*id)).collect();
+                // let return_values = effect(simulated_stack);
+                // let mut return_value_ids = Vec::new();
+                // return_values
+                //     .iter()
+                //     .for_each(|ret| {
+                //         if let Expression::ReturnValue(id) = ret {
+                //             let return_val_id = self
+                //                 .arena
+                //                 .alloc_and_push_to_hfs_stack(ret.clone(), ExprProvenance::RuntimeValue,
+                //                                              self.arena.get_type_token(*id).clone());
+                //             return_value_ids.push(return_val_id);
+                //         } else {
+                //             panic!("[internal error] stack keyword effect should return a Expression::ReturnValue")
+                //         }
+                // });
+                //
+                // let id = self.arena.alloc_and_push_to_hfs_stack(Expression::StackKeyword { name, args, return_values: return_value_ids },
+                //                                                 ExprProvenance::RuntimeValue, token);
+                // self.arena.pop_or_error("could not pop stack keyword");
+                // id
             },
         }
     }

@@ -7,11 +7,28 @@ import hfs;
 fn foo: (i32 i32 str) -> (i32 i32 i32) {
 
     let var: f32;
-    @(1 2 3.0) &= var;
-    @(1 2 3.0) := var;
-    @(1 2 3.0) &> func;
-    @(1 2 3.0) :> func;
+    @(3.0) &= var;
+    if @(var 2.0 <) {
+        let var: i32;
+        @(69) &= var;
+        {
+            let var: i32;
+            @(69) &= var;
+        }
+        @(69);
+    } else {
+        @pop @(420);
+    }
+}
 
+fn foo: (i32 i32 str) -> (i32 i32 i32) { ... }
+fn main: () -> (i32) {
+    // 4 syntax ideas
+    @(1 2 "stringthing") &> foo -> let (a: i32 b: i32 c: i32);
+    @(1 2 "stringthing") &> foo -> let (a b c);
+    @(1 2 "stringthing") &> foo -> let var: (i32 i32 i32);
+    @(1 2 "stringthing") &> foo -> let var;
+    @pop2;
 }
 
 

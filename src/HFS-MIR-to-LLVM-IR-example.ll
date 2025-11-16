@@ -1,3 +1,7 @@
+; ModuleID = 'llvm-test.cpp'
+source_filename = "llvm-test.cpp"
+target triple = "x86_64-pc-linux-gnu"
+
 %ReturnTuple = type { i32, i32, i32 }
 
 define %ReturnTuple @foo(i32 %arg0, i32 %arg1, ptr %arg2) {

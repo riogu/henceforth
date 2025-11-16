@@ -24,6 +24,7 @@ pub struct CfgFunction {
     identifier: FuncId,
     // we repeat the FunctionDeclaration methods because we are meant convert everything over
     // rather than keep acessing the old FunctionDeclaration (we still keep the FuncId though)
+    // also you can just store each CfgFunction with their FuncId too in the new arena
     pub param_type: TypeId,
     pub return_type: TypeId,
 

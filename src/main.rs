@@ -8,7 +8,7 @@ mod hfs {
     pub mod parser;
     pub mod scope_stack;
     pub mod stack_analyzer;
-    pub mod cfg_builder;
+    pub mod cfg_analyzer;
     pub mod hfs_mir;
     pub mod token;
     pub mod types;
@@ -20,7 +20,7 @@ mod hfs {
     pub use parser::*;
     pub use scope_stack::*;
     pub use stack_analyzer::*;
-    pub use cfg_builder::*;
+    pub use cfg_analyzer::*;
     pub use hfs_mir::*;
     pub use token::*;
     pub use types::*;

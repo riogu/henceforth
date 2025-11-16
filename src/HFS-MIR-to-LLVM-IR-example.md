@@ -24,7 +24,7 @@ fn foo: (i32 i32 str) -> (i32 i32 i32) {
         branch -69 < 69, else_if_block_0, else_block_0;
         else_if_block_1:
             %ret2 = jump end_if_0, push (1 1 1);  // if you prefer this representation
-            // here we put the push() diirectly in the jump (pick what you prefer)
+            // here we put the push() directly in the jump (pick what you prefer)
     else_block_0:
         %inst4 = push (420 420 420);
         %ret3 = jump end_if_0, %inst4;       // this came from tracking state in analysis

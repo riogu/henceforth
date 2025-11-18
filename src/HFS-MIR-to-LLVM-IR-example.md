@@ -1,8 +1,11 @@
 ```cpp
 // example of the HFS MIR language
-fn foo: (i32 i32 str) -> (i32 i32 i32) {
+fn foo: (i32 i32) -> (i32 i32 i32) {
   start:
     let var: f32;
+
+    keyword pop;
+    keyword pop;
     store var, 3.0; 
     jump if_block_0; // jumping with no values
     if_cond_0:

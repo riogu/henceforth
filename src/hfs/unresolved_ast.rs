@@ -1,6 +1,6 @@
+use crate::hfs::ScopeKind;
 use crate::hfs::ast::*;
 use crate::hfs::token::*;
-use crate::hfs::ScopeKind;
 
 // ============================================================================
 // First-pass AST (no stack resolution)

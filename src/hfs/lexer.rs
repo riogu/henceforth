@@ -1,9 +1,9 @@
+use crate::hfs::VALID_STACK_KEYWORDS;
 use crate::hfs::lexer;
 use crate::hfs::token::Literal;
 use crate::hfs::token::SourceInfo;
 use crate::hfs::token::Token;
 use crate::hfs::token::TokenKind;
-use crate::hfs::VALID_STACK_KEYWORDS;
 use std::{fs, path::PathBuf};
 
 #[derive(Debug)]

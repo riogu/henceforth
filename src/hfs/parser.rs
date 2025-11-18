@@ -1,7 +1,7 @@
+use crate::hfs::ScopeKind;
 use crate::hfs::ast::*;
 use crate::hfs::token::*;
 use crate::hfs::unresolved_ast::*;
-use crate::hfs::ScopeKind;
 
 use std::iter::Peekable;
 use std::vec::IntoIter;
@@ -160,7 +160,10 @@ impl<'a> Parser<'a> {
     // <statement> ::= <if_stmt> | <stack_block> | <while_stmt> | <return_stmt>
     //               | <break_stmt> | <continue_stmt> | <assignment_stmt> | ";"
     fn statement(&mut self) -> UnresolvedStmtId {
-        let token = self.tokens.peek().expect("unexpected end of input while parsing statement"); 
+        let token = self
+            .tokens
+            .peek()
+            .expect("unexpected end of input while parsing statement");
         match token.kind {
             TokenKind::If => self.if_statement(),
             TokenKind::At => self.stack_block(),
@@ -269,17 +272,24 @@ impl<'a> Parser<'a> {
                 _ => expressions.push(self.stack_expression()),
             };
         }
-        self.arena.alloc_unresolved_stmt(UnresolvedStatement::StackBlock(expressions), token)
+        self.arena
+            .alloc_unresolved_stmt(UnresolvedStatement::StackBlock(expressions), token)
     }
     // <stack_expression> ::= <stack_operation> | <identifier> | <literal> | <function_call>
     fn stack_expression(&mut self) -> UnresolvedExprId {
-        let kind = self .tokens .peek() .expect("unexpected end of input while parsing statement") .kind .clone();
+        let kind = self
+            .tokens
+            .peek()
+            .expect("unexpected end of input while parsing statement")
+            .kind
+            .clone();
         match kind {
             kind if kind.is_stack_operator() => self.stack_operation(),
             TokenKind::StackKeyword(keyword) => self.stack_keyword_expr(),
             TokenKind::Identifier(_) => {
                 let (name, token) = self.expect_identifier();
-                self.arena.alloc_unresolved_expr(UnresolvedExpression::Identifier(name), token)
+                self.arena
+                    .alloc_unresolved_expr(UnresolvedExpression::Identifier(name), token)
             }
             TokenKind::Literal(lit) => self.arena.alloc_unresolved_expr(
                 UnresolvedExpression::Literal(lit),
@@ -372,7 +382,8 @@ impl<'a> Parser<'a> {
                 _ => expressions.push(self.stack_expression()),
             };
         }
-        self.arena .alloc_unresolved_expr(UnresolvedExpression::Tuple { expressions }, token)
+        self.arena
+            .alloc_unresolved_expr(UnresolvedExpression::Tuple { expressions }, token)
     }
 
     // <assignment> ::= "&=" <identifier> ";"
@@ -418,6 +429,7 @@ impl<'a> Parser<'a> {
     // <stack-keyword> ::= @pop | @pop_all
     fn stack_keyword_expr(&mut self) -> UnresolvedExprId {
         let (name, token) = self.expect_stack_keyword();
-        self.arena.alloc_unresolved_expr(UnresolvedExpression::StackKeyword(name), token)
+        self.arena
+            .alloc_unresolved_expr(UnresolvedExpression::StackKeyword(name), token)
     }
 }

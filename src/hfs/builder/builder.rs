@@ -1,6 +1,6 @@
 use crate::{
-    hfs::token::{Literal, TokenKind},
     hfs::Type,
+    hfs::token::{Literal, TokenKind},
 };
 
 pub enum BuilderOperation {
@@ -36,7 +36,7 @@ pub trait FunctionOps {
     fn args(self, args: Option<Vec<Type>>) -> Self;
     fn return_types(self, return_types: Option<Vec<Type>>) -> Self;
     fn func_with(self, name: &str, args: Option<Vec<Type>>, return_type: Option<Vec<Type>>)
-        -> Self;
+    -> Self;
     fn body(self) -> Self;
     fn end_body(self) -> Self;
     fn call_function(self, name: &str, mode: PassMode) -> Self;

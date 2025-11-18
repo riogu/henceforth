@@ -1,9 +1,9 @@
 use crate::hfs::{
+    Literal, TokenKind, Type,
     builder::builder::{
         Builder, BuilderOperation, ControlFlowOps, FunctionOps, LoopOps, PassMode, StackOps,
         VariableOps,
     },
-    Literal, TokenKind, Type,
 };
 
 pub struct TokenSequence {

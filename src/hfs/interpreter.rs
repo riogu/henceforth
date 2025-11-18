@@ -94,16 +94,28 @@ impl<'a> Interpreter<'a> {
         if let Some(main) = scope_stack.find_function("main") {
             interpreter.call_declared_function(main, Vec::new());
         } else {
-            panic!("this file has no 'main()' entrypoint, so it cannot be interpreted (consider compiling it instead)")
+            panic!(
+                "this file has no 'main()' entrypoint, so it cannot be interpreted (consider compiling it instead)"
+            )
         }
     }
 
     fn interpret_var_decl(&mut self, var_id: VarId) {
-        let call_frame = self .call_stack .last_mut() .expect("[internal error] invalid call stack");
-        call_frame.locals.insert( var_id, RuntimeValue::default(self.arena.get_type_of_var(var_id)),);
+        let call_frame = self
+            .call_stack
+            .last_mut()
+            .expect("[internal error] invalid call stack");
+        call_frame.locals.insert(
+            var_id,
+            RuntimeValue::default(self.arena.get_type_of_var(var_id)),
+        );
     }
 
-    fn call_declared_function( &mut self, func_id: FuncId, tuple_args: Vec<RuntimeValue>) -> Vec<RuntimeValue> {
+    fn call_declared_function(
+        &mut self,
+        func_id: FuncId,
+        tuple_args: Vec<RuntimeValue>,
+    ) -> Vec<RuntimeValue> {
         self.call_stack.push(CallFrame {
             func_id,
             locals: HashMap::new(),
@@ -121,7 +133,11 @@ impl<'a> Interpreter<'a> {
 
     fn interpret_stmt(&mut self, stmt_id: StmtId) {
         match self.arena.get_stmt(stmt_id) {
-            Statement::If { cond, body, else_stmt } => {
+            Statement::If {
+                cond,
+                body,
+                else_stmt,
+            } => {
                 let RuntimeValue::Bool(if_cond) = self.interpret_expr(*cond) else {
                     panic!("expected boolean value on stack for if statement condition")
                 };
@@ -133,7 +149,7 @@ impl<'a> Interpreter<'a> {
                     match self.curr_call_frame().flow_state {
                         CtrlFlowState::Normal => {}
                         CtrlFlowState::Return | CtrlFlowState::Break | CtrlFlowState::Continue => {
-                            return
+                            return;
                         }
                     }
                 } else if let Some(else_stmt) = else_stmt {
@@ -184,7 +200,7 @@ impl<'a> Interpreter<'a> {
                     match self.curr_call_frame().flow_state {
                         CtrlFlowState::Normal => {} // funny code lol
                         CtrlFlowState::Return | CtrlFlowState::Break | CtrlFlowState::Continue => {
-                            return
+                            return;
                         }
                     }
                 }
@@ -192,7 +208,11 @@ impl<'a> Interpreter<'a> {
             Statement::Return => self.curr_call_frame_mut().flow_state = CtrlFlowState::Return,
             Statement::Break => self.curr_call_frame_mut().flow_state = CtrlFlowState::Break,
             Statement::Continue => self.curr_call_frame_mut().flow_state = CtrlFlowState::Continue,
-            Statement::Assignment { value, identifier, is_move } => {
+            Statement::Assignment {
+                value,
+                identifier,
+                is_move,
+            } => {
                 let new_value = self.interpret_expr(*value);
                 match identifier {
                     Identifier::GlobalVar(var_id) => self.globals.insert(*var_id, new_value),
@@ -205,8 +225,15 @@ impl<'a> Interpreter<'a> {
                 };
             }
             Statement::Empty => {}
-            Statement::FunctionCall { args, identifier, is_move, } => {
-                let args: Vec<RuntimeValue> = args.iter().map(|arg| self.interpret_expr(arg.clone())).collect();
+            Statement::FunctionCall {
+                args,
+                identifier,
+                is_move,
+            } => {
+                let args: Vec<RuntimeValue> = args
+                    .iter()
+                    .map(|arg| self.interpret_expr(arg.clone()))
+                    .collect();
                 let return_values = self.call_declared_function(*identifier, args.clone());
                 for val in return_values {
                     // merge returned tuples into the caller's stack

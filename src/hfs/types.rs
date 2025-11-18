@@ -73,7 +73,7 @@ impl<'a> AstArena<'a> {
                 let tuple_type = Type::Tuple(element_types);
                 self.alloc_type(tuple_type, token)
             }
-            Expression::Parameter{ index, type_id} => type_id,
+            Expression::Parameter { index, type_id } => type_id,
             Expression::ReturnValue(type_id) => type_id,
             Expression::StackKeyword { .. } => todo!(),
         }

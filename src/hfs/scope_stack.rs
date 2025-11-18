@@ -1,5 +1,6 @@
-use crate::hfs::ast::*;
 use std::collections::HashMap;
+
+use crate::hfs::ast::*;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 // Scopes, used for solving symbols
@@ -40,16 +41,8 @@ impl ScopeStack {
             mangled_functions: HashMap::new(),
         }
     }
-    pub fn push_function_and_scope(
-        &mut self,
-        name: &str,
-        func_id: FuncId,
-        curr_func_return_type: TypeId,
-    ) {
-        let parent = self
-            .scope_stack
-            .last_mut()
-            .expect("[internal hfs error] couldn't push function, scopes were set up wrong.");
+    pub fn push_function_and_scope(&mut self, name: &str, func_id: FuncId, curr_func_return_type: TypeId) {
+        let parent = self.scope_stack.last_mut().expect("[internal hfs error] couldn't push function, scopes were set up wrong.");
         let mangled_name = format!("{}{}()", parent.name, name);
         self.scope_stack.push(Scope {
             name: format!("{}::", mangled_name),
@@ -63,32 +56,20 @@ impl ScopeStack {
         if scope_kind == ScopeKind::Function {
             panic!("[internal error] function scopes shouldn't be pushed with this method.");
         }
-        let parent = self
-            .scope_stack
-            .last_mut()
-            .expect("[internal hfs error] couldn't push block, scopes were set up wrong.");
+        let parent = self.scope_stack.last_mut().expect("[internal hfs error] couldn't push block, scopes were set up wrong.");
         let scope_name = format!("{}{}::", parent.name, parent.inner_count);
         parent.inner_count += 1;
         let curr_func_return_type = parent.curr_func_return_type;
-        self.scope_stack.push(Scope {
-            name: scope_name,
-            kind: scope_kind,
-            inner_count: 0,
-            curr_func_return_type,
-        });
+        self.scope_stack.push(Scope { name: scope_name, kind: scope_kind, inner_count: 0, curr_func_return_type });
     }
     pub fn push_variable(&mut self, name: &str, var_id: VarId) {
-        let curr_stack = self
-            .scope_stack
-            .last()
-            .expect("[internal hfs error] scopes were set up wrong.");
+        let curr_stack = self.scope_stack.last().expect("[internal hfs error] scopes were set up wrong.");
         let mangled_name = format!("{}{}", curr_stack.name, name);
         match curr_stack.kind {
             ScopeKind::Global => self.mangled_global_vars.insert(mangled_name, var_id),
             ScopeKind::Function => self.mangled_locals.insert(mangled_name, var_id),
-            ScopeKind::Block | ScopeKind::WhileLoop | ScopeKind::IfStmt | ScopeKind::ElseStmt => {
-                self.mangled_locals.insert(mangled_name, var_id)
-            }
+            ScopeKind::Block | ScopeKind::WhileLoop | ScopeKind::IfStmt | ScopeKind::ElseStmt =>
+                self.mangled_locals.insert(mangled_name, var_id),
         };
     }
     pub fn pop(&mut self) {
@@ -97,16 +78,10 @@ impl ScopeStack {
         }
     }
     pub fn curr_scope_kind(&self) -> ScopeKind {
-        self.scope_stack
-            .last()
-            .expect("[internal hfs error] no scope found")
-            .kind
+        self.scope_stack.last().expect("[internal hfs error] no scope found").kind
     }
     pub fn get_curr_func_return_type(&self) -> TypeId {
-        self.scope_stack
-            .last()
-            .expect("[internal hfs error] no scope found")
-            .curr_func_return_type
+        self.scope_stack.last().expect("[internal hfs error] no scope found").curr_func_return_type
     }
     pub fn is_in_while_loop_context(&self) -> bool {
         for scope in self.scope_stack.iter().rev() {
@@ -133,10 +108,7 @@ impl ScopeStack {
         }
         // Check globals
         let global_mangled_name = format!("{}{}", self.scope_stack[0].name, name);
-        (
-            self.mangled_global_vars.get(&global_mangled_name).copied(),
-            true,
-        )
+        (self.mangled_global_vars.get(&global_mangled_name).copied(), true)
     }
 
     pub fn find_function(&self, name: &str) -> Option<FuncId> {

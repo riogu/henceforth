@@ -27,9 +27,7 @@ impl From<bool> for Literal {
     }
 }
 
-pub const VALID_STACK_KEYWORDS: &[&str] = &[
-    "@pop", "@pop_all", "@dup", "@swap", "@over", "@rot", "@rrot", "@nip", "@tuck",
-];
+pub const VALID_STACK_KEYWORDS: &[&str] = &["@pop", "@pop_all", "@dup", "@swap", "@over", "@rot", "@rrot", "@nip", "@tuck"];
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum TokenKind {
@@ -133,7 +131,7 @@ impl From<Type> for TokenKind {
 
 use std::fmt;
 
-use crate::{hfs::ast::Type, hfs::builder::builder::BuilderOperation};
+use crate::hfs::{ast::Type, builder::builder::BuilderOperation};
 
 impl fmt::Display for TokenKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -198,18 +196,8 @@ pub struct SourceInfo<'a> {
 }
 
 impl<'a> SourceInfo<'a> {
-    pub fn new(
-        line_number: usize,
-        line_offset: usize,
-        token_width: usize,
-        line_string: &'a str,
-    ) -> Self {
-        Self {
-            line_number,
-            line_offset,
-            token_width,
-            line_string,
-        }
+    pub fn new(line_number: usize, line_offset: usize, token_width: usize, line_string: &'a str) -> Self {
+        Self { line_number, line_offset, token_width, line_string }
     }
 }
 
@@ -293,11 +281,8 @@ impl TokenKind {
             TokenKind::Float => Type::Float,
             TokenKind::Identifier(_) => {
                 panic!("[internal hfs error]: this is not how you convert identifiers to types")
-            }
-            _ => panic!(
-                "[internal hfs error]: expected token that has a type, got {:?}",
-                self
-            ),
+            },
+            _ => panic!("[internal hfs error]: expected token that has a type, got {:?}", self),
         }
     }
     pub fn is_type(&self) -> bool {

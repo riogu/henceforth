@@ -1,5 +1,4 @@
-use crate::hfs::ast::*;
-use crate::hfs::token::*;
+use crate::hfs::{ast::*, token::*};
 
 impl<'a> AstArena<'a> {
     // Convenience methods for common types
@@ -29,7 +28,7 @@ impl<'a> AstArena<'a> {
                 let rhs_type = self.get_type_id_of_expr(*rhs);
                 // TODO: Type checking - they should match
                 lhs_type
-            }
+            },
             Operation::Or(_, _)
             | Operation::And(_, _)
             | Operation::Not(_)
@@ -49,11 +48,11 @@ impl<'a> AstArena<'a> {
                 Identifier::GlobalVar(var_id) | Identifier::Variable(var_id) => {
                     let var = self.get_var(var_id);
                     var.hfs_type
-                }
+                },
                 Identifier::Function(func_id) => {
                     let func = self.get_func(func_id);
                     func.return_type
-                }
+                },
             },
             Expression::Literal(literal) => match literal {
                 Literal::Integer(_) => self.int_type(),
@@ -72,7 +71,7 @@ impl<'a> AstArena<'a> {
 
                 let tuple_type = Type::Tuple(element_types);
                 self.alloc_type(tuple_type, token)
-            }
+            },
             Expression::Parameter { index, type_id } => type_id,
             Expression::ReturnValue(type_id) => type_id,
             Expression::StackKeyword { .. } => todo!(),

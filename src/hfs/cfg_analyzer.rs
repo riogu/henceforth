@@ -1,8 +1,7 @@
 use std::fmt::Debug;
 
 use crate::hfs::{
-    self, ast::*, BasicBlock, BlockId, CfgFunction, CfgPrintable, InstId, Instruction, Literal,
-    TermInstId, TerminatorInst,
+    self, BasicBlock, BlockId, CfgFunction, CfgPrintable, InstId, Instruction, Literal, TermInstId, TerminatorInst, ast::*,
 };
 // here is where youll create the CFG pass and the new IR generation
 

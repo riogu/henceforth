@@ -1,5 +1,6 @@
-use crate::hfs::{token::*, RuntimeValue, ScopeKind};
 use std::{collections::HashMap, fmt::Display};
+
+use crate::hfs::{RuntimeValue, ScopeKind, token::*};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct VarId(pub usize);
@@ -188,7 +189,7 @@ pub struct AstArena<'a> {
     // expr provenances shouldn't change after creation
     pub expr_provenances: Vec<ExprProvenance>, // indexed by ExprId
     // variables should continuously change their provenance for analysis
-    pub curr_var_provenances: Vec<ExprProvenance>, // indexed by VarId
+    pub curr_var_provenances: Vec<ExprProvenance>,       // indexed by VarId
     pub curr_func_call_provenances: Vec<ExprProvenance>, // indexed by FuncId
 }
 
@@ -197,43 +198,17 @@ pub struct AstArena<'a> {
 impl<'a> AstArena<'a> {
     pub fn new() -> Self {
         let mut arena = Self::default();
-        arena.alloc_type_uncached(
-            Type::Int,
-            Token {
-                kind: TokenKind::Int,
-                source_info: SourceInfo::new(0, 0, 0, "Int"),
-            },
-        );
-        arena.alloc_type_uncached(
-            Type::Float,
-            Token {
-                kind: TokenKind::Float,
-                source_info: SourceInfo::new(0, 0, 0, "Float"),
-            },
-        );
-        arena.alloc_type_uncached(
-            Type::Bool,
-            Token {
-                kind: TokenKind::Bool,
-                source_info: SourceInfo::new(0, 0, 0, "Bool"),
-            },
-        );
-        arena.alloc_type_uncached(
-            Type::String,
-            Token {
-                kind: TokenKind::String,
-                source_info: SourceInfo::new(0, 0, 0, "String"),
-            },
-        );
+        arena.alloc_type_uncached(Type::Int, Token { kind: TokenKind::Int, source_info: SourceInfo::new(0, 0, 0, "Int") });
+        arena.alloc_type_uncached(Type::Float, Token { kind: TokenKind::Float, source_info: SourceInfo::new(0, 0, 0, "Float") });
+        arena.alloc_type_uncached(Type::Bool, Token { kind: TokenKind::Bool, source_info: SourceInfo::new(0, 0, 0, "Bool") });
+        arena.alloc_type_uncached(Type::String, Token {
+            kind: TokenKind::String,
+            source_info: SourceInfo::new(0, 0, 0, "String"),
+        });
         arena
     }
 
-    pub fn alloc_and_push_to_hfs_stack(
-        &mut self,
-        expr: Expression,
-        provenance: ExprProvenance,
-        token: Token<'a>,
-    ) -> ExprId {
+    pub fn alloc_and_push_to_hfs_stack(&mut self, expr: Expression, provenance: ExprProvenance, token: Token<'a>) -> ExprId {
         // theres no reason to not push to the stack when making a new expression
         // so this is the only method available
         let id = ExprId(self.exprs.len());
@@ -252,8 +227,7 @@ impl<'a> AstArena<'a> {
     pub fn alloc_var(&mut self, var: VarDeclaration, token: Token<'a>) -> VarId {
         let id = VarId(self.vars.len());
         self.vars.push(var);
-        self.curr_var_provenances
-            .push(ExprProvenance::CompiletimeValue);
+        self.curr_var_provenances.push(ExprProvenance::CompiletimeValue);
         // by default, variables start as compile time variables.
         // this is changed throughout semantic analysis, they could become runtime
         // if they are assigned a RuntimeValue (they can regain compile time if we reassign them)
@@ -267,8 +241,7 @@ impl<'a> AstArena<'a> {
         // we assume a function call is runtime by default (im not gonna invest too much on this)
         // this isnt really used extensively, its here to match variables if we want it later for
         // compile-time analysis of functions and other things
-        self.curr_func_call_provenances
-            .push(ExprProvenance::RuntimeValue);
+        self.curr_func_call_provenances.push(ExprProvenance::RuntimeValue);
         id
     }
 
@@ -301,9 +274,7 @@ impl<'a> AstArena<'a> {
     }
     pub fn get_identifier_provenance(&self, id: Identifier) -> &ExprProvenance {
         match id {
-            Identifier::GlobalVar(var_id) | Identifier::Variable(var_id) => {
-                &self.curr_var_provenances[var_id.0]
-            }
+            Identifier::GlobalVar(var_id) | Identifier::Variable(var_id) => &self.curr_var_provenances[var_id.0],
             Identifier::Function(func_id) => &self.curr_func_call_provenances[func_id.0],
         }
     }
@@ -368,16 +339,8 @@ impl<'a> AstArena<'a> {
         &self.type_tokens[id.0]
     }
 
-    pub fn get_stack_change(
-        &self,
-        stack_start: Vec<ExprId>,
-        mut hfs_stack: Vec<ExprId>,
-    ) -> Vec<ExprId> {
-        let elements_to_delete = hfs_stack
-            .iter()
-            .zip(&stack_start)
-            .take_while(|(a, b)| a == b)
-            .count();
+    pub fn get_stack_change(&self, stack_start: Vec<ExprId>, mut hfs_stack: Vec<ExprId>) -> Vec<ExprId> {
+        let elements_to_delete = hfs_stack.iter().zip(&stack_start).take_while(|(a, b)| a == b).count();
         hfs_stack.drain(0..elements_to_delete);
         hfs_stack
     }

@@ -1,1 +1,78 @@
-inline_attribute_width = 80
+# rustfmt.toml - Mirroring C++ clang-format style
+
+# Basic formatting
+max_width = 130
+hard_tabs = false
+tab_spaces = 4
+
+# Indentation
+indent_style = "Block"
+# Note: Rust doesn't have case labels like C++, match arms are always indented
+
+# Function and control flow formatting
+fn_params_layout = "Tall"  # Similar to your AllowAllParametersOfDeclarationOnNextLine: false
+fn_call_width = 115
+fn_single_line = false  # Mirrors AllowShortFunctionsOnASingleLine: Empty
+
+# Brace style
+brace_style = "SameLineWhere"  # Closest to Attach, keeps braces on same line
+control_brace_style = "AlwaysSameLine"  # For if/while/for
+
+# Struct/enum formatting
+struct_lit_single_line = true
+enum_discrim_align_threshold = 0  # Don't align enum discriminants
+
+# Expression formatting
+chain_width = 115
+single_line_if_else_max_width = 60  # Allows short if-else, similar to OnlyFirstIf
+single_line_let_else_max_width = 0  # Don't allow single-line let-else
+
+# Operator and spacing
+binop_separator = "Front"  # Mirrors BreakBeforeBinaryOperators: NonAssignment
+space_before_colon = false  # Rust default, closest to your style
+space_after_colon = true
+
+# Array and argument formatting
+array_width = 115
+use_small_heuristics = "Max"  # Allows some single-line formatting for short items
+
+# Comment formatting
+normalize_comments = false  # Similar to ReflowComments: false
+wrap_comments = false
+comment_width = 115
+
+# Import/use formatting
+imports_granularity = "Crate"  # Groups imports by crate
+reorder_imports = true  # Mirrors SortIncludes: true
+group_imports = "StdExternalCrate"  # Groups std, external, and local imports
+
+# Whitespace
+blank_lines_lower_bound = 0
+blank_lines_upper_bound = 1  # Mirrors MaxEmptyLinesToKeep: 1
+trailing_comma = "Vertical"  # Adds trailing commas for multi-line (Rust convention)
+
+# String formatting
+format_strings = true  # Rust will format string literals
+overflow_delimited_expr = true
+
+# Macro formatting
+format_macro_matchers = true
+format_macro_bodies = true
+
+# Match expression formatting
+match_block_trailing_comma = true
+match_arm_leading_pipes = "Never"
+
+# Miscellaneous
+edition = "2021"  # Or "2024" if you're using Rust 2024
+newline_style = "Unix"
+remove_nested_parens = true
+reorder_impl_items = false  # Keep items in order you wrote them
+
+# Type formatting
+use_try_shorthand = true  # Use ? operator
+use_field_init_shorthand = true  # Use struct shorthand when possible
+
+# Where clause formatting
+where_single_line = false  # Always break where clauses across lines
+match_arm_blocks = false

@@ -1,6 +1,4 @@
-use crate::hfs::ScopeKind;
-use crate::hfs::ast::*;
-use crate::hfs::token::*;
+use crate::hfs::{ScopeKind, ast::*, token::*};
 
 // ============================================================================
 // First-pass AST (no stack resolution)
@@ -140,34 +138,13 @@ pub struct UnresolvedAstArena<'a> {
 impl<'a> UnresolvedAstArena<'a> {
     pub fn new() -> Self {
         let mut arena = Self::default();
-        arena.alloc_type_uncached(
-            Type::Int,
-            Token {
-                kind: TokenKind::Int,
-                source_info: SourceInfo::new(0, 0, 0, "Int"),
-            },
-        );
-        arena.alloc_type_uncached(
-            Type::Float,
-            Token {
-                kind: TokenKind::Float,
-                source_info: SourceInfo::new(0, 0, 0, "Float"),
-            },
-        );
-        arena.alloc_type_uncached(
-            Type::Bool,
-            Token {
-                kind: TokenKind::Bool,
-                source_info: SourceInfo::new(0, 0, 0, "Bool"),
-            },
-        );
-        arena.alloc_type_uncached(
-            Type::String,
-            Token {
-                kind: TokenKind::String,
-                source_info: SourceInfo::new(0, 0, 0, "String"),
-            },
-        );
+        arena.alloc_type_uncached(Type::Int, Token { kind: TokenKind::Int, source_info: SourceInfo::new(0, 0, 0, "Int") });
+        arena.alloc_type_uncached(Type::Float, Token { kind: TokenKind::Float, source_info: SourceInfo::new(0, 0, 0, "Float") });
+        arena.alloc_type_uncached(Type::Bool, Token { kind: TokenKind::Bool, source_info: SourceInfo::new(0, 0, 0, "Bool") });
+        arena.alloc_type_uncached(Type::String, Token {
+            kind: TokenKind::String,
+            source_info: SourceInfo::new(0, 0, 0, "String"),
+        });
         arena
     }
 
@@ -178,44 +155,28 @@ impl<'a> UnresolvedAstArena<'a> {
         id
     }
 
-    pub fn alloc_unresolved_expr(
-        &mut self,
-        expr: UnresolvedExpression,
-        token: Token<'a>,
-    ) -> UnresolvedExprId {
+    pub fn alloc_unresolved_expr(&mut self, expr: UnresolvedExpression, token: Token<'a>) -> UnresolvedExprId {
         let id = UnresolvedExprId(self.unresolved_exprs.len());
         self.unresolved_exprs.push(expr);
         self.unresolved_expr_tokens.push(token);
         id
     }
 
-    pub fn alloc_unresolved_stmt(
-        &mut self,
-        stmt: UnresolvedStatement,
-        token: Token<'a>,
-    ) -> UnresolvedStmtId {
+    pub fn alloc_unresolved_stmt(&mut self, stmt: UnresolvedStatement, token: Token<'a>) -> UnresolvedStmtId {
         let id = UnresolvedStmtId(self.unresolved_stmts.len());
         self.unresolved_stmts.push(stmt);
         self.unresolved_stmt_tokens.push(token);
         id
     }
 
-    pub fn alloc_unresolved_var(
-        &mut self,
-        var: UnresolvedVarDeclaration,
-        token: Token<'a>,
-    ) -> UnresolvedVarId {
+    pub fn alloc_unresolved_var(&mut self, var: UnresolvedVarDeclaration, token: Token<'a>) -> UnresolvedVarId {
         let id = UnresolvedVarId(self.unresolved_vars.len());
         self.unresolved_vars.push(var);
         self.unresolved_var_tokens.push(token);
         id
     }
 
-    pub fn alloc_unresolved_function(
-        &mut self,
-        func: UnresolvedFunctionDeclaration,
-        token: Token<'a>,
-    ) -> UnresolvedFuncId {
+    pub fn alloc_unresolved_function(&mut self, func: UnresolvedFunctionDeclaration, token: Token<'a>) -> UnresolvedFuncId {
         let id = UnresolvedFuncId(self.unresolved_functions.len());
         self.unresolved_functions.push(func);
         self.unresolved_function_tokens.push(token);
@@ -279,11 +240,8 @@ impl<'a> UnresolvedAstArena<'a> {
             TokenKind::Float => self.alloc_type(Type::Float, token),
             TokenKind::Identifier(_) => {
                 panic!("[internal hfs error]: this is not how you convert identifiers to types")
-            }
-            _ => panic!(
-                "[internal hfs error]: expected token that has a type, got {:?}",
-                token.kind
-            ),
+            },
+            _ => panic!("[internal hfs error]: expected token that has a type, got {:?}", token.kind),
         }
     }
 }

@@ -1,10 +1,9 @@
-use crate::hfs::VALID_STACK_KEYWORDS;
-use crate::hfs::lexer;
-use crate::hfs::token::Literal;
-use crate::hfs::token::SourceInfo;
-use crate::hfs::token::Token;
-use crate::hfs::token::TokenKind;
 use std::{fs, path::PathBuf};
+
+use crate::hfs::{
+    VALID_STACK_KEYWORDS, lexer,
+    token::{Literal, SourceInfo, Token, TokenKind},
+};
 
 #[derive(Debug)]
 pub struct File<'a> {
@@ -14,14 +13,7 @@ pub struct File<'a> {
 
 impl<'a> File<'a> {
     pub fn new(path: &'a PathBuf) -> File<'a> {
-        File {
-            contents: fs::read_to_string(&path)
-                .expect("Could not read file.")
-                .lines()
-                .map(String::from)
-                .collect(),
-            path,
-        }
+        File { contents: fs::read_to_string(&path).expect("Could not read file.").lines().map(String::from).collect(), path }
     }
 }
 
@@ -46,9 +38,9 @@ impl Lexer {
                     '%' => TokenKind::Percent,
                     '@' => {
                         let mut lit = char.to_string();
-                        while let Some(c) = chars_iter.next_if(|c| {
-                            ('a'..='z').contains(c) || ('A'..='Z').contains(c) || c == &'_'
-                        }) {
+                        while let Some(c) =
+                            chars_iter.next_if(|c| ('a'..='z').contains(c) || ('A'..='Z').contains(c) || c == &'_')
+                        {
                             lit.push(c);
                         }
                         if VALID_STACK_KEYWORDS.contains(&lit.as_str()) {
@@ -58,9 +50,9 @@ impl Lexer {
                         } else {
                             panic!("lexer error")
                         }
-                    }
+                    },
                     '+' => TokenKind::Plus,
-                    '.' => {
+                    '.' =>
                         if let Some(_) = chars_iter.next_if_eq(&'.') {
                             if let Some(_) = chars_iter.next_if_eq(&'.') {
                                 TokenKind::DotDotDot
@@ -69,9 +61,8 @@ impl Lexer {
                             }
                         } else {
                             panic!("lexer error")
-                        }
-                    }
-                    ':' => {
+                        },
+                    ':' =>
                         if let Some(_) = chars_iter.next_if_eq(&'=') {
                             TokenKind::CopyAssign
                         } else {
@@ -80,51 +71,44 @@ impl Lexer {
                             } else {
                                 TokenKind::Colon
                             }
-                        }
-                    }
-                    '-' => {
+                        },
+                    '-' =>
                         if let Some(_) = chars_iter.next_if_eq(&'>') {
                             TokenKind::Arrow
                         } else {
                             TokenKind::Minus
-                        }
-                    }
+                        },
                     '*' => TokenKind::Star,
-                    '/' => {
+                    '/' =>
                         if let Some(_) = chars_iter.next_if_eq(&'/') {
                             continue;
                         } else {
                             TokenKind::Slash
-                        }
-                    }
-                    '=' => {
+                        },
+                    '=' =>
                         if let Some(_) = chars_iter.next_if_eq(&'=') {
                             TokenKind::Equal
                         } else {
                             panic!("lexer error")
-                        }
-                    } // ==
-                    '!' => {
+                        }, // ==
+                    '!' =>
                         if let Some(_) = chars_iter.next_if_eq(&'=') {
                             TokenKind::NotEqual
                         } else {
                             TokenKind::Not
-                        }
-                    } // ! or !=
-                    '<' => {
+                        }, // ! or !=
+                    '<' =>
                         if let Some(_) = chars_iter.next_if_eq(&'=') {
                             TokenKind::LessEqual
                         } else {
                             TokenKind::Less
-                        }
-                    } // < or <=
-                    '>' => {
+                        }, // < or <=
+                    '>' =>
                         if let Some(_) = chars_iter.next_if_eq(&'=') {
                             TokenKind::GreaterEqual
                         } else {
                             TokenKind::Greater
-                        }
-                    } // > or >=
+                        }, // > or >=
                     '&' => {
                         if let Some(_) = chars_iter.next_if_eq(&'&') {
                             TokenKind::And
@@ -139,14 +123,13 @@ impl Lexer {
                                 }
                             }
                         } // &&
-                    }
-                    '|' => {
+                    },
+                    '|' =>
                         if let Some(_) = chars_iter.next_if_eq(&'|') {
                             TokenKind::Or
                         } else {
                             panic!("lexer error")
-                        }
-                    } // ||
+                        }, // ||
 
                     '"' => {
                         let mut lit = String::new();
@@ -162,12 +145,10 @@ impl Lexer {
                             }
                         }
                         TokenKind::Literal(Literal::String(lit))
-                    }
+                    },
                     '0'..='9' => {
                         let mut lit = char.to_string();
-                        while let Some(c) =
-                            chars_iter.next_if(|c| ('0'..='9').contains(c) || c == &'.')
-                        {
+                        while let Some(c) = chars_iter.next_if(|c| ('0'..='9').contains(c) || c == &'.') {
                             lit.push(c);
                         }
                         let number: Result<i32, f32> = match lit.parse::<i32>() {
@@ -181,14 +162,11 @@ impl Lexer {
                             Ok(int) => TokenKind::Literal(Literal::Integer(int)),
                             Err(float) => TokenKind::Literal(Literal::Float(float)),
                         }
-                    }
+                    },
                     'a'..='z' | 'A'..='Z' | '_' => {
                         let mut lit = char.to_string();
                         while let Some(c) = chars_iter.next_if(|c| {
-                            ('a'..='z').contains(c)
-                                || ('A'..='Z').contains(c)
-                                || ('0'..='9').contains(c)
-                                || c == &'_'
+                            ('a'..='z').contains(c) || ('A'..='Z').contains(c) || ('0'..='9').contains(c) || c == &'_'
                         }) {
                             lit.push(c);
                         }
@@ -211,14 +189,11 @@ impl Lexer {
 
                             _ => TokenKind::Identifier(lit),
                         }
-                    }
+                    },
                     _ => panic!("lexer error"),
                 };
                 line_offset += 1;
-                tokens.push(Token::new(
-                    kind,
-                    SourceInfo::new(line_number, line_offset, 1, line_string),
-                ));
+                tokens.push(Token::new(kind, SourceInfo::new(line_number, line_offset, 1, line_string)));
             }
         }
         tokens
@@ -229,35 +204,24 @@ impl Lexer {
 mod tests {
     use std::rc::Rc;
 
+    use super::*;
     use crate::hfs::{
         ast::Type,
-        builder::builder::{
-            Builder, BuilderOperation, ControlFlowOps, FunctionOps, LoopOps, PassMode, StackOps,
-            VariableOps,
-        },
+        builder::builder::{Builder, BuilderOperation, ControlFlowOps, FunctionOps, LoopOps, PassMode, StackOps, VariableOps},
         lexer_builder::TokenSequence,
     };
-
-    use super::*;
 
     fn tokenize_file_into_kinds(path: &str) -> Vec<TokenKind> {
         let path = PathBuf::from(path);
         let file = File::new(&path);
-        Lexer::tokenize(&file)
-            .into_iter()
-            .map(|token| token.kind)
-            .collect()
+        Lexer::tokenize(&file).into_iter().map(|token| token.kind).collect()
     }
 
     #[test]
     fn test_tokenize_simple_main() {
         let tokens = tokenize_file_into_kinds("test/simple_main.hfs");
 
-        let expected = TokenSequence::new()
-            .func_with("main", None, None)
-            .body()
-            .end_body()
-            .build();
+        let expected = TokenSequence::new().func_with("main", None, None).body().end_body().build();
 
         assert_eq!(tokens, expected);
     }
@@ -539,11 +503,7 @@ mod tests {
     fn test_copy_and_move_func_calls() {
         let tokens = tokenize_file_into_kinds("test/copy_and_move_func_calls.hfs");
         let expected = TokenSequence::new()
-            .func_with(
-                "max",
-                Some(vec![Type::Int, Type::Int]),
-                Some(vec![Type::Int]),
-            )
+            .func_with("max", Some(vec![Type::Int, Type::Int]), Some(vec![Type::Int]))
             .body()
             .if_statement()
             .stack_block()
@@ -561,11 +521,7 @@ mod tests {
             .push_stack_keyword("@pop", true)
             .end_body()
             .end_body()
-            .func_with(
-                "max3",
-                Some(vec![Type::Int, Type::Int, Type::Int]),
-                Some(vec![Type::Int]),
-            )
+            .func_with("max3", Some(vec![Type::Int, Type::Int, Type::Int]), Some(vec![Type::Int]))
             .body()
             .push_stack_keyword("@rrot", true)
             .call_function("max", PassMode::Move)

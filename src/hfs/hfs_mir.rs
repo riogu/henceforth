@@ -1,6 +1,6 @@
-use std::fmt::{format, Display};
+use std::fmt::{Display, format};
 
-use crate::hfs::{ast::*, InstArena, Literal};
+use crate::hfs::{InstArena, Literal, ast::*};
 /*
 // =================================================================================================
 // Control Flow Graph IR Pass (HFS MIR - Medium-level IR)
@@ -93,7 +93,7 @@ pub enum Instruction {
     Tuple {
         instructions: Vec<InstId>,
     },
-    Push(Vec<InstId>),
+    Push(InstId), // always a tuple
     Operation(CfgOperation),
     Identifier(VarIdentifier),
     Literal(Literal),
@@ -104,13 +104,9 @@ pub enum Instruction {
 pub enum TerminatorInst {
     Return(InstId), // only the last block in a function should have a Terminator::Return
     // all others that want to return should jump to the "end" block which is tracked by each function
-    Branch {
-        cond: InstId,
-        true_block: BlockId,
-        false_block: BlockId,
-    },
+    Branch { cond: InstId, true_block: BlockId, false_block: BlockId },
     // if we want to jump with nothing, just have an empty vector
-    Jump(BlockId, Vec<InstId>),
+    Jump(BlockId, Option<InstId>), // is a tuple
     Unreachable, // might be useful for you later in CFG analysis
                  // if you dont find it useful (you just wanna delete nodes instead) then remove this
 }
@@ -135,11 +131,7 @@ pub enum CfgOperation {
 
 // Debug printing trait and implementations
 fn get_repr_many<T: CfgPrintable>(items: &Vec<T>, arena: &InstArena, sep: &str) -> String {
-    items
-        .iter()
-        .map(|item| item.get_repr(arena))
-        .collect::<Vec<String>>()
-        .join(sep)
+    items.iter().map(|item| item.get_repr(arena)).collect::<Vec<String>>().join(sep)
 }
 
 pub trait CfgPrintable {
@@ -155,14 +147,11 @@ impl CfgPrintable for Type {
             Type::Float => String::from("f32"),
             Type::Tuple(type_ids) => {
                 // ID -> Type -> string representation
-                let type_reprs: Vec<String> = type_ids
-                    .iter()
-                    .map(|id| arena.get_type(*id))
-                    .map(|typ| typ.get_repr(arena))
-                    .collect();
+                let type_reprs: Vec<String> =
+                    type_ids.iter().map(|id| arena.get_type(*id)).map(|typ| typ.get_repr(arena)).collect();
 
                 type_reprs.join(" ")
-            }
+            },
         }
     }
 }
@@ -189,22 +178,13 @@ impl CfgPrintable for TerminatorInst {
             TerminatorInst::Return(inst_id) => {
                 let inst = arena.get_instruction(*inst_id);
                 format!("return {};", inst.get_repr(arena))
-            }
-            TerminatorInst::Branch {
-                cond,
-                true_block,
-                false_block,
-            } => {
+            },
+            TerminatorInst::Branch { cond, true_block, false_block } => {
                 let cond = arena.get_instruction(*cond);
                 let true_block = arena.get_block(*true_block);
                 let false_block = arena.get_block(*false_block);
-                format!(
-                    "branch {}, {}, {};",
-                    cond.get_repr(arena),
-                    true_block.get_repr(arena),
-                    false_block.get_repr(arena)
-                )
-            }
+                format!("branch {}, {}, {};", cond.get_repr(arena), true_block.get_repr(arena), false_block.get_repr(arena))
+            },
             TerminatorInst::Jump(block_id, inst_ids) => todo!(),
             TerminatorInst::Unreachable => String::from("unreachable;"),
         }
@@ -217,17 +197,9 @@ impl CfgPrintable for Instruction {
             Instruction::Parameter { index, ty } => todo!(),
             Instruction::VarDeclaration(var_id) => {
                 let var = arena.get_var(var_id);
-            }
-            Instruction::Store {
-                value,
-                identifier,
-                is_move,
-            } => todo!(),
-            Instruction::FunctionCall {
-                args,
-                identifier,
-                is_move,
-            } => todo!(),
+            },
+            Instruction::Store { value, identifier, is_move } => todo!(),
+            Instruction::FunctionCall { args, identifier, is_move } => todo!(),
             Instruction::Phi { incoming } => todo!(),
             Instruction::StackKeyword { name, args } => todo!(),
             Instruction::Tuple { instructions } => todo!(),

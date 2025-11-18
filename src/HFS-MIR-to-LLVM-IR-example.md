@@ -1,11 +1,12 @@
 ```cpp
 // example of the HFS MIR language
-fn foo: (i32 i32) -> (i32 i32 i32) {
+fn foo: (i32 %arg0 i32 %arg1) -> (i32 i32 i32) {
   start:
     let var: f32;
 
-    keyword pop;
-    keyword pop;
+    keyword pop, %arg1;
+    keyword pop, %arg0;
+
     store var, 3.0; 
     jump if_block_0; // jumping with no values
     if_cond_0:
@@ -17,24 +18,27 @@ fn foo: (i32 i32) -> (i32 i32 i32) {
             let var2: i32;
             %inst1 = push (69);
             store var2, 3 * 66;
-            %ret0 = jump end_if_0, (%inst0 %inst1);   // this came from tracking state in analysis
+            // must deconstruct the tuples ALWAYS
+            // else how would you make this final tuple
+            jump end_if_0, (%inst0 %inst1);   // this came from tracking state in analysis
     else_if_cond_0:
         branch -420 < 5, else_if_block_0, else_if_cond_1;
         else_if_block_0:
-            %inst2 = push (0 0 0);
-            %ret1 = jump end_if_0, %inst2;   // this came from tracking state in analysis
+            %inst2 = (0 0 0);
+            jump end_if_0, %inst2;   // this came from tracking state in analysis
     else_if_cond_1:
         branch -69 < 69, else_if_block_0, else_block_0;
         else_if_block_1:
-            %ret2 = jump end_if_0, push (1 1 1);  // if you prefer this representation
+            %inst6 = push (1 1 1);
+            jump end_if_0, %inst6;  // if you prefer this representation
             // here we put the push() directly in the jump (pick what you prefer)
     else_block_0:
         %inst4 = push (420 420 420);
-        %ret3 = jump end_if_0, %inst4;       // this came from tracking state in analysis
+        jump end_if_0, %inst4;       // this came from tracking state in analysis
   end_if_0:
     // here, phi will either deconstruct the arguments, or literally return a tuple
     // either way thats more implementation details than something to represent in IR
-    %inst5 = phi (if_block_0, %ret0), (else_if_block_0, %ret1), (else_if_block_1, %ret2), (else_block_0, %ret3);
+    %inst5 = phi if_block_0, else_if_block_0, else_if_block_1, else_block_0;
     let example: i32;
     store example, %inst4; // whatever phi returns at runtime
     jump while_cond_0;
@@ -48,6 +52,14 @@ fn foo: (i32 i32) -> (i32 i32 i32) {
   end:
     return %inst5; // we know inst5 has the values we want
     // lets say it didnt: we might first build a local variable that contains our values
+}
+
+fn main: () -> () {
+    %var0 = push (1 2);
+    call foo, var0;
+    keyword pop;
+    keyword pop;
+    keyword pop;
 }
 
 // same code but in henceforth
@@ -77,9 +89,9 @@ fn foo: (i32 i32) -> (i32 i32 i32) {
 
 
 }
-fn main: () -> (i32) {
+fn main: () -> () {
     @(1 2) &> foo;
-    @pop @pop;
+    @pop @pop @pop;
 }
 ```
 

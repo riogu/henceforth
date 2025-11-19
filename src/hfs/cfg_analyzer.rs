@@ -15,7 +15,9 @@ pub struct InstArena {
     pub blocks: Vec<BasicBlock>,
 }
 impl InstArena {
-    pub fn new() -> Self {}
+    pub fn new() -> Self {
+        todo!()
+    }
 }
 
 impl InstArena {

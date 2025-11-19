@@ -1,6 +1,6 @@
 use std::{collections::HashMap, fmt::Display};
 
-use crate::hfs::{RuntimeValue, ScopeKind, token::*};
+use crate::hfs::{token::*, RuntimeValue, ScopeKind};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct VarId(pub usize);
@@ -97,8 +97,7 @@ pub struct StackKeywordDeclaration<'a> {
     pub name: &'a str,
     pub expected_args_size: Option<usize>,
     pub return_size: usize,
-    pub type_effect: fn(Vec<TypeId>) -> Vec<Expression>,
-    pub value_effect: fn(Vec<RuntimeValue>) -> Vec<RuntimeValue>,
+    pub signature: &'a str,
 }
 
 // ============================================================================
@@ -346,113 +345,39 @@ impl<'a> AstArena<'a> {
     }
 }
 
-// Grabs a signature (a b) -> (a b c) and creates a lambda that applies the stack keyword to a vector of runtme values
-macro_rules! value_effect {
-    (_) => {
-        |_: Vec<RuntimeValue>| -> Vec<RuntimeValue> {
-            vec![]
-        }
-    };
-
-    (($($arg:ident)*) -> ($($return:ident)*)) => {
-        |values: Vec<RuntimeValue>| -> Vec<RuntimeValue> {
-            let mut _idx = 0;
-            $(
-                let $arg = values[_idx].clone();
-                _idx += 1;
-            )*
-
-            vec![$($return.clone()),*]
-        }
-    };
-}
 // Grabs a signature with the syntax (a b) -> (a b c) and creates a lambda that performs that operation with a vector of types
-macro_rules! type_effect {
-    (_) => {
-        |_: Vec<TypeId>| -> Vec<Expression> {
-            vec![]
-        }
-    };
+// macro_rules! type_effect {
+//     (_) => {
+//         |_: Vec<TypeId>| -> Vec<Expression> {
+//             vec![]
+//         }
+//     };
 
-    (($($arg:ident)*) -> ($($return:ident)*)) => {
-        |types: Vec<TypeId>| -> Vec<Expression> {
-            let mut _idx = 0;
-            $(
-                let $arg = types[_idx].clone();
-                _idx += 1;
-            )*
+//     (($($arg:ident)*) -> ($($return:ident)*)) => {
+//         |types: Vec<TypeId>| -> Vec<Expression> {
+//             let mut _idx = 0;
+//             $(
+//                 let $arg = types[_idx].clone();
+//                 _idx += 1;
+//             )*
 
-            vec![$(Expression::ReturnValue($return.clone())),*]
-        }
-    };
-}
+//             vec![$(Expression::ReturnValue($return.clone())),*]
+//         }
+//     };
+// }
 
 // ============================================================================
 // Type-safe ID types
 // ============================================================================
 
 const STACK_KEYWORDS: &[StackKeywordDeclaration] = &[
-    StackKeywordDeclaration {
-        name: "@pop",
-        expected_args_size: Some(1),
-        return_size: 0,
-        type_effect: type_effect![(a) -> ()],
-        value_effect: value_effect![(a) -> ()],
-    },
-    StackKeywordDeclaration {
-        name: "@pop_all",
-        expected_args_size: None,
-        return_size: 0,
-        type_effect: type_effect![_],
-        value_effect: value_effect![_],
-    },
-    StackKeywordDeclaration {
-        name: "@dup",
-        expected_args_size: Some(1),
-        return_size: 2,
-        type_effect: type_effect![(a) -> (a a)],
-        value_effect: value_effect![(a) -> (a a)],
-    },
-    StackKeywordDeclaration {
-        name: "@swap",
-        expected_args_size: Some(2),
-        return_size: 2,
-        type_effect: type_effect![(a b) -> (b a)],
-        value_effect: value_effect![(a b) -> (b a)],
-    },
-    StackKeywordDeclaration {
-        name: "@over",
-        expected_args_size: Some(2),
-        return_size: 3,
-        type_effect: type_effect![(a b) -> (a b a)],
-        value_effect: value_effect![(a b) -> (a b a)],
-    },
-    StackKeywordDeclaration {
-        name: "@rot",
-        expected_args_size: Some(3),
-        return_size: 3,
-        type_effect: type_effect![(a b c) -> (b c a)],
-        value_effect: value_effect![(a b c) -> (b c a)],
-    },
-    StackKeywordDeclaration {
-        name: "@rrot",
-        expected_args_size: Some(3),
-        return_size: 3,
-        type_effect: type_effect![(a b c) -> (c a b)],
-        value_effect: value_effect![(a b c) -> (c a b)],
-    },
-    StackKeywordDeclaration {
-        name: "@nip",
-        expected_args_size: Some(2),
-        return_size: 1,
-        type_effect: type_effect![(a b) -> (b)],
-        value_effect: value_effect![(a b) -> (b)],
-    },
-    StackKeywordDeclaration {
-        name: "@tuck",
-        expected_args_size: Some(2),
-        return_size: 3,
-        type_effect: type_effect![(a b) -> (b a b)],
-        value_effect: value_effect![(a b) -> (b a b)],
-    },
+    StackKeywordDeclaration { name: "@pop", expected_args_size: Some(1), return_size: 0, signature: "(a) -> ()" },
+    StackKeywordDeclaration { name: "@pop_all", expected_args_size: None, return_size: 0, signature: "_" },
+    StackKeywordDeclaration { name: "@dup", expected_args_size: Some(1), return_size: 2, signature: "(a) -> (a a)" },
+    StackKeywordDeclaration { name: "@swap", expected_args_size: Some(2), return_size: 2, signature: "(a b) -> (b a)" },
+    StackKeywordDeclaration { name: "@over", expected_args_size: Some(2), return_size: 3, signature: "(a b) -> (a b a)" },
+    StackKeywordDeclaration { name: "@rot", expected_args_size: Some(3), return_size: 3, signature: "(a b c) -> (b c a)" },
+    StackKeywordDeclaration { name: "@rrot", expected_args_size: Some(3), return_size: 3, signature: "(a b c) -> (c a b)" },
+    StackKeywordDeclaration { name: "@nip", expected_args_size: Some(2), return_size: 1, signature: "(a b) -> (b)" },
+    StackKeywordDeclaration { name: "@tuck", expected_args_size: Some(2), return_size: 3, signature: "(a b) -> (b a b)" },
 ];

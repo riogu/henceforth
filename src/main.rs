@@ -26,8 +26,9 @@ mod hfs {
     pub use types::*;
     pub use unresolved_ast::*;
 }
-use clap::{Parser, arg};
 use std::path::PathBuf;
+
+use clap::{arg, Parser};
 
 #[derive(Parser, Debug, Clone)]
 #[command(author, version, about)]
@@ -48,6 +49,8 @@ fn main() {
 
     let (top_level_nodes, ast_arena, scope_stack) =
         hfs::StackAnalyzer::resolve(unresolved_top_level_nodes, unresolved_ast_arena, file_name);
+
+    let _ = hfs::CfgAnalyzer::analyze(ast_arena);
     // interpreter doesnt even need the top level nodes lol
-    hfs::Interpreter::interpret(&ast_arena, &scope_stack);
+    // hfs::Interpreter::interpret(&ast_arena, &scope_stack);
 }

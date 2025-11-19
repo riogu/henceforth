@@ -1,6 +1,6 @@
-use std::fmt::{Display, format};
+use std::fmt::{format, Display};
 
-use crate::hfs::{InstArena, Literal, ast::*};
+use crate::hfs::{ast::*, InstArena, Literal};
 /*
 // =================================================================================================
 // Control Flow Graph IR Pass (HFS MIR - Medium-level IR)
@@ -78,7 +78,7 @@ pub enum Instruction {
     },
 
     Phi {
-        incoming: Vec<(BlockId, InstId)>, // (predecessor block, value)
+        incoming: Vec<BlockId>, // (predecessor block, value)
     },
 
     // note we basically move stack keywords outside the stack block
@@ -107,8 +107,8 @@ pub enum TerminatorInst {
     Branch { cond: InstId, true_block: BlockId, false_block: BlockId },
     // if we want to jump with nothing, just have an empty vector
     Jump(BlockId, Option<InstId>), // is a tuple
-    Unreachable, // might be useful for you later in CFG analysis
-                 // if you dont find it useful (you just wanna delete nodes instead) then remove this
+    Unreachable,                   // might be useful for you later in CFG analysis
+                                   // if you dont find it useful (you just wanna delete nodes instead) then remove this
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -172,6 +172,79 @@ impl CfgPrintable for CfgFunction {
     }
 }
 
+impl CfgPrintable for CfgOperation {
+    fn get_repr(&self, arena: &InstArena) -> String {
+        match self {
+            CfgOperation::Add(inst_id1, inst_id2) => format!(
+                "{} + {}",
+                arena.get_instruction(*inst_id1).get_repr(arena),
+                arena.get_instruction(*inst_id2).get_repr(arena)
+            ),
+            CfgOperation::Sub(inst_id1, inst_id2) => format!(
+                "{} - {}",
+                arena.get_instruction(*inst_id1).get_repr(arena),
+                arena.get_instruction(*inst_id2).get_repr(arena)
+            ),
+            CfgOperation::Mul(inst_id1, inst_id2) => format!(
+                "{} * {}",
+                arena.get_instruction(*inst_id1).get_repr(arena),
+                arena.get_instruction(*inst_id2).get_repr(arena)
+            ),
+            CfgOperation::Div(inst_id1, inst_id2) => format!(
+                "{} / {}",
+                arena.get_instruction(*inst_id1).get_repr(arena),
+                arena.get_instruction(*inst_id2).get_repr(arena)
+            ),
+            CfgOperation::Mod(inst_id1, inst_id2) => format!(
+                "{} % {}",
+                arena.get_instruction(*inst_id1).get_repr(arena),
+                arena.get_instruction(*inst_id2).get_repr(arena)
+            ),
+            CfgOperation::Equal(inst_id1, inst_id2) => format!(
+                "{} == {}",
+                arena.get_instruction(*inst_id1).get_repr(arena),
+                arena.get_instruction(*inst_id2).get_repr(arena)
+            ),
+            CfgOperation::NotEqual(inst_id1, inst_id2) => format!(
+                "{} != {}",
+                arena.get_instruction(*inst_id1).get_repr(arena),
+                arena.get_instruction(*inst_id2).get_repr(arena)
+            ),
+            CfgOperation::Less(inst_id1, inst_id2) => format!(
+                "{} < {}",
+                arena.get_instruction(*inst_id1).get_repr(arena),
+                arena.get_instruction(*inst_id2).get_repr(arena)
+            ),
+            CfgOperation::LessEqual(inst_id1, inst_id2) => format!(
+                "{} <= {}",
+                arena.get_instruction(*inst_id1).get_repr(arena),
+                arena.get_instruction(*inst_id2).get_repr(arena)
+            ),
+            CfgOperation::Greater(inst_id1, inst_id2) => format!(
+                "{} > {}",
+                arena.get_instruction(*inst_id1).get_repr(arena),
+                arena.get_instruction(*inst_id2).get_repr(arena)
+            ),
+            CfgOperation::GreaterEqual(inst_id1, inst_id2) => format!(
+                "{} >= {}",
+                arena.get_instruction(*inst_id1).get_repr(arena),
+                arena.get_instruction(*inst_id2).get_repr(arena)
+            ),
+            CfgOperation::Or(inst_id1, inst_id2) => format!(
+                "{} && {}",
+                arena.get_instruction(*inst_id1).get_repr(arena),
+                arena.get_instruction(*inst_id2).get_repr(arena)
+            ),
+            CfgOperation::And(inst_id1, inst_id2) => format!(
+                "{} && {}",
+                arena.get_instruction(*inst_id1).get_repr(arena),
+                arena.get_instruction(*inst_id2).get_repr(arena)
+            ),
+            CfgOperation::Not(inst_id) => format!("!{}", arena.get_instruction(*inst_id).get_repr(arena)),
+        }
+    }
+}
+
 impl CfgPrintable for TerminatorInst {
     fn get_repr(&self, arena: &InstArena) -> String {
         match self {
@@ -183,9 +256,18 @@ impl CfgPrintable for TerminatorInst {
                 let cond = arena.get_instruction(*cond);
                 let true_block = arena.get_block(*true_block);
                 let false_block = arena.get_block(*false_block);
-                format!("branch {}, {}, {};", cond.get_repr(arena), true_block.get_repr(arena), false_block.get_repr(arena))
+                format!("branch {}, {}, {};", cond.get_repr(arena), true_block.name, false_block.name)
             },
-            TerminatorInst::Jump(block_id, inst_ids) => todo!(),
+            TerminatorInst::Jump(block_id, inst_id) => {
+                let block = arena.get_block(*block_id);
+                match inst_id {
+                    Some(id) => {
+                        let inst = arena.get_instruction(*id);
+                        format!("jump {}, {};", block.name, inst.get_repr(arena))
+                    },
+                    None => format!("jump {};", block.name),
+                }
+            },
             TerminatorInst::Unreachable => String::from("unreachable;"),
         }
     }
@@ -196,17 +278,61 @@ impl CfgPrintable for Instruction {
         match self {
             Instruction::Parameter { index, ty } => todo!(),
             Instruction::VarDeclaration(var_id) => {
-                let var = arena.get_var(var_id);
+                let var = arena.get_var(*var_id);
+                let var_type = arena.get_type(var.hfs_type);
+
+                format!("let {}: {};", var.name, var_type.get_repr(arena))
             },
-            Instruction::Store { value, identifier, is_move } => todo!(),
-            Instruction::FunctionCall { args, identifier, is_move } => todo!(),
-            Instruction::Phi { incoming } => todo!(),
-            Instruction::StackKeyword { name, args } => todo!(),
-            Instruction::Tuple { instructions } => todo!(),
-            Instruction::Push(inst_ids) => todo!(),
-            Instruction::Operation(cfg_operation) => todo!(),
-            Instruction::Identifier(var_identifier) => todo!(),
-            Instruction::Literal(literal) => todo!(),
+            Instruction::Store { value, identifier, is_move } => {
+                let id = match identifier {
+                    VarIdentifier::GlobalVar(var_id) => var_id,
+                    VarIdentifier::Variable(var_id) => var_id,
+                };
+                let var = arena.get_var(*id);
+                let value = arena.get_instruction(*value);
+
+                format!("store {}, {};", var.name, value.get_repr(arena))
+            },
+            Instruction::FunctionCall { args, identifier, is_move } => {
+                let func = arena.get_func(*identifier);
+                let args_repr: Vec<String> =
+                    args.iter().map(|id| arena.get_instruction(*id)).map(|inst| inst.get_repr(arena)).collect();
+                format!("call {}, {};", func.name, args_repr.join(", "))
+            },
+            Instruction::Phi { incoming } => {
+                let incoming: Vec<String> =
+                    incoming.iter().map(|id| arena.get_block(*id)).map(|block| block.name.clone()).collect();
+                format!("phi {};", incoming.join(", "))
+            },
+            Instruction::StackKeyword { name, args } => {
+                let args_repr: Vec<String> =
+                    args.iter().map(|id| arena.get_instruction(*id)).map(|inst| inst.get_repr(arena)).collect();
+                format!("keyword {}, {};", name, args_repr.join(", "))
+            },
+            Instruction::Tuple { instructions } => {
+                let instructions_repr: Vec<String> =
+                    instructions.iter().map(|id| arena.get_instruction(*id)).map(|inst| inst.get_repr(arena)).collect();
+                format!("({})", instructions_repr.join(", "))
+            },
+            Instruction::Push(inst_id) => {
+                let inst = arena.get_instruction(*inst_id);
+                format!("push {};", inst.get_repr(arena))
+            },
+            Instruction::Operation(cfg_operation) => cfg_operation.get_repr(arena),
+            Instruction::Identifier(var_identifier) => {
+                let id = match var_identifier {
+                    VarIdentifier::GlobalVar(var_id) => var_id,
+                    VarIdentifier::Variable(var_id) => var_id,
+                };
+                let var_decl = arena.get_var(*id);
+                var_decl.name.clone()
+            },
+            Instruction::Literal(literal) => match literal {
+                Literal::Integer(lit) => lit.to_string(),
+                Literal::Float(lit) => lit.to_string(),
+                Literal::String(lit) => lit.clone(),
+                Literal::Bool(lit) => lit.to_string(),
+            },
         }
     }
 }

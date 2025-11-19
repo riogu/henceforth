@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 
 use crate::hfs::{
-    self, BasicBlock, BlockId, CfgFunction, CfgPrintable, InstId, Instruction, Literal, TermInstId, TerminatorInst, ast::*,
+    self, ast::*, BasicBlock, BlockId, CfgFunction, CfgPrintable, InstId, Instruction, Literal, TermInstId, TerminatorInst,
 };
 // here is where youll create the CFG pass and the new IR generation
 
@@ -13,6 +13,9 @@ pub struct InstArena {
     pub instructions: Vec<Instruction>,
     pub terminators: Vec<TerminatorInst>,
     pub blocks: Vec<BasicBlock>,
+}
+impl InstArena {
+    pub fn new() -> Self {}
 }
 
 impl InstArena {
@@ -42,13 +45,25 @@ impl InstArena {
 }
 
 #[derive(Debug)]
-pub struct CfgAnalyzer {
+pub struct CfgAnalyzer<'a> {
+    pub ast_arena: AstArena<'a>,
     pub arena: InstArena,
     // similar to StackAnalyzer, pretty much that
 }
 
+impl<'a> CfgAnalyzer<'a> {
+    pub fn new(ast_arena: AstArena<'a>, arena: InstArena) -> Self {
+        let mut arena = InstArena::new();
+        Self { ast_arena, arena }
+    }
+
+    pub fn analyze(ast_arena: AstArena<'a>) -> InstArena {
+        todo!()
+    }
+}
+
 // Debug printing functions (using the MIR syntax)
-impl CfgAnalyzer {
+impl<'a> CfgAnalyzer<'a> {
     pub fn print_hfs_mir(&self) {
         for func in &self.arena.functions {
             println!("{}", func.get_repr(&self.arena));

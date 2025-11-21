@@ -96,7 +96,7 @@ fn main: () -> () {
 
 ### Execution
 - Tree-walking interpreter with runtime stack management
-- Direct AST interpretation after validation passes
+- LLVM IR backend (planned)
 
 ### Compiler Pipeline
 ```

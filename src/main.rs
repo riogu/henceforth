@@ -50,7 +50,7 @@ fn main() {
     let (top_level_nodes, ast_arena, scope_stack) =
         hfs::StackAnalyzer::resolve(unresolved_top_level_nodes, unresolved_ast_arena, file_name);
 
-    let _ = hfs::CfgAnalyzer::analyze(ast_arena);
+    let _ = hfs::CfgAnalyzer::analyze(top_level_nodes, ast_arena);
     // interpreter doesnt even need the top level nodes lol
     // hfs::Interpreter::interpret(&ast_arena, &scope_stack);
 }

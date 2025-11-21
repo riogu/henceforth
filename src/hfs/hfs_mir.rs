@@ -25,9 +25,14 @@ pub struct InstId(pub usize);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct TermInstId(pub usize);
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum CfgTopLevelId {
+    VariableDecl(VarId),
+    FunctionDecl(FuncId),
+}
 #[derive(Debug)]
 pub struct CfgFunction {
-    identifier: FuncId,
+    pub identifier: FuncId,
     pub name: String,
     // we repeat the FunctionDeclaration methods because we are meant convert everything over
     // rather than keep acessing the old FunctionDeclaration (we still keep the FuncId though)
@@ -162,13 +167,20 @@ impl CfgPrintable for CfgFunction {
         let returns = arena.get_type(self.return_type).clone();
         format!(
             "fn {}: ({}) -> ({}) {{\n
-                {}\n   
-             }}",
+{}\n   
+}}",
             self.name,
             params.get_repr(arena),
+            returns.get_repr(arena),
             get_repr_many(&self.body_blocks, arena, "\n"),
-            returns.get_repr(arena)
         )
+    }
+}
+
+impl CfgPrintable for VarDeclaration {
+    fn get_repr(&self, arena: &InstArena) -> String {
+        let typ = arena.get_type(self.hfs_type);
+        format!("let {}: {};", self.name, typ.get_repr(arena))
     }
 }
 

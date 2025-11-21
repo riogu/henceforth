@@ -111,7 +111,7 @@ pub struct StackAnalyzer<'a> {
 impl<'a> StackAnalyzer<'a> {
     pub fn new(unresolved: UnresolvedAstArena<'a>, file_name: String) -> Self {
         let mut arena = AstArena::new();
-        arena.types.extend_from_slice(&unresolved.types[4..]);
+        arena.types.extend_from_slice(&unresolved.types[PRIMITIVE_TYPE_COUNT..]);
         Self { arena, unresolved_arena: unresolved, scope_resolution_stack: ScopeStack::new(file_name) }
     }
 

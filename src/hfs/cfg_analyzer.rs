@@ -20,6 +20,7 @@ pub struct InstArena<'a> {
     pub function_tokens: Vec<Token<'a>>,
     pub type_tokens: Vec<Token<'a>>,
 }
+
 impl<'a> InstArena<'a> {
     pub fn new() -> Self {
         let mut arena = Self::default();
@@ -37,6 +38,17 @@ impl<'a> InstArena<'a> {
         let id = TypeId(self.types.len());
         self.types.push(hfs_type.clone());
         self.type_tokens.push(token);
+        id
+    }
+
+    fn alloc_function(&mut self, func: CfgFunction, token: Token<'a>) -> FuncId {
+        let id = FuncId(self.functions.len());
+        self.functions.push(func);
+        id
+    }
+    pub fn alloc_var(&mut self, var: VarDeclaration, token: Token<'a>) -> VarId {
+        let id = VarId(self.vars.len());
+        self.vars.push(var);
         id
     }
 }
@@ -89,7 +101,7 @@ impl<'a> CfgAnalyzer<'a> {
     }
 
     fn analyze_function_declaration(&mut self, id: FuncId) -> FuncId {
-        todo!()
+        id
     }
 
     fn analyze_top_level(&mut self, top_level: Vec<TopLevelId>) -> Vec<CfgTopLevelId> {

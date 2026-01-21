@@ -79,5 +79,5 @@
 
 <string> ::= '"' [^"]* '"'
 
-<stack-keyword> ::= @pop | @pop_all
+<stack-keyword> ::= @pop | @pop_all | @dup | @swap | @over | @rot | @rrot | @nip | @tuck
 ```

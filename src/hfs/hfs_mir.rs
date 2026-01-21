@@ -1,21 +1,11 @@
-use std::fmt::{format, Display};
+use std::fmt::{Display, format};
 
-use crate::hfs::{ast::*, InstArena, Literal};
+use crate::hfs::{InstArena, Literal, ast::*};
 /*
-// =================================================================================================
-// Control Flow Graph IR Pass (HFS MIR - Medium-level IR)
-//     See HFS-MIR-to-LLVM-IR-example.md for an example
-// =================================================================================================
-// MIR is a graph-based IR that represents flattened control flow.
-//
-// Key properties:
-// - Stack semantics eliminated: all values are explicitly named (InstId)
-// - Control flow linearized: if/while/etc become blocks + branches/jumps
-// - SSA-friendly: each instruction produces a single named value (if there is a value)
-// - Graph structure: blocks connected by explicit control flow edges
-// - Statement-free: AST's Statement nodes are entirely eliminated and turned into instructions
-//
-// This IR maps cleanly to LLVM IR and is ready for lowering or interpretation.
+=================================================================================================
+Control Flow Graph IR Pass (HFS MIR - Medium-level IR)
+    See HFS-MIR-to-LLVM-IR-example.md for an example
+=================================================================================================
 */
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

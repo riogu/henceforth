@@ -1,6 +1,6 @@
 use std::{iter::Peekable, vec::IntoIter};
 
-use crate::hfs::{ScopeKind, ast::*, token::*, unresolved_ast::*};
+use crate::hfs::{ast::*, token::*, unresolved_ast::*, ScopeKind};
 
 pub struct Parser<'a> {
     tokens: Peekable<IntoIter<Token<'a>>>, // Own the tokens, iterate by value
@@ -310,5 +310,32 @@ impl<'a> Parser<'a> {
     fn stack_keyword_expr(&mut self) -> UnresolvedExprId {
         let (name, token) = self.expect_stack_keyword();
         self.arena.alloc_unresolved_expr(UnresolvedExpression::StackKeyword(name), token)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+
+    use crate::hfs::{
+        builder::builder::{Builder, FunctionOps},
+        parser_builder::ParserBuilder,
+        File, Lexer, Parser, UnresolvedAstArena,
+    };
+
+    fn parse_file<'a>(file: &'a File) -> UnresolvedAstArena<'a> {
+        let tokens = Lexer::tokenize(&file);
+        let (_, ast) = Parser::parse_tokens(tokens);
+        ast
+    }
+    #[test]
+    fn test_tokenize_simple_main() {
+        let path = PathBuf::from("test/simple_main.hfs");
+        let file = File::new(&path);
+        let ast = parse_file(&file);
+
+        let expected = ParserBuilder::new().func_with("main", None, None).body().end_body().build();
+
+        assert_eq!(ast, expected);
     }
 }

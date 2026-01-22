@@ -187,7 +187,7 @@ impl fmt::Display for TokenKind {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct SourceInfo<'a> {
     line_number: usize,
     line_offset: usize,
@@ -201,7 +201,7 @@ impl<'a> SourceInfo<'a> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Token<'a> {
     pub kind: TokenKind,
     pub source_info: SourceInfo<'a>,

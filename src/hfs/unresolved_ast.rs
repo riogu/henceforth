@@ -1,4 +1,4 @@
-use crate::hfs::{ScopeKind, ast::*, token::*};
+use crate::hfs::{ast::*, token::*, ScopeKind};
 
 // ============================================================================
 // First-pass AST (no stack resolution)
@@ -34,7 +34,7 @@ impl UnresolvedOperation {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum UnresolvedExpression {
     Operation(UnresolvedOperation),
     Identifier(String),
@@ -43,7 +43,7 @@ pub enum UnresolvedExpression {
     StackKeyword(String),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum UnresolvedStatement {
     If {
         cond: UnresolvedStmtId,
@@ -72,20 +72,20 @@ pub enum UnresolvedStatement {
     },
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum UnresolvedElseStmt {
     ElseIf(UnresolvedStmtId), // Points to an UnresolvedIfStmt
     Else(UnresolvedStmtId),   // Points to a UnresolvedBlockScope
 }
 
 // Unresolved declarations (mirror the resolved ones but use UnresolvedStmtId)
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct UnresolvedVarDeclaration {
     pub name: String,
     pub hfs_type: TypeId,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct UnresolvedFunctionDeclaration {
     pub name: String,
     pub param_type: TypeId,
@@ -133,6 +133,16 @@ pub struct UnresolvedAstArena<'a> {
     pub(crate) unresolved_var_tokens: Vec<Token<'a>>,
     pub(crate) unresolved_function_tokens: Vec<Token<'a>>,
     pub(crate) type_tokens: Vec<Token<'a>>,
+}
+
+impl<'a> PartialEq for UnresolvedAstArena<'a> {
+    fn eq(&self, other: &Self) -> bool {
+        self.unresolved_exprs == other.unresolved_exprs
+            && self.unresolved_stmts == other.unresolved_stmts
+            && self.unresolved_vars == other.unresolved_vars
+            && self.unresolved_functions == other.unresolved_functions
+            && self.types == other.types
+    }
 }
 
 impl<'a> UnresolvedAstArena<'a> {

@@ -1,9 +1,6 @@
 use crate::hfs::{
+    builder::builder::{Builder, BuilderOperation, ControlFlowOps, FunctionOps, LoopOps, PassMode, StackOps, VariableOps},
     Literal, TokenKind, Type,
-    builder::builder::{
-        Builder, BuilderOperation, ControlFlowOps, FunctionOps, LoopOps, PassMode, StackOps,
-        VariableOps,
-    },
 };
 
 pub struct TokenSequence {
@@ -49,6 +46,7 @@ impl VariableOps for TokenSequence {
 }
 
 impl Builder<TokenKind> for TokenSequence {
+    type Built = Vec<TokenKind>;
     fn new() -> Self {
         Self { tokens: Vec::new() }
     }
@@ -73,31 +71,20 @@ impl Builder<TokenKind> for TokenSequence {
 impl FunctionOps for TokenSequence {
     fn args(mut self, args: Option<Vec<Type>>) -> Self {
         if let Some(args) = args {
-            let tokens = args
-                .into_iter()
-                .map(|typename| typename.into())
-                .collect::<Vec<TokenKind>>();
+            let tokens = args.into_iter().map(|typename| typename.into()).collect::<Vec<TokenKind>>();
             return self.push_many(tokens);
         }
         self
     }
     fn return_types(mut self, return_types: Option<Vec<Type>>) -> Self {
         if let Some(return_types) = return_types {
-            let tokens = return_types
-                .into_iter()
-                .map(|typename| typename.into())
-                .collect::<Vec<TokenKind>>();
+            let tokens = return_types.into_iter().map(|typename| typename.into()).collect::<Vec<TokenKind>>();
             return self.push_many(tokens);
         }
         self
     }
 
-    fn func_with(
-        mut self,
-        name: &str,
-        args: Option<Vec<Type>>,
-        return_type: Option<Vec<Type>>,
-    ) -> Self {
+    fn func_with(mut self, name: &str, args: Option<Vec<Type>>, return_type: Option<Vec<Type>>) -> Self {
         self.push(TokenKind::Fn)
             .push(TokenKind::Identifier(name.to_string()))
             .push(TokenKind::Colon)

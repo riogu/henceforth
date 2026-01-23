@@ -161,7 +161,7 @@ impl<'a> StackOps for ParserBuilder<'a> {
         self
     }
 
-    fn end_stack_block(mut self, _semicolon: bool) -> Self {
+    fn end_stack_block(mut self, semicolon: bool) -> Self {
         if let Some(BuilderContext::StackBlock) = self.context_stack.pop() {
             let exprs = std::mem::take(&mut self.stack_block_exprs);
             let stmt = UnresolvedStatement::StackBlock(exprs);
@@ -169,6 +169,9 @@ impl<'a> StackOps for ParserBuilder<'a> {
 
             if let Some(BuilderContext::BlockScope { items, .. }) = self.context_stack.last_mut() {
                 items.push(UnresolvedTopLevelId::Statement(stmt_id));
+            }
+            if semicolon {
+                self.arena.alloc_unresolved_stmt(UnresolvedStatement::Empty, Self::dummy_token());
             }
         }
         self
@@ -191,9 +194,12 @@ impl<'a> StackOps for ParserBuilder<'a> {
         self
     }
 
-    fn push_stack_keyword(mut self, keyword: &str, _semicolon: bool) -> Self {
+    fn push_stack_keyword(mut self, keyword: &str, semicolon: bool) -> Self {
         let expr = UnresolvedExpression::StackKeyword(keyword.to_string());
         let expr_id = self.arena.alloc_unresolved_expr(expr, Self::dummy_token());
+        if semicolon {
+            self.arena.alloc_unresolved_stmt(UnresolvedStatement::Empty, Self::dummy_token());
+        }
 
         self.stack_block_exprs.push(expr_id);
         self

@@ -1,8 +1,9 @@
 use std::{fs, path::PathBuf};
 
 use crate::hfs::{
-    VALID_STACK_KEYWORDS, lexer,
+    lexer,
     token::{Literal, SourceInfo, Token, TokenKind},
+    VALID_STACK_KEYWORDS,
 };
 
 #[derive(Debug)]
@@ -218,7 +219,7 @@ mod tests {
     }
 
     #[test]
-    fn test_tokenize_simple_main() {
+    fn test_simple_main() {
         let tokens = tokenize_file_into_kinds("test/simple_main.hfs");
 
         let expected = TokenSequence::new().func_with("main", None, None).body().end_body().build();

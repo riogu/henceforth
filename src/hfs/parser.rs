@@ -317,10 +317,15 @@ impl<'a> Parser<'a> {
 mod tests {
     use std::path::PathBuf;
 
-    use crate::hfs::{
-        builder::builder::{Builder, FunctionOps},
-        parser_builder::ParserBuilder,
-        File, Lexer, Parser, UnresolvedAstArena,
+    use crate::{
+        hfs::{
+            builder::builder::{
+                Builder, BuilderOperation, ControlFlowOps, FunctionOps, LoopOps, PassMode, StackOps, VariableOps,
+            },
+            parser_builder::ParserBuilder,
+            File, Lexer, Parser, Type, UnresolvedAstArena,
+        },
+        pretty_assert_eq,
     };
 
     fn parse_file<'a>(file: &'a File) -> UnresolvedAstArena<'a> {
@@ -329,13 +334,353 @@ mod tests {
         ast
     }
     #[test]
-    fn test_tokenize_simple_main() {
+    fn test_simple_main() {
         let path = PathBuf::from("test/simple_main.hfs");
         let file = File::new(&path);
         let ast = parse_file(&file);
 
         let expected = ParserBuilder::new().func_with("main", None, None).body().end_body().build();
 
-        assert_eq!(ast, expected);
+        pretty_assert_eq!(ast, expected);
+    }
+
+    #[test]
+    fn test_function_with_lots_of_arguments() {
+        let path = PathBuf::from("test/function_with_lots_of_arguments.hfs");
+        let file = File::new(&path);
+        let ast = parse_file(&file);
+        let expected = ParserBuilder::new()
+            .func_with(
+                "func_with_lots_of_arguments",
+                Some(vec![Type::Int, Type::Float, Type::String, Type::Bool]),
+                Some(vec![Type::Int, Type::Float, Type::Bool, Type::String]),
+            )
+            .body()
+            .push_stack_keyword("@pop", true)
+            .push_stack_keyword("@pop", true)
+            .push_stack_keyword("@pop", true)
+            .push_stack_keyword("@pop", true)
+            .stack_block()
+            .push_literal(5)
+            .push_literal(5.0)
+            .push_literal(false)
+            .push_literal("test")
+            .end_stack_block(true)
+            .end_body()
+            .func_with("main", None, None)
+            .body()
+            .end_body()
+            .build();
+
+        pretty_assert_eq!(ast, expected);
+    }
+
+    #[test]
+    fn test_function_with_no_arguments() {
+        let path = PathBuf::from("test/function_with_no_arguments.hfs");
+        let file = File::new(&path);
+        let ast = parse_file(&file);
+        let expected = ParserBuilder::new()
+            .func_with("no_args", None, Some(vec![Type::Int]))
+            .body()
+            .stack_block()
+            .push_literal(4)
+            .end_stack_block(true)
+            .end_body()
+            .func_with("main", None, None)
+            .body()
+            .end_body()
+            .build();
+
+        pretty_assert_eq!(ast, expected);
+    }
+
+    #[test]
+    fn test_function_with_no_return_type() {
+        let path = PathBuf::from("test/function_with_no_return_type.hfs");
+        let file = File::new(&path);
+        let ast = parse_file(&file);
+        let expected = ParserBuilder::new()
+            .func_with("no_return_type", Some(vec![Type::Int]), None)
+            .body()
+            .push_stack_keyword("@pop", true)
+            .end_body()
+            .func_with("main", None, None)
+            .body()
+            .end_body()
+            .build();
+        pretty_assert_eq!(ast, expected);
+    }
+
+    #[test]
+    fn test_variable_declarations() {
+        let path = PathBuf::from("test/variable_declarations.hfs");
+        let file = File::new(&path);
+        let ast = parse_file(&file);
+
+        let expected = ParserBuilder::new()
+            .func_with("main", None, None)
+            .body()
+            .variable("a", Type::Int)
+            .variable("b", Type::Float)
+            .variable("c", Type::String)
+            .variable("d", Type::Bool)
+            .end_body()
+            .build();
+
+        pretty_assert_eq!(ast, expected);
+    }
+
+    #[test]
+    fn test_copy_and_move() {
+        let path = PathBuf::from("test/copy_and_move.hfs");
+        let file = File::new(&path);
+        let ast = parse_file(&file);
+        let expected = ParserBuilder::new()
+            .func_with("main", None, None)
+            .body()
+            .variable("copy", Type::Int)
+            .variable("move", Type::Int)
+            .stack_block()
+            .push_literal(5)
+            .end_stack_block(false)
+            .assign_to("copy", PassMode::Copy)
+            .assign_to("move", PassMode::Move)
+            .end_body()
+            .build();
+        pretty_assert_eq!(ast, expected);
+    }
+
+    #[test]
+    fn test_operations() {
+        let path = PathBuf::from("test/operations.hfs");
+        let file = File::new(&path);
+        let ast = parse_file(&file);
+        let expected = ParserBuilder::new()
+            .func_with("main", None, None)
+            .body()
+            .stack_block()
+            .push_literal(1)
+            .push_literal(1)
+            .push_operation(BuilderOperation::Add)
+            .push_literal(2)
+            .push_operation(BuilderOperation::Multiply)
+            .end_stack_block(true)
+            .push_stack_keyword("@dup", true)
+            .stack_block()
+            .push_operation(BuilderOperation::Divide)
+            .push_literal(2)
+            .push_operation(BuilderOperation::Multiply)
+            .push_literal(2)
+            .push_operation(BuilderOperation::Modulo)
+            .end_stack_block(true)
+            .push_stack_keyword("@pop", true)
+            .stack_block()
+            .push_literal(false)
+            .end_stack_block(true)
+            .push_stack_keyword("@dup", true)
+            .stack_block()
+            .push_operation(BuilderOperation::Or)
+            .push_operation(BuilderOperation::Not)
+            .push_literal(true)
+            .push_operation(BuilderOperation::And)
+            .end_stack_block(true)
+            .push_stack_keyword("@pop", true)
+            .end_body()
+            .build();
+        pretty_assert_eq!(ast, expected);
+    }
+
+    #[test]
+    fn test_while_loop() {
+        let path = PathBuf::from("test/while_loop.hfs");
+        let file = File::new(&path);
+        let ast = parse_file(&file);
+        let expected = ParserBuilder::new()
+            .func_with("main", None, None)
+            .body()
+            .variable("a", Type::Int)
+            .variable("b", Type::Int)
+            .stack_block()
+            .push_literal(100)
+            .end_stack_block(false)
+            .assign_to("a", PassMode::Move)
+            .stack_block()
+            .push_literal(0)
+            .end_stack_block(false)
+            .assign_to("b", PassMode::Move)
+            .while_loop()
+            .stack_block()
+            .push_variable("a")
+            .push_literal(0)
+            .push_operation(BuilderOperation::GreaterThan)
+            .push_variable("b")
+            .push_literal(200)
+            .push_operation(BuilderOperation::LessThan)
+            .push_operation(BuilderOperation::And)
+            .end_stack_block(false)
+            .body()
+            .stack_block()
+            .push_variable("a")
+            .push_literal(1)
+            .push_operation(BuilderOperation::Subtract)
+            .end_stack_block(false)
+            .assign_to("a", PassMode::Move)
+            .stack_block()
+            .push_variable("b")
+            .push_literal(2)
+            .push_operation(BuilderOperation::Add)
+            .end_stack_block(false)
+            .assign_to("b", PassMode::Move)
+            .end_body()
+            .return_statement()
+            .end_body()
+            .build();
+        pretty_assert_eq!(ast, expected)
+    }
+
+    #[test]
+    fn test_simple_if_else() {
+        let path = PathBuf::from("test/simple_if_else.hfs");
+        let file = File::new(&path);
+        let ast = parse_file(&file);
+        let expected = ParserBuilder::new()
+            .func_with("main", None, None)
+            .body()
+            .if_statement()
+            .stack_block()
+            .push_literal(5)
+            .push_literal(2)
+            .push_operation(BuilderOperation::GreaterThan)
+            .end_stack_block(false)
+            .body()
+            .stack_block()
+            .push_literal(1)
+            .push_literal(2)
+            .push_literal(3)
+            .push_literal(4)
+            .end_stack_block(true)
+            .push_stack_keyword("@pop_all", true)
+            .return_statement()
+            .end_body()
+            .else_statement()
+            .body()
+            .return_statement()
+            .end_body()
+            .end_body()
+            .build();
+        pretty_assert_eq!(ast, expected);
+    }
+
+    #[test]
+    fn test_if_elif_else() {
+        let path = PathBuf::from("test/if_elif_else.hfs");
+        let file = File::new(&path);
+        let ast = parse_file(&file);
+        let expected = ParserBuilder::new()
+            .func_with("fizz_buzz", Some(vec![Type::Int]), Some(vec![Type::String]))
+            .body()
+            .if_statement()
+            .stack_block()
+            .push_literal(15)
+            .push_operation(BuilderOperation::Modulo)
+            .push_literal(0)
+            .push_operation(BuilderOperation::Equals)
+            .end_stack_block(false)
+            .body()
+            .stack_block()
+            .push_literal("fizzbuzz")
+            .end_stack_block(true)
+            .end_body()
+            .elif_statement()
+            .stack_block()
+            .push_literal(3)
+            .push_operation(BuilderOperation::Modulo)
+            .push_literal(0)
+            .push_operation(BuilderOperation::Equals)
+            .end_stack_block(false)
+            .body()
+            .stack_block()
+            .push_literal("fizz")
+            .end_stack_block(true)
+            .end_body()
+            .elif_statement()
+            .stack_block()
+            .push_literal(5)
+            .push_operation(BuilderOperation::Modulo)
+            .push_literal(0)
+            .push_operation(BuilderOperation::Equals)
+            .end_stack_block(false)
+            .body()
+            .stack_block()
+            .push_literal("buzz")
+            .end_stack_block(true)
+            .end_body()
+            .else_statement()
+            .body()
+            .push_stack_keyword("@pop", true)
+            .stack_block()
+            .push_literal("no fizzbuzz")
+            .end_stack_block(true)
+            .end_body()
+            .end_body()
+            .func_with("main", None, None)
+            .body()
+            .stack_block()
+            .push_literal(530)
+            .end_stack_block(false)
+            .call_function("fizz_buzz", PassMode::Move)
+            .push_stack_keyword("@pop", true)
+            .end_body()
+            .build();
+        pretty_assert_eq!(ast, expected);
+    }
+
+    #[test]
+    fn test_copy_and_move_func_calls() {
+        let path = PathBuf::from("test/copy_and_move_func_calls.hfs");
+        let file = File::new(&path);
+        let ast = parse_file(&file);
+        let expected = ParserBuilder::new()
+            .func_with("max", Some(vec![Type::Int, Type::Int]), Some(vec![Type::Int]))
+            .body()
+            .if_statement()
+            .stack_block()
+            .push_stack_keyword("@swap", false)
+            .push_stack_keyword("@dup", false)
+            .push_stack_keyword("@rot", false)
+            .push_operation(BuilderOperation::GreaterThan)
+            .end_stack_block(false)
+            .body()
+            .return_statement()
+            .end_body()
+            .else_statement()
+            .body()
+            .push_stack_keyword("@swap", false)
+            .push_stack_keyword("@pop", true)
+            .end_body()
+            .end_body()
+            .func_with("max3", Some(vec![Type::Int, Type::Int, Type::Int]), Some(vec![Type::Int]))
+            .body()
+            .push_stack_keyword("@rrot", true)
+            .call_function("max", PassMode::Move)
+            .call_function("max", PassMode::Copy)
+            .push_stack_keyword("@swap", false)
+            .push_stack_keyword("@pop", false)
+            .push_stack_keyword("@swap", false)
+            .push_stack_keyword("@pop", true)
+            .end_body()
+            .func_with("main", None, None)
+            .body()
+            .stack_block()
+            .push_literal(50)
+            .push_literal(10)
+            .push_literal(30)
+            .end_stack_block(false)
+            .call_function("max3", PassMode::Move)
+            .push_stack_keyword("@pop", true)
+            .end_body()
+            .build();
+        pretty_assert_eq!(ast, expected)
     }
 }

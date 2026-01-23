@@ -58,7 +58,7 @@ pub enum Expression {
 }
 
 #[derive(Debug, Clone)]
-struct StackKeyword {
+pub struct StackKeyword {
     name: String,
     args: Vec<ExprId>,
 }

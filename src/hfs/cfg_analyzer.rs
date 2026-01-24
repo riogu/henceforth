@@ -29,10 +29,7 @@ impl InstArena {
         arena.alloc_type_uncached(Type::Int, Token { kind: TokenKind::Int, source_info: SourceInfo::new(0, 0, 0) });
         arena.alloc_type_uncached(Type::Float, Token { kind: TokenKind::Float, source_info: SourceInfo::new(0, 0, 0) });
         arena.alloc_type_uncached(Type::Bool, Token { kind: TokenKind::Bool, source_info: SourceInfo::new(0, 0, 0) });
-        arena.alloc_type_uncached(Type::String, Token {
-            kind: TokenKind::String,
-            source_info: SourceInfo::new(0, 0, 0),
-        });
+        arena.alloc_type_uncached(Type::String, Token { kind: TokenKind::String, source_info: SourceInfo::new(0, 0, 0) });
         arena
     }
 
@@ -122,8 +119,14 @@ impl CfgAnalyzer {
         let mut analyzed_nodes = Vec::<CfgTopLevelId>::new();
         for node in top_level.clone() {
             let new_node = match node {
-                TopLevelId::VariableDecl(id) => CfgTopLevelId::VariableDecl(self.analyze_variable_declaration(id)),
-                TopLevelId::FunctionDecl(id) => CfgTopLevelId::FunctionDecl(self.analyze_function_declaration(id)),
+                TopLevelId::VariableDecl(id) => CfgTopLevelId::VariableDecl(
+                    self.ast_arena.get_var_token(id).source_info.clone(),
+                    self.analyze_variable_declaration(id),
+                ),
+                TopLevelId::FunctionDecl(id) => CfgTopLevelId::FunctionDecl(
+                    self.ast_arena.get_function_token(id).source_info.clone(),
+                    self.analyze_function_declaration(id),
+                ),
                 TopLevelId::Statement(id) => panic!("there can't be statements on global scope"),
             };
             analyzed_nodes.push(new_node);
@@ -150,11 +153,11 @@ impl CfgAnalyzer {
     pub fn print_hfs_mir(&self, top_level_nodes: Vec<CfgTopLevelId>) {
         for id in top_level_nodes {
             match id {
-                CfgTopLevelId::VariableDecl(var_id) => {
+                CfgTopLevelId::VariableDecl(source_info, var_id) => {
                     let var = self.arena.get_var(var_id);
                     println!("{}", var.get_repr(&self.arena));
                 },
-                CfgTopLevelId::FunctionDecl(func_id) => {
+                CfgTopLevelId::FunctionDecl(source_info, func_id) => {
                     let func = self.arena.get_func(func_id);
                     println!("{}", func.get_repr(&self.arena));
                 },

@@ -187,7 +187,7 @@ impl fmt::Display for TokenKind {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Hash, Eq)]
 pub struct SourceInfo {
     line_number: usize,
     line_offset: usize,

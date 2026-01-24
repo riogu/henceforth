@@ -41,7 +41,7 @@ pub struct BasicBlock {
     pub name: String,
     pub predecessors: Vec<BlockId>, // or phi node construction
     pub instructions: Vec<InstId>,
-    pub terminator: TerminatorInst,
+    pub terminator: TermInstId,
 }
 
 #[derive(Debug)]
@@ -105,7 +105,7 @@ pub enum TerminatorInst {
     // all others that want to return should jump to the "end" block which is tracked by each function
     Branch { source_info: SourceInfo, cond: InstId, true_block: BlockId, false_block: BlockId },
     // if we want to jump with nothing, just have an empty vector
-    Jump(BlockId, Option<InstId>), // is a tuple
+    Jump(SourceInfo, BlockId, Option<InstId>), // is a tuple
     Unreachable,                   // might be useful for you later in CFG analysis
 }
 
@@ -263,7 +263,7 @@ impl CfgPrintable for TerminatorInst {
                 let false_block = arena.get_block(*false_block);
                 format!("branch {}, {}, {};", cond.get_repr(arena), true_block.name, false_block.name)
             },
-            TerminatorInst::Jump(block_id, inst_id) => {
+            TerminatorInst::Jump(source_info, block_id, inst_id) => {
                 let block = arena.get_block(*block_id);
                 match inst_id {
                     Some(id) => {

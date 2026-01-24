@@ -221,7 +221,6 @@ impl StackAnalyzer {
     fn resolve_stmt(&mut self, id: UnresolvedStmtId) -> StmtId {
         let token = self.unresolved_arena.get_unresolved_stmt_token(id);
         let unresolved_stmt = self.unresolved_arena.get_unresolved_stmt(id).clone();
-
         match unresolved_stmt {
             UnresolvedStatement::If { body, else_stmt, cond } => {
                 let stack_before_branches = self.arena.hfs_stack.clone();

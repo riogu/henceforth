@@ -103,13 +103,13 @@ pub struct StackKeywordDeclaration<'a> {
 // ============================================================================
 // Statements
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ElseStmt {
     ElseIf(StmtId), // Points to an IfStmt
     Else(StmtId),   // Points to a BlockScope
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Statement {
     If {
         cond: ExprId, // boolean from the stack or operation

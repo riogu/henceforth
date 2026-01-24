@@ -188,27 +188,27 @@ impl fmt::Display for TokenKind {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct SourceInfo<'a> {
+pub struct SourceInfo {
     line_number: usize,
     line_offset: usize,
     token_width: usize,
-    line_string: &'a str,
+    // line_string: &'a str,
 }
 
-impl<'a> SourceInfo<'a> {
-    pub fn new(line_number: usize, line_offset: usize, token_width: usize, line_string: &'a str) -> Self {
-        Self { line_number, line_offset, token_width, line_string }
+impl SourceInfo {
+    pub fn new(line_number: usize, line_offset: usize, token_width: usize) -> Self {
+        Self { line_number, line_offset, token_width}
     }
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Token<'a> {
+pub struct Token {
     pub kind: TokenKind,
-    pub source_info: SourceInfo<'a>,
+    pub source_info: SourceInfo,
 }
 
-impl<'a> Token<'a> {
-    pub fn new(kind: TokenKind, source_info: SourceInfo<'a>) -> Self {
+impl Token {
+    pub fn new(kind: TokenKind, source_info: SourceInfo) -> Self {
         Self { kind, source_info }
     }
 

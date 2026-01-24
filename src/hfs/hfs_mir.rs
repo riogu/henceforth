@@ -1,6 +1,6 @@
 use std::fmt::{Display, format};
 
-use crate::hfs::{InstArena, Literal, ast::*};
+use crate::hfs::{ast::*, InstArena, Literal, Token};
 /*
 =================================================================================================
 Control Flow Graph IR Pass (HFS MIR - Medium-level IR)
@@ -22,7 +22,8 @@ pub enum CfgTopLevelId {
 }
 #[derive(Debug)]
 pub struct CfgFunction {
-    pub identifier: FuncId,
+    pub old_func_id: FuncId,
+    pub token: Token,
     pub name: String,
     // we repeat the FunctionDeclaration methods because we are meant convert everything over
     // rather than keep acessing the old FunctionDeclaration (we still keep the FuncId though)

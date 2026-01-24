@@ -12,8 +12,8 @@ pub struct File<'a> {
     pub path: &'a PathBuf,
 }
 
-impl<'a> File<'a> {
-    pub fn new(path: &'a PathBuf) -> File<'a> {
+impl File<'_> {
+    pub fn new<'a>(path: &'a PathBuf) -> File<'a> {
         File { contents: fs::read_to_string(&path).expect("Could not read file.").lines().map(String::from).collect(), path }
     }
 }
@@ -22,7 +22,7 @@ pub struct Lexer {} // idk how to make this a namespace
 
 impl Lexer {
     #[must_use]
-    pub fn tokenize<'a>(file: &'a File) -> Vec<Token<'a>> {
+    pub fn tokenize<'a>(file: &'a File) -> Vec<Token> {
         let mut tokens = Vec::<Token>::new();
         let mut line_offset = 0;
 
@@ -194,7 +194,7 @@ impl Lexer {
                     _ => panic!("lexer error"),
                 };
                 line_offset += 1;
-                tokens.push(Token::new(kind, SourceInfo::new(line_number, line_offset, 1, line_string)));
+                tokens.push(Token::new(kind, SourceInfo::new(line_number, line_offset, 1)));
             }
         }
         tokens

@@ -2,13 +2,13 @@ use std::{iter::Peekable, vec::IntoIter};
 
 use crate::hfs::{ast::*, token::*, unresolved_ast::*, ScopeKind};
 
-pub struct Parser<'a> {
-    tokens: Peekable<IntoIter<Token<'a>>>, // Own the tokens, iterate by value
-    arena: UnresolvedAstArena<'a>,
+pub struct Parser {
+    tokens: Peekable<IntoIter<Token>>, // Own the tokens, iterate by value
+    arena: UnresolvedAstArena,
 }
 
-impl<'a> Parser<'a> {
-    fn expect(&mut self, token_kind: TokenKind) -> Token<'a> {
+impl Parser {
+    fn expect(&mut self, token_kind: TokenKind) -> Token {
         match self.tokens.next() {
             Some(token) if std::mem::discriminant(&token.kind) == std::mem::discriminant(&token_kind) => token,
             Some(found) => panic!("expected '{:?}', found '{:?}", token_kind, found.kind),
@@ -16,7 +16,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn expect_identifier(&mut self) -> (String, Token<'a>) {
+    fn expect_identifier(&mut self) -> (String, Token) {
         let token = self.tokens.next().expect("unexpected end of input");
         match &token.kind {
             TokenKind::Identifier(name) => (name.clone(), token),
@@ -24,7 +24,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn expect_stack_keyword(&mut self) -> (String, Token<'a>) {
+    fn expect_stack_keyword(&mut self) -> (String, Token) {
         let token = self.tokens.next().expect("unexpected end of input");
         match &token.kind {
             TokenKind::StackKeyword(name) => (name.clone(), token),
@@ -60,7 +60,7 @@ impl<'a> Parser<'a> {
 }
 
 // Declarations
-impl<'a> Parser<'a> {
+impl Parser {
     // <function_decl> ::= "fn" <identifier> ":" <signature> "{" <block_scope> "}"
     fn function_declaration(&mut self) -> UnresolvedFuncId {
         self.expect(TokenKind::Fn);
@@ -94,7 +94,7 @@ impl<'a> Parser<'a> {
 }
 
 // RD Parser for Henceforth (check 'henceforth-bnf.md')
-impl<'a> Parser<'a> {
+impl Parser {
     // <top_level_node> ::= <var_decl> | <function_decl> | <statement>
     #[must_use]
     pub fn parse_tokens(tokens: Vec<Token>) -> (Vec<UnresolvedTopLevelId>, UnresolvedAstArena) {
@@ -328,7 +328,7 @@ mod tests {
         pretty_assert_eq,
     };
 
-    fn parse_file<'a>(file: &'a File) -> UnresolvedAstArena<'a> {
+    fn parse_file(file: & File) -> UnresolvedAstArena {
         let tokens = Lexer::tokenize(&file);
         let (_, ast) = Parser::parse_tokens(tokens);
         ast

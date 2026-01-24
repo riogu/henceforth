@@ -5,8 +5,8 @@ use crate::hfs::{
     UnresolvedFunctionDeclaration, UnresolvedStatement, UnresolvedStmtId, UnresolvedTopLevelId, UnresolvedVarDeclaration,
 };
 
-pub struct ParserBuilder<'a> {
-    arena: UnresolvedAstArena<'a>,
+pub struct ParserBuilder {
+    arena: UnresolvedAstArena,
     current_function: Option<FunctionContext>,
     stack_block_exprs: Vec<UnresolvedExprId>,
     context_stack: Vec<BuilderContext>,
@@ -30,9 +30,9 @@ enum BuilderContext {
     BlockScope { items: Vec<UnresolvedTopLevelId>, scope_kind: ScopeKind },
 }
 
-impl<'a> ParserBuilder<'a> {
-    fn dummy_token() -> Token<'a> {
-        Token { kind: crate::hfs::TokenKind::Let, source_info: SourceInfo::new(0, 0, 0, "") }
+impl ParserBuilder {
+    fn dummy_token() -> Token {
+        Token { kind: crate::hfs::TokenKind::Let, source_info: SourceInfo::new(0, 0, 0) }
     }
 
     fn types_to_tuple_id(&mut self, types: Vec<Type>) -> TypeId {
@@ -47,12 +47,12 @@ impl<'a> ParserBuilder<'a> {
     }
 
     fn type_to_id(&mut self, typename: Type) -> TypeId {
-        self.arena.to_type(Token::new(typename.to_token(), SourceInfo::new(0, 0, 0, "")))
+        self.arena.to_type(Token::new(typename.to_token(), SourceInfo::new(0, 0, 0)))
     }
 }
 
-impl<'a> Builder<UnresolvedStmtOrExpr> for ParserBuilder<'a> {
-    type Built = UnresolvedAstArena<'a>;
+impl Builder<UnresolvedStmtOrExpr> for ParserBuilder {
+    type Built = UnresolvedAstArena;
     fn new() -> Self {
         ParserBuilder {
             arena: UnresolvedAstArena::new(),
@@ -83,14 +83,14 @@ impl<'a> Builder<UnresolvedStmtOrExpr> for ParserBuilder<'a> {
         self
     }
 
-    fn build(self) -> UnresolvedAstArena<'a> {
+    fn build(self) -> UnresolvedAstArena {
         self.arena
     }
 }
 
-impl<'a> VariableOps for ParserBuilder<'a> {
+impl VariableOps for ParserBuilder {
     fn variable(mut self, name: &str, typename: Type) -> Self {
-        let type_id = self.arena.to_type(Token::new(typename.to_token(), SourceInfo::new(0, 0, 0, "")));
+        let type_id = self.arena.to_type(Token::new(typename.to_token(), SourceInfo::new(0, 0, 0)));
         let var_decl = UnresolvedVarDeclaration { name: name.to_string(), hfs_type: type_id };
         let var_id = self.arena.alloc_unresolved_var(var_decl, Self::dummy_token());
 
@@ -117,7 +117,7 @@ impl<'a> VariableOps for ParserBuilder<'a> {
     }
 }
 
-impl<'a> LoopOps for ParserBuilder<'a> {
+impl LoopOps for ParserBuilder {
     fn while_loop(mut self) -> Self {
         let cond = UnresolvedStmtId(self.arena.unresolved_stmts.len().saturating_sub(1));
         self.context_stack.push(BuilderContext::WhileLoop { cond });
@@ -127,7 +127,7 @@ impl<'a> LoopOps for ParserBuilder<'a> {
     }
 }
 
-impl<'a> ControlFlowOps for ParserBuilder<'a> {
+impl ControlFlowOps for ParserBuilder {
     fn if_statement(mut self) -> Self {
         let cond = UnresolvedStmtId(self.arena.unresolved_stmts.len().saturating_sub(1));
         self.context_stack.push(BuilderContext::IfStatement { cond });
@@ -154,7 +154,7 @@ impl<'a> ControlFlowOps for ParserBuilder<'a> {
     }
 }
 
-impl<'a> StackOps for ParserBuilder<'a> {
+impl StackOps for ParserBuilder {
     fn stack_block(mut self) -> Self {
         self.context_stack.push(BuilderContext::StackBlock);
         self.stack_block_exprs = Vec::new();
@@ -214,7 +214,7 @@ impl<'a> StackOps for ParserBuilder<'a> {
     }
 }
 
-impl<'a> FunctionOps for ParserBuilder<'a> {
+impl FunctionOps for ParserBuilder {
     fn args(mut self, args: Option<Vec<Type>>) -> Self {
         let param_type = self.types_to_tuple_id(args.unwrap_or_default());
 

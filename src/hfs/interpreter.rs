@@ -40,7 +40,7 @@ pub struct CallFrame {
 
 //---------------------------------------------------------------------------
 pub struct Interpreter<'a> {
-    arena: &'a AstArena<'a>,
+    arena: &'a AstArena,
     globals: HashMap<VarId, RuntimeValue>,
     call_stack: Vec<CallFrame>,
 }
@@ -62,7 +62,7 @@ impl<'a> Interpreter<'a> {
 }
 
 impl<'a> Interpreter<'a> {
-    pub fn new(arena: &'a AstArena<'a>) -> Self {
+    pub fn new(arena: &'a AstArena) -> Self {
         Self { arena, globals: HashMap::new(), call_stack: Vec::new() }
     }
 

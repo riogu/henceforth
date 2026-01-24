@@ -9,7 +9,7 @@ use std::{collections::HashMap, rc::Rc};
 // the goal is to make Henceforth a compiled language, therefore we do multiple stack passes
 use super::*;
 
-impl<'a> AstArena<'a> {
+impl AstArena {
     // clears the stack and returns it to the user
     pub fn pop_entire_hfs_stack(&mut self) -> Vec<ExprId> {
         let temp = self.hfs_stack.clone();
@@ -102,14 +102,14 @@ impl<'a> AstArena<'a> {
 // we also need to solve identifiers here, otherwise we cant check
 // how function calls/assignments change the stack
 // ============================================================================
-pub struct StackAnalyzer<'a> {
-    unresolved_arena: UnresolvedAstArena<'a>,
-    arena: AstArena<'a>,
+pub struct StackAnalyzer {
+    unresolved_arena: UnresolvedAstArena,
+    arena: AstArena,
     scope_resolution_stack: ScopeStack,
 }
 
-impl<'a> StackAnalyzer<'a> {
-    pub fn new(unresolved: UnresolvedAstArena<'a>, file_name: String) -> Self {
+impl StackAnalyzer {
+    pub fn new(unresolved: UnresolvedAstArena, file_name: String) -> Self {
         let mut arena = AstArena::new();
         arena.types.extend_from_slice(&unresolved.types[PRIMITIVE_TYPE_COUNT..]);
         Self { arena, unresolved_arena: unresolved, scope_resolution_stack: ScopeStack::new(file_name) }
@@ -117,9 +117,9 @@ impl<'a> StackAnalyzer<'a> {
 
     pub fn resolve(
         top_level: Vec<UnresolvedTopLevelId>,
-        unresolved: UnresolvedAstArena<'a>,
+        unresolved: UnresolvedAstArena,
         file_name: String,
-    ) -> (Vec<TopLevelId>, AstArena<'a>, ScopeStack) {
+    ) -> (Vec<TopLevelId>, AstArena, ScopeStack) {
         let mut stack_parser = StackAnalyzer::new(unresolved, file_name);
         let resolved_top_level = stack_parser.resolve_top_level(top_level);
         (resolved_top_level, stack_parser.arena, stack_parser.scope_resolution_stack)
@@ -211,7 +211,7 @@ impl<'a> StackAnalyzer<'a> {
         func_id
     }
     // this method should be used since it guarantees that we set up everything right
-    fn push_function_and_scope_and_alloc(&mut self, name: &str, func: FunctionDeclaration, token: Token<'a>) -> FuncId {
+    fn push_function_and_scope_and_alloc(&mut self, name: &str, func: FunctionDeclaration, token: Token) -> FuncId {
         let ret_type = func.return_type.clone();
         let func_id = self.arena.alloc_function(func, token);
         self.scope_resolution_stack.push_function_and_scope(name, func_id, ret_type);
@@ -386,7 +386,7 @@ impl<'a> StackAnalyzer<'a> {
                 }
                 let arg_type_id = self.arena.alloc_type(Type::Tuple(arg_types), Token {
                     kind: TokenKind::LeftParen,
-                    source_info: SourceInfo::new(0, 0, 0, "Arg Tuple(function call)"),
+                    source_info: SourceInfo::new(0, 0, 0),
                 });
                 // first make sure calling this function is valid given the stack state
                 self.arena.validate_func_call(func_decl.param_type, arg_type_id);
@@ -516,7 +516,7 @@ impl<'a> StackAnalyzer<'a> {
         }
     }
 
-    fn resolve_operation(&mut self, op: &UnresolvedOperation, token: Token<'a>) -> ExprId {
+    fn resolve_operation(&mut self, op: &UnresolvedOperation, token: Token) -> ExprId {
         match op {
             op if op.is_binary() => {
                 let (lhs_expr, rhs_expr) = self

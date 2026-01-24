@@ -119,7 +119,7 @@ pub enum UnresolvedTopLevelId {
 // ============================================================================
 
 #[derive(Debug, Default)]
-pub struct UnresolvedAstArena<'a> {
+pub struct UnresolvedAstArena {
     // Unresolved AST nodes
     pub(crate) unresolved_exprs: Vec<UnresolvedExpression>,
     pub(crate) unresolved_stmts: Vec<UnresolvedStatement>,
@@ -128,14 +128,14 @@ pub struct UnresolvedAstArena<'a> {
     pub(crate) types: Vec<Type>,
 
     // Token storage
-    pub(crate) unresolved_expr_tokens: Vec<Token<'a>>,
-    pub(crate) unresolved_stmt_tokens: Vec<Token<'a>>,
-    pub(crate) unresolved_var_tokens: Vec<Token<'a>>,
-    pub(crate) unresolved_function_tokens: Vec<Token<'a>>,
-    pub(crate) type_tokens: Vec<Token<'a>>,
+    pub(crate) unresolved_expr_tokens: Vec<Token>,
+    pub(crate) unresolved_stmt_tokens: Vec<Token>,
+    pub(crate) unresolved_var_tokens: Vec<Token>,
+    pub(crate) unresolved_function_tokens: Vec<Token>,
+    pub(crate) type_tokens: Vec<Token>,
 }
 
-impl<'a> PartialEq for UnresolvedAstArena<'a> {
+impl PartialEq for UnresolvedAstArena {
     fn eq(&self, other: &Self) -> bool {
         self.unresolved_exprs == other.unresolved_exprs
             && self.unresolved_stmts == other.unresolved_stmts
@@ -145,55 +145,55 @@ impl<'a> PartialEq for UnresolvedAstArena<'a> {
     }
 }
 
-impl<'a> UnresolvedAstArena<'a> {
+impl UnresolvedAstArena {
     pub fn new() -> Self {
         let mut arena = Self::default();
-        arena.alloc_type_uncached(Type::Int, Token { kind: TokenKind::Int, source_info: SourceInfo::new(0, 0, 0, "Int") });
-        arena.alloc_type_uncached(Type::Float, Token { kind: TokenKind::Float, source_info: SourceInfo::new(0, 0, 0, "Float") });
-        arena.alloc_type_uncached(Type::Bool, Token { kind: TokenKind::Bool, source_info: SourceInfo::new(0, 0, 0, "Bool") });
+        arena.alloc_type_uncached(Type::Int, Token { kind: TokenKind::Int, source_info: SourceInfo::new(0, 0, 0) });
+        arena.alloc_type_uncached(Type::Float, Token { kind: TokenKind::Float, source_info: SourceInfo::new(0, 0, 0) });
+        arena.alloc_type_uncached(Type::Bool, Token { kind: TokenKind::Bool, source_info: SourceInfo::new(0, 0, 0) });
         arena.alloc_type_uncached(Type::String, Token {
             kind: TokenKind::String,
-            source_info: SourceInfo::new(0, 0, 0, "String"),
+            source_info: SourceInfo::new(0, 0, 0),
         });
         arena
     }
 
-    fn alloc_type_uncached(&mut self, hfs_type: Type, token: Token<'a>) -> TypeId {
+    fn alloc_type_uncached(&mut self, hfs_type: Type, token: Token) -> TypeId {
         let id = TypeId(self.types.len());
         self.types.push(hfs_type.clone());
         self.type_tokens.push(token);
         id
     }
 
-    pub fn alloc_unresolved_expr(&mut self, expr: UnresolvedExpression, token: Token<'a>) -> UnresolvedExprId {
+    pub fn alloc_unresolved_expr(&mut self, expr: UnresolvedExpression, token: Token) -> UnresolvedExprId {
         let id = UnresolvedExprId(self.unresolved_exprs.len());
         self.unresolved_exprs.push(expr);
         self.unresolved_expr_tokens.push(token);
         id
     }
 
-    pub fn alloc_unresolved_stmt(&mut self, stmt: UnresolvedStatement, token: Token<'a>) -> UnresolvedStmtId {
+    pub fn alloc_unresolved_stmt(&mut self, stmt: UnresolvedStatement, token: Token) -> UnresolvedStmtId {
         let id = UnresolvedStmtId(self.unresolved_stmts.len());
         self.unresolved_stmts.push(stmt);
         self.unresolved_stmt_tokens.push(token);
         id
     }
 
-    pub fn alloc_unresolved_var(&mut self, var: UnresolvedVarDeclaration, token: Token<'a>) -> UnresolvedVarId {
+    pub fn alloc_unresolved_var(&mut self, var: UnresolvedVarDeclaration, token: Token) -> UnresolvedVarId {
         let id = UnresolvedVarId(self.unresolved_vars.len());
         self.unresolved_vars.push(var);
         self.unresolved_var_tokens.push(token);
         id
     }
 
-    pub fn alloc_unresolved_function(&mut self, func: UnresolvedFunctionDeclaration, token: Token<'a>) -> UnresolvedFuncId {
+    pub fn alloc_unresolved_function(&mut self, func: UnresolvedFunctionDeclaration, token: Token) -> UnresolvedFuncId {
         let id = UnresolvedFuncId(self.unresolved_functions.len());
         self.unresolved_functions.push(func);
         self.unresolved_function_tokens.push(token);
         id
     }
 
-    pub fn alloc_type(&mut self, hfs_type: Type, token: Token<'a>) -> TypeId {
+    pub fn alloc_type(&mut self, hfs_type: Type, token: Token) -> TypeId {
         let id = TypeId(self.types.len());
         self.types.push(hfs_type);
         self.type_tokens.push(token);
@@ -222,27 +222,27 @@ impl<'a> UnresolvedAstArena<'a> {
     }
 
     // Token accessor methods
-    pub fn get_unresolved_expr_token(&self, id: UnresolvedExprId) -> Token<'a> {
+    pub fn get_unresolved_expr_token(&self, id: UnresolvedExprId) -> Token {
         self.unresolved_expr_tokens[id.0].clone()
     }
 
-    pub fn get_unresolved_stmt_token(&self, id: UnresolvedStmtId) -> Token<'a> {
+    pub fn get_unresolved_stmt_token(&self, id: UnresolvedStmtId) -> Token {
         self.unresolved_stmt_tokens[id.0].clone()
     }
 
-    pub fn get_unresolved_var_token(&self, id: UnresolvedVarId) -> Token<'a> {
+    pub fn get_unresolved_var_token(&self, id: UnresolvedVarId) -> Token {
         self.unresolved_var_tokens[id.0].clone()
     }
 
-    pub fn get_unresolved_func_token(&self, id: UnresolvedFuncId) -> Token<'a> {
+    pub fn get_unresolved_func_token(&self, id: UnresolvedFuncId) -> Token {
         self.unresolved_function_tokens[id.0].clone()
     }
 
-    pub fn get_type_token(&self, id: TypeId) -> Token<'a> {
+    pub fn get_type_token(&self, id: TypeId) -> Token {
         self.type_tokens[id.0].clone()
     }
 
-    pub fn to_type(&mut self, token: Token<'a>) -> TypeId {
+    pub fn to_type(&mut self, token: Token) -> TypeId {
         match token.kind {
             TokenKind::Int => self.alloc_type(Type::Int, token),
             TokenKind::String => self.alloc_type(Type::String, token),

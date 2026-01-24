@@ -2,7 +2,7 @@ use crate::hfs::{ast::*, token::*};
 
 pub const PRIMITIVE_TYPE_COUNT: usize = 4;
 
-impl<'a> AstArena<'a> {
+impl AstArena {
     // Convenience methods for common types
     pub fn int_type(&self) -> TypeId {
         TypeId(0)

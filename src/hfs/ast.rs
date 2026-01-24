@@ -164,7 +164,7 @@ impl Type {
 // Arena storage with token tracking
 // ============================================================================
 #[derive(Debug, Default)]
-pub struct AstArena<'a> {
+pub struct AstArena {
     // AST nodes
     pub(crate) exprs: Vec<Expression>,
     pub(crate) stmts: Vec<Statement>,
@@ -174,11 +174,11 @@ pub struct AstArena<'a> {
     pub(crate) types: Vec<Type>,
 
     // Token storage (parallel arrays)
-    pub(crate) expr_tokens: Vec<Token<'a>>,
-    pub(crate) stmt_tokens: Vec<Token<'a>>,
-    pub(crate) var_tokens: Vec<Token<'a>>,
-    pub(crate) function_tokens: Vec<Token<'a>>,
-    pub(crate) type_tokens: Vec<Token<'a>>,
+    pub(crate) expr_tokens: Vec<Token>,
+    pub(crate) stmt_tokens: Vec<Token>,
+    pub(crate) var_tokens: Vec<Token>,
+    pub(crate) function_tokens: Vec<Token>,
+    pub(crate) type_tokens: Vec<Token>,
 
     pub(crate) hfs_stack: Vec<ExprId>, // keeps track of the state of our stack
 
@@ -194,20 +194,20 @@ pub struct AstArena<'a> {
 
 // had to move this here because i wanted to the arena's private members to be available to the parser
 // for better code structure (without making arena members public)
-impl<'a> AstArena<'a> {
+impl AstArena {
     pub fn new() -> Self {
         let mut arena = Self::default();
-        arena.alloc_type_uncached(Type::Int, Token { kind: TokenKind::Int, source_info: SourceInfo::new(0, 0, 0, "Int") });
-        arena.alloc_type_uncached(Type::Float, Token { kind: TokenKind::Float, source_info: SourceInfo::new(0, 0, 0, "Float") });
-        arena.alloc_type_uncached(Type::Bool, Token { kind: TokenKind::Bool, source_info: SourceInfo::new(0, 0, 0, "Bool") });
+        arena.alloc_type_uncached(Type::Int, Token { kind: TokenKind::Int, source_info: SourceInfo::new(0, 0, 0) });
+        arena.alloc_type_uncached(Type::Float, Token { kind: TokenKind::Float, source_info: SourceInfo::new(0, 0, 0) });
+        arena.alloc_type_uncached(Type::Bool, Token { kind: TokenKind::Bool, source_info: SourceInfo::new(0, 0, 0) });
         arena.alloc_type_uncached(Type::String, Token {
             kind: TokenKind::String,
-            source_info: SourceInfo::new(0, 0, 0, "String"),
+            source_info: SourceInfo::new(0, 0, 0),
         });
         arena
     }
 
-    pub fn alloc_and_push_to_hfs_stack(&mut self, expr: Expression, provenance: ExprProvenance, token: Token<'a>) -> ExprId {
+    pub fn alloc_and_push_to_hfs_stack(&mut self, expr: Expression, provenance: ExprProvenance, token: Token) -> ExprId {
         // theres no reason to not push to the stack when making a new expression
         // so this is the only method available
         let id = ExprId(self.exprs.len());
@@ -217,13 +217,13 @@ impl<'a> AstArena<'a> {
         id
     }
 
-    pub fn alloc_stmt(&mut self, stmt: Statement, token: Token<'a>) -> StmtId {
+    pub fn alloc_stmt(&mut self, stmt: Statement, token: Token) -> StmtId {
         let id = StmtId(self.stmts.len());
         self.stmts.push(stmt);
         id
     }
 
-    pub fn alloc_var(&mut self, var: VarDeclaration, token: Token<'a>) -> VarId {
+    pub fn alloc_var(&mut self, var: VarDeclaration, token: Token) -> VarId {
         let id = VarId(self.vars.len());
         self.vars.push(var);
         self.curr_var_provenances.push(ExprProvenance::CompiletimeValue);
@@ -234,7 +234,7 @@ impl<'a> AstArena<'a> {
         id
     }
 
-    pub fn alloc_function(&mut self, func: FunctionDeclaration, token: Token<'a>) -> FuncId {
+    pub fn alloc_function(&mut self, func: FunctionDeclaration, token: Token) -> FuncId {
         let id = FuncId(self.functions.len());
         self.functions.push(func);
         // we assume a function call is runtime by default (im not gonna invest too much on this)
@@ -245,14 +245,14 @@ impl<'a> AstArena<'a> {
     }
 
     // Internal: allocate without checking cache
-    fn alloc_type_uncached(&mut self, hfs_type: Type, token: Token<'a>) -> TypeId {
+    fn alloc_type_uncached(&mut self, hfs_type: Type, token: Token) -> TypeId {
         let id = TypeId(self.types.len());
         self.types.push(hfs_type.clone());
         self.type_tokens.push(token);
         self.type_cache.insert(hfs_type, id);
         id
     }
-    pub fn alloc_type(&mut self, hfs_type: Type, token: Token<'a>) -> TypeId {
+    pub fn alloc_type(&mut self, hfs_type: Type, token: Token) -> TypeId {
         // Check if this type already exists
         if let Some(&existing_id) = self.type_cache.get(&hfs_type) {
             return existing_id;
@@ -295,7 +295,7 @@ impl<'a> AstArena<'a> {
         &self.types[id.0]
     }
 
-    pub fn get_stack_keyword_from_name(&self, name: &str) -> &StackKeywordDeclaration<'a> {
+    pub fn get_stack_keyword_from_name(&self, name: &str) -> &StackKeywordDeclaration<'_> {
         if let Some(keyword) = STACK_KEYWORDS.iter().find(|keyword| keyword.name == name) {
             keyword
         } else {
@@ -318,23 +318,23 @@ impl<'a> AstArena<'a> {
     }
 
     // Token accessor methods
-    pub fn get_expr_token(&self, id: ExprId) -> &Token<'a> {
+    pub fn get_expr_token(&self, id: ExprId) -> &Token {
         &self.expr_tokens[id.0]
     }
 
-    pub fn get_stmt_token(&self, id: StmtId) -> &Token<'a> {
+    pub fn get_stmt_token(&self, id: StmtId) -> &Token {
         &self.stmt_tokens[id.0]
     }
 
-    pub fn get_var_token(&self, id: VarId) -> &Token<'a> {
+    pub fn get_var_token(&self, id: VarId) -> &Token {
         &self.var_tokens[id.0]
     }
 
-    pub fn get_function_token(&self, id: FuncId) -> &Token<'a> {
+    pub fn get_function_token(&self, id: FuncId) -> &Token {
         &self.function_tokens[id.0]
     }
 
-    pub fn get_type_token(&self, id: TypeId) -> &Token<'a> {
+    pub fn get_type_token(&self, id: TypeId) -> &Token {
         &self.type_tokens[id.0]
     }
 

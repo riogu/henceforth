@@ -48,9 +48,9 @@ impl AstArena {
         if expected_count != actual_count {
             panic!("expected {} values on stack for return, found {}", expected_count, actual_count)
         }
-        let back_of_stack = &self.hfs_stack.clone()[actual_count - expected_count..];
+        let stack_copy = &self.hfs_stack.clone();
 
-        for (expr_id, expected_type_id) in back_of_stack.iter().zip(return_types.iter()) {
+        for (expr_id, expected_type_id) in stack_copy.iter().zip(return_types.iter()) {
             let actual_type_id = self.get_type_id_of_expr(*expr_id);
             if let Err(err) = self.validate_type(actual_type_id, *expected_type_id) {
                 panic!("return value {}", err);

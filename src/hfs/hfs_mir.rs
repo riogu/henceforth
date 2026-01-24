@@ -17,7 +17,7 @@ pub struct TermInstId(pub usize);
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum CfgTopLevelId {
-    VariableDecl(SourceInfo, VarId),
+    GlobalVarDecl(SourceInfo, VarId),
     FunctionDecl(SourceInfo, FuncId),
 }
 #[derive(Debug)]
@@ -33,19 +33,15 @@ pub struct CfgFunction {
     pub return_type: TypeId,
 
     pub parameter_exprs: Vec<InstId>,
-
-    pub entry_block: BlockId,
-    pub body_blocks: Vec<BasicBlock>,
-    pub exit_block: BlockId,
+    pub entry_block: BlockId, // CFG of blocks
 }
 
 #[derive(Debug)]
 pub struct BasicBlock {
-    pub id: BlockId,
     pub name: String,
-    pub instructions: Vec<Instruction>,
-    pub terminator: TerminatorInst,
     pub predecessors: Vec<BlockId>, // or phi node construction
+    pub instructions: Vec<InstId>,
+    pub terminator: TerminatorInst,
 }
 
 #[derive(Debug)]
@@ -61,7 +57,7 @@ pub enum Instruction {
     Parameter {
         source_info: SourceInfo,
         index: usize,
-        ty: TypeId,
+        type_id: TypeId,
     },
     VarDeclaration(SourceInfo, VarId),
     Store {
@@ -111,7 +107,6 @@ pub enum TerminatorInst {
     // if we want to jump with nothing, just have an empty vector
     Jump(BlockId, Option<InstId>), // is a tuple
     Unreachable,                   // might be useful for you later in CFG analysis
-                                   // if you dont find it useful (you just wanna delete nodes instead) then remove this
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -163,15 +158,15 @@ impl CfgPrintable for CfgFunction {
     fn get_repr(&self, arena: &InstArena) -> String {
         let params = arena.get_type(self.param_type).clone();
         let returns = arena.get_type(self.return_type).clone();
-        format!(
-            "fn {}: ({}) -> ({}) {{\n
-{}\n   
-}}",
-            self.name,
-            params.get_repr(arena),
-            returns.get_repr(arena),
-            get_repr_many(&self.body_blocks, arena, "\n"),
-        )
+        // let blocks_repr = self
+        //     .body_blocks
+        //     .iter()
+        //     .map(|block_id| arena.get_block(*block_id).get_repr(arena))
+        //     .collect::<Vec<String>>()
+        //     .join("\n");
+        format!("fn {}: ({}) -> ({}) {{\n{}\n   }}", self.name, params.get_repr(arena), returns.get_repr(arena), "")
+        // FIXME: this is a graph traversal (CFG blocks are linked lists)
+        // joao pls fix this later when you work on this part
     }
 }
 
@@ -286,7 +281,7 @@ impl CfgPrintable for TerminatorInst {
 impl CfgPrintable for Instruction {
     fn get_repr(&self, arena: &InstArena) -> String {
         match self {
-            Instruction::Parameter { source_info, index, ty } => todo!(),
+            Instruction::Parameter { source_info, index, type_id: ty } => todo!(),
             Instruction::VarDeclaration(source_info, var_id) => {
                 let var = arena.get_var(*var_id);
                 let var_type = arena.get_type(var.hfs_type);
@@ -349,8 +344,12 @@ impl CfgPrintable for Instruction {
 
 impl CfgPrintable for BasicBlock {
     fn get_repr(&self, arena: &InstArena) -> String {
-        let non_term_inst_repr = get_repr_many(&self.instructions, arena, "\n");
-        let terminator_repr = self.terminator.get_repr(arena);
-        format!("{}\n{}", non_term_inst_repr, terminator_repr)
+        // let non_term_inst_repr = get_repr_many(&self.instructions, arena, "\n");
+        // let terminator_repr = self.terminator.get_repr(arena);
+        // format!("{}\n{}", non_term_inst_repr, terminator_repr)
+        todo!()
+        // FIXME: (for joao) your get_repr_many() method wont work because we actually have
+        // InstId not Instruction (i wrote it wrong initially) and you wrote it thinking
+        // of that. Remake it so it expects a Vec<InstId> or use a map() or smth
     }
 }

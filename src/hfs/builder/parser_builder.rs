@@ -36,14 +36,8 @@ impl ParserBuilder {
     }
 
     fn types_to_tuple_id(&mut self, types: Vec<Type>) -> TypeId {
-        if types.is_empty() {
-            self.arena.alloc_type(Type::Tuple(vec![]), Self::dummy_token())
-        } else if types.len() == 1 {
-            self.type_to_id(types[0].clone())
-        } else {
-            let type_ids: Vec<TypeId> = types.into_iter().map(|ty| self.type_to_id(ty)).collect();
-            self.arena.alloc_type(Type::Tuple(type_ids), Self::dummy_token())
-        }
+        let type_ids = types.into_iter().map(|ty| self.type_to_id(ty)).collect();
+        self.arena.alloc_type(Type::Tuple(type_ids), Self::dummy_token())
     }
 
     fn type_to_id(&mut self, typename: Type) -> TypeId {
@@ -169,9 +163,10 @@ impl StackOps for ParserBuilder {
 
             if let Some(BuilderContext::BlockScope { items, .. }) = self.context_stack.last_mut() {
                 items.push(UnresolvedTopLevelId::Statement(stmt_id));
-            }
-            if semicolon {
-                self.arena.alloc_unresolved_stmt(UnresolvedStatement::Empty, Self::dummy_token());
+                if semicolon {
+                    let id = self.arena.alloc_unresolved_stmt(UnresolvedStatement::Empty, Self::dummy_token());
+                    items.push(UnresolvedTopLevelId::Statement(id));
+                }
             }
         }
         self

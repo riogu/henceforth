@@ -317,18 +317,15 @@ impl Parser {
 mod tests {
     use std::path::PathBuf;
 
-    use crate::{
-        hfs::{
-            builder::builder::{
-                Builder, BuilderOperation, ControlFlowOps, FunctionOps, LoopOps, PassMode, StackOps, VariableOps,
-            },
-            parser_builder::ParserBuilder,
-            File, Lexer, Parser, Type, UnresolvedAstArena,
-        },
-        pretty_assert_eq,
+    use pretty_assertions::assert_eq;
+
+    use crate::hfs::{
+        builder::builder::{Builder, BuilderOperation, ControlFlowOps, FunctionOps, LoopOps, PassMode, StackOps, VariableOps},
+        parser_builder::ParserBuilder,
+        File, Lexer, Parser, Type, UnresolvedAstArena,
     };
 
-    fn parse_file(file: & File) -> UnresolvedAstArena {
+    fn parse_file(file: &File) -> UnresolvedAstArena {
         let tokens = Lexer::tokenize(&file);
         let (_, ast) = Parser::parse_tokens(tokens);
         ast
@@ -341,7 +338,7 @@ mod tests {
 
         let expected = ParserBuilder::new().func_with("main", None, None).body().end_body().build();
 
-        pretty_assert_eq!(ast, expected);
+        assert_eq!(ast, expected);
     }
 
     #[test]
@@ -372,7 +369,7 @@ mod tests {
             .end_body()
             .build();
 
-        pretty_assert_eq!(ast, expected);
+        assert_eq!(ast, expected);
     }
 
     #[test]
@@ -392,7 +389,7 @@ mod tests {
             .end_body()
             .build();
 
-        pretty_assert_eq!(ast, expected);
+        assert_eq!(ast, expected);
     }
 
     #[test]
@@ -409,7 +406,7 @@ mod tests {
             .body()
             .end_body()
             .build();
-        pretty_assert_eq!(ast, expected);
+        assert_eq!(ast, expected);
     }
 
     #[test]
@@ -428,7 +425,7 @@ mod tests {
             .end_body()
             .build();
 
-        pretty_assert_eq!(ast, expected);
+        assert_eq!(ast, expected);
     }
 
     #[test]
@@ -448,7 +445,7 @@ mod tests {
             .assign_to("move", PassMode::Move)
             .end_body()
             .build();
-        pretty_assert_eq!(ast, expected);
+        assert_eq!(ast, expected);
     }
 
     #[test]
@@ -488,7 +485,7 @@ mod tests {
             .push_stack_keyword("@pop", true)
             .end_body()
             .build();
-        pretty_assert_eq!(ast, expected);
+        assert_eq!(ast, expected);
     }
 
     #[test]
@@ -536,7 +533,7 @@ mod tests {
             .return_statement()
             .end_body()
             .build();
-        pretty_assert_eq!(ast, expected)
+        assert_eq!(ast, expected)
     }
 
     #[test]
@@ -569,7 +566,7 @@ mod tests {
             .end_body()
             .end_body()
             .build();
-        pretty_assert_eq!(ast, expected);
+        assert_eq!(ast, expected);
     }
 
     #[test]
@@ -633,7 +630,7 @@ mod tests {
             .push_stack_keyword("@pop", true)
             .end_body()
             .build();
-        pretty_assert_eq!(ast, expected);
+        assert_eq!(ast, expected);
     }
 
     #[test]
@@ -681,6 +678,6 @@ mod tests {
             .push_stack_keyword("@pop", true)
             .end_body()
             .build();
-        pretty_assert_eq!(ast, expected)
+        assert_eq!(ast, expected)
     }
 }

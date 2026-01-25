@@ -86,14 +86,3 @@ pub trait ControlFlowOps {
     fn elif_statement(self) -> Self;
     fn else_statement(self) -> Self;
 }
-
-#[macro_export]
-macro_rules! pretty_assert_eq {
-    ($left:expr, $right:expr $(,)?) => {{
-        let left_val = &$left;
-        let right_val = &$right;
-        if left_val != right_val {
-            panic!("assertion failed: `(left == right)`\n\nleft:\n{:#?}\n\nright:\n{:#?}\n", left_val, right_val);
-        }
-    }};
-}

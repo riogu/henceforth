@@ -151,10 +151,7 @@ impl UnresolvedAstArena {
         arena.alloc_type_uncached(Type::Int, Token { kind: TokenKind::Int, source_info: SourceInfo::new(0, 0, 0) });
         arena.alloc_type_uncached(Type::Float, Token { kind: TokenKind::Float, source_info: SourceInfo::new(0, 0, 0) });
         arena.alloc_type_uncached(Type::Bool, Token { kind: TokenKind::Bool, source_info: SourceInfo::new(0, 0, 0) });
-        arena.alloc_type_uncached(Type::String, Token {
-            kind: TokenKind::String,
-            source_info: SourceInfo::new(0, 0, 0),
-        });
+        arena.alloc_type_uncached(Type::String, Token { kind: TokenKind::String, source_info: SourceInfo::new(0, 0, 0) });
         arena
     }
 
@@ -194,6 +191,9 @@ impl UnresolvedAstArena {
     }
 
     pub fn alloc_type(&mut self, hfs_type: Type, token: Token) -> TypeId {
+        if let Some(id) = self.types.iter().position(|t| *t == hfs_type) {
+            return TypeId(id);
+        }
         let id = TypeId(self.types.len());
         self.types.push(hfs_type);
         self.type_tokens.push(token);

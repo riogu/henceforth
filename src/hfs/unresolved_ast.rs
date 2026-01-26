@@ -50,7 +50,7 @@ pub enum UnresolvedStatement {
         body: UnresolvedStmtId,
         else_stmt: Option<UnresolvedStmtId>,
     },
-    Else(UnresolvedStmtId),   // Points to a UnresolvedBlockScope
+    Else(UnresolvedStmtId), // Points to a UnresolvedBlockScope
     If {
         cond: UnresolvedStmtId,
         body: UnresolvedStmtId,
@@ -118,7 +118,7 @@ pub enum UnresolvedTopLevelId {
 // First-pass Arena (completely separate from AstArena)
 // ============================================================================
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct UnresolvedAstArena {
     // Unresolved AST nodes
     pub(crate) unresolved_exprs: Vec<UnresolvedExpression>,

@@ -1,6 +1,6 @@
 use std::{collections::HashMap, fmt::Display};
 
-use crate::hfs::{RuntimeValue, ScopeKind, token::*};
+use crate::hfs::{token::*, RuntimeValue, ScopeKind};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct VarId(pub usize);
@@ -77,7 +77,7 @@ pub enum ExprProvenance {
 
 // ============================================================================
 // Declarations (shared)
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct VarDeclaration {
     pub name: String,
     pub hfs_type: TypeId,
@@ -162,7 +162,7 @@ impl Type {
 // ============================================================================
 // Arena storage with token tracking
 // ============================================================================
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct AstArena {
     // AST nodes
     pub(crate) exprs: Vec<Expression>,

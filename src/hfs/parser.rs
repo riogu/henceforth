@@ -1,6 +1,6 @@
 use std::{iter::Peekable, vec::IntoIter};
 
-use crate::hfs::{ScopeKind, ast::*, token::*, unresolved_ast::*};
+use crate::hfs::{ast::*, token::*, unresolved_ast::*, ScopeKind};
 
 pub struct Parser {
     tokens: Peekable<IntoIter<Token>>, // Own the tokens, iterate by value
@@ -329,19 +329,20 @@ mod tests {
     use crate::hfs::{
         builder::builder::{Builder, BuilderOperation, ControlFlowOps, FunctionOps, LoopOps, PassMode, StackOps, VariableOps},
         parser_builder::ParserBuilder,
+        utils::{run_until, Phase},
         File, Lexer, Parser, Type, UnresolvedAstArena,
     };
 
-    fn parse_file(file: &File) -> UnresolvedAstArena {
-        let tokens = Lexer::tokenize(&file);
-        let (_, ast) = Parser::parse_tokens(tokens);
-        ast
+    fn parse_file(name: &str) -> UnresolvedAstArena {
+        run_until(name, Phase::Parser)
+            .as_any()
+            .downcast_ref::<UnresolvedAstArena>()
+            .expect("Expected UnresolvedAstArena from Parser")
+            .clone()
     }
     #[test]
     fn test_simple_main() {
-        let path = PathBuf::from("test/simple_main.hfs");
-        let file = File::new(&path);
-        let ast = parse_file(&file);
+        let ast = parse_file("test/simple_main.hfs");
 
         let expected = ParserBuilder::new().func_with("main", None, None).body().end_body().build();
 
@@ -350,9 +351,7 @@ mod tests {
 
     #[test]
     fn test_function_with_lots_of_arguments() {
-        let path = PathBuf::from("test/function_with_lots_of_arguments.hfs");
-        let file = File::new(&path);
-        let ast = parse_file(&file);
+        let ast = parse_file("test/function_with_lots_of_arguments.hfs");
         let expected = ParserBuilder::new()
             .func_with(
                 "func_with_lots_of_arguments",
@@ -381,9 +380,7 @@ mod tests {
 
     #[test]
     fn test_function_with_no_arguments() {
-        let path = PathBuf::from("test/function_with_no_arguments.hfs");
-        let file = File::new(&path);
-        let ast = parse_file(&file);
+        let ast = parse_file("test/function_with_no_arguments.hfs");
         let expected = ParserBuilder::new()
             .func_with("no_args", None, Some(vec![Type::Int]))
             .body()
@@ -401,9 +398,7 @@ mod tests {
 
     #[test]
     fn test_function_with_no_return_type() {
-        let path = PathBuf::from("test/function_with_no_return_type.hfs");
-        let file = File::new(&path);
-        let ast = parse_file(&file);
+        let ast = parse_file("test/function_with_no_return_type.hfs");
         let expected = ParserBuilder::new()
             .func_with("no_return_type", Some(vec![Type::Int]), None)
             .body()
@@ -418,9 +413,7 @@ mod tests {
 
     #[test]
     fn test_variable_declarations() {
-        let path = PathBuf::from("test/variable_declarations.hfs");
-        let file = File::new(&path);
-        let ast = parse_file(&file);
+        let ast = parse_file("test/variable_declarations.hfs");
 
         let expected = ParserBuilder::new()
             .func_with("main", None, None)
@@ -437,9 +430,7 @@ mod tests {
 
     #[test]
     fn test_copy_and_move() {
-        let path = PathBuf::from("test/copy_and_move.hfs");
-        let file = File::new(&path);
-        let ast = parse_file(&file);
+        let ast = parse_file("test/copy_and_move.hfs");
         let expected = ParserBuilder::new()
             .func_with("main", None, None)
             .body()
@@ -457,9 +448,7 @@ mod tests {
 
     #[test]
     fn test_operations() {
-        let path = PathBuf::from("test/operations.hfs");
-        let file = File::new(&path);
-        let ast = parse_file(&file);
+        let ast = parse_file("test/operations.hfs");
         let expected = ParserBuilder::new()
             .func_with("main", None, None)
             .body()
@@ -497,9 +486,7 @@ mod tests {
 
     #[test]
     fn test_while_loop() {
-        let path = PathBuf::from("test/while_loop.hfs");
-        let file = File::new(&path);
-        let ast = parse_file(&file);
+        let ast = parse_file("test/while_loop.hfs");
         let expected = ParserBuilder::new()
             .func_with("main", None, None)
             .body()
@@ -545,9 +532,7 @@ mod tests {
 
     #[test]
     fn test_simple_if_else() {
-        let path = PathBuf::from("test/simple_if_else.hfs");
-        let file = File::new(&path);
-        let ast = parse_file(&file);
+        let ast = parse_file("test/simple_if_else.hfs");
         let expected = ParserBuilder::new()
             .func_with("main", None, None)
             .body()
@@ -578,9 +563,7 @@ mod tests {
 
     #[test]
     fn test_if_elif_else() {
-        let path = PathBuf::from("test/if_elif_else.hfs");
-        let file = File::new(&path);
-        let ast = parse_file(&file);
+        let ast = parse_file("test/if_elif_else.hfs");
         let expected = ParserBuilder::new()
             .func_with("fizz_buzz", Some(vec![Type::Int]), Some(vec![Type::String]))
             .body()
@@ -642,9 +625,7 @@ mod tests {
 
     #[test]
     fn test_copy_and_move_func_calls() {
-        let path = PathBuf::from("test/copy_and_move_func_calls.hfs");
-        let file = File::new(&path);
-        let ast = parse_file(&file);
+        let ast = parse_file("test/copy_and_move_func_calls.hfs");
         let expected = ParserBuilder::new()
             .func_with("max", Some(vec![Type::Int, Type::Int]), Some(vec![Type::Int]))
             .body()

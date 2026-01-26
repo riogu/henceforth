@@ -210,18 +210,23 @@ mod tests {
         ast::Type,
         builder::builder::{Builder, BuilderOperation, ControlFlowOps, FunctionOps, LoopOps, PassMode, StackOps, VariableOps},
         lexer_builder::TokenSequence,
+        utils::{run_until, Phase},
     };
 
-    fn tokenize_file_into_kinds(path: &str) -> Vec<TokenKind> {
-        let path = PathBuf::from(path);
-        let file = File::new(&path);
-        Lexer::tokenize(&file).into_iter().map(|token| token.kind).collect()
+    pub fn tokenize_file_into_kinds(name: &str) -> Vec<TokenKind> {
+        run_until(name, Phase::Lexer)
+            .as_any()
+            .downcast_ref::<Vec<Token>>()
+            .expect("Expected Vec<Token> from Lexer")
+            .clone()
+            .into_iter()
+            .map(|token| token.kind)
+            .collect()
     }
 
     #[test]
     fn test_simple_main() {
         let tokens = tokenize_file_into_kinds("test/simple_main.hfs");
-
         let expected = TokenSequence::new().func_with("main", None, None).body().end_body().build();
 
         assert_eq!(tokens, expected);

@@ -17,14 +17,14 @@ pub struct TypeId(pub usize);
 // AST Node Structures
 // ============================================================================
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Identifier {
     GlobalVar(VarId),
     Variable(VarId),
     Function(FuncId),
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Operation {
     Add(ExprId, ExprId),
     Sub(ExprId, ExprId),
@@ -42,7 +42,7 @@ pub enum Operation {
     Not(ExprId),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Expression {
     Operation(Operation),
     Identifier(Identifier),
@@ -57,7 +57,7 @@ pub enum Expression {
     StackKeyword(StackKeyword),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct StackKeyword {
     name: String,
     args: Vec<ExprId>,
@@ -77,13 +77,13 @@ pub enum ExprProvenance {
 
 // ============================================================================
 // Declarations (shared)
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct VarDeclaration {
     pub name: String,
     pub hfs_type: TypeId,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct FunctionDeclaration {
     pub name: String,
     pub param_type: TypeId,  // either a tuple or a single type
@@ -92,7 +92,7 @@ pub struct FunctionDeclaration {
     pub parameter_exprs: Vec<ExprId>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct StackKeywordDeclaration<'a> {
     pub name: &'a str,
     pub expected_args_size: Option<usize>,
@@ -103,7 +103,7 @@ pub struct StackKeywordDeclaration<'a> {
 // ============================================================================
 // Statements
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Statement {
     ElseIf {
         cond: ExprId, // boolean from the stack or operation
@@ -189,6 +189,16 @@ pub struct AstArena {
     // variables should continuously change their provenance for analysis
     pub curr_var_provenances: Vec<ExprProvenance>,       // indexed by VarId
     pub curr_func_call_provenances: Vec<ExprProvenance>, // indexed by FuncId
+}
+
+impl PartialEq for AstArena {
+    fn eq(&self, other: &Self) -> bool {
+        self.exprs == other.exprs
+            && self.stmts == other.stmts
+            && self.vars == other.vars
+            && self.functions == other.functions
+            && self.types == other.types
+    }
 }
 
 // had to move this here because i wanted to the arena's private members to be available to the parser

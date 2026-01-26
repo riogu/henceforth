@@ -119,9 +119,10 @@ impl<'a> Interpreter<'a> {
                         },
                     }
                 } else if let Some(else_stmt) = else_stmt {
-                    match else_stmt {
-                        ElseStmt::ElseIf(stmt_id) | ElseStmt::Else(stmt_id) => self.interpret_stmt(*stmt_id),
-                    }
+                    // TODO: this was from before the refactor
+                    // match else_stmt {
+                    //     ElseStmt::ElseIf(stmt_id) | ElseStmt::Else(stmt_id) => self.interpret_stmt(*stmt_id),
+                    // }
                 }
             },
             Statement::While { cond, body } => loop {
@@ -182,7 +183,7 @@ impl<'a> Interpreter<'a> {
                 };
             },
             Statement::Empty => {},
-            Statement::FunctionCall { args, identifier, is_move } => {
+            Statement::FunctionCall { args, func_id: identifier, is_move } => {
                 let args: Vec<RuntimeValue> = args.iter().map(|arg| self.interpret_expr(arg.clone())).collect();
                 let return_values = self.call_declared_function(*identifier, args.clone());
                 for val in return_values {
@@ -191,6 +192,8 @@ impl<'a> Interpreter<'a> {
                     // self.curr_call_frame_mut().local_hfs_stack.push(val);
                 }
             },
+            Statement::ElseIf { cond, body, else_stmt } => todo!(),
+            Statement::Else(stmt_id) => todo!(),
         }
     }
 

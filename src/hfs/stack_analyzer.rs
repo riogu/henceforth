@@ -402,7 +402,7 @@ impl StackAnalyzer {
                     panic!("[internal error] functions only return tuples at the moment.")
                 };
                 // function calls dont go to the stack
-                self.arena.alloc_stmt(Statement::FunctionCall { args: expressions, identifier: func_id, is_move }, token)
+                self.arena.alloc_stmt(Statement::FunctionCall { args: expressions, func_id, is_move }, token)
             },
             UnresolvedStatement::Else(unresolved_stmt_id) => panic!("[internal error] else statements are not solved here"),
         }

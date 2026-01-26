@@ -14,16 +14,18 @@ pub struct BlockId(pub usize);
 pub struct InstId(pub usize);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct TermInstId(pub usize);
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct IrFuncId(pub usize);
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct IrVarId(pub usize);
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum CfgTopLevelId {
-    GlobalVarDecl(SourceInfo, VarId),
-    FunctionDecl(SourceInfo, FuncId),
+    GlobalVarDecl(IrVarId),
+    FunctionDecl(IrFuncId),
 }
 #[derive(Debug)]
 pub struct CfgFunction {
-    pub old_func_id: FuncId, // i dont think we will wanna keep this
-    // but for now its here (probs delete later)
     pub source_info: SourceInfo,
     pub name: String,
     // we repeat the FunctionDeclaration methods because we are meant convert everything over
@@ -44,12 +46,14 @@ pub struct BasicBlock {
     pub terminator: Option<TermInstId>,
 }
 
+// Declarations (shared)
 #[derive(Debug)]
-pub enum VarIdentifier {
-    GlobalVar(SourceInfo, VarId),
-    Variable(SourceInfo, VarId),
+pub struct IrVarDeclaration {
+    pub source_info: SourceInfo,
+    pub name: String,
+    pub hfs_type: TypeId,
+    pub is_global: bool,
 }
-
 // each Instruction -> one value (this is just like LLVM SSA)
 // but not all instructions produce values (declarations, stores, etc)
 #[derive(Debug)]
@@ -59,17 +63,16 @@ pub enum Instruction {
         index: usize,
         type_id: TypeId,
     },
-    VarDeclaration(SourceInfo, VarId),
     Store {
         source_info: SourceInfo,
         value: InstId,
-        identifier: VarIdentifier, // GlobalVar or Variable
+        var_id: IrVarId, // GlobalVar or Variable
         is_move: bool,
     },
     FunctionCall {
         source_info: SourceInfo,
         args: Vec<InstId>,
-        identifier: FuncId,
+        func_id: IrFuncId,
         is_move: bool,
     },
 
@@ -94,7 +97,7 @@ pub enum Instruction {
     },
     Push(SourceInfo, InstId), // always a tuple
     Operation(SourceInfo, CfgOperation),
-    Identifier(SourceInfo, VarIdentifier),
+    Identifier(IrVarId),
     Literal(SourceInfo, Literal),
 }
 
@@ -106,7 +109,7 @@ pub enum TerminatorInst {
     Branch { source_info: SourceInfo, cond: InstId, true_block: BlockId, false_block: BlockId },
     // if we want to jump with nothing, just have an empty vector
     Jump(SourceInfo, BlockId, Option<InstId>), // is a tuple
-    Unreachable,                   // might be useful for you later in CFG analysis
+    Unreachable,                               // might be useful for you later in CFG analysis
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -282,23 +285,25 @@ impl CfgPrintable for Instruction {
     fn get_repr(&self, arena: &InstArena) -> String {
         match self {
             Instruction::Parameter { source_info, index, type_id: ty } => todo!(),
-            Instruction::VarDeclaration(source_info, var_id) => {
-                let var = arena.get_var(*var_id);
-                let var_type = arena.get_type(var.hfs_type);
-
-                format!("let {}: {};", var.name, var_type.get_repr(arena))
+            // FIXME: joao you gotta redo this one because VarDeclaration aren't
+            // meant to be instructions (they are standalone)
+            // Instruction::VarDeclaration(source_info, var_id) => {
+            //     let var = arena.get_var(*var_id);
+            //     let var_type = arena.get_type(var.hfs_type);
+            //
+            //     format!("let {}: {};", var.name, var_type.get_repr(arena))
+            // },
+            Instruction::Store { source_info, value, var_id: identifier, is_move } => {
+                // let id = match identifier {
+                //     VarIdentifier::GlobalVar(source_info, var_id) => var_id,
+                //     VarIdentifier::Variable(source_info, var_id) => var_id,
+                // };
+                // let var = arena.get_var(*id);
+                // let value = arena.get_instruction(*value);
+                // format!("store {}, {};", var.name, value.get_repr(arena))
+                todo!("joao i broke your printing code")
             },
-            Instruction::Store { source_info, value, identifier, is_move } => {
-                let id = match identifier {
-                    VarIdentifier::GlobalVar(source_info, var_id) => var_id,
-                    VarIdentifier::Variable(source_info, var_id) => var_id,
-                };
-                let var = arena.get_var(*id);
-                let value = arena.get_instruction(*value);
-
-                format!("store {}, {};", var.name, value.get_repr(arena))
-            },
-            Instruction::FunctionCall { source_info, args, identifier, is_move } => {
+            Instruction::FunctionCall { source_info, args, func_id: identifier, is_move } => {
                 let func = arena.get_func(*identifier);
                 let args_repr: Vec<String> =
                     args.iter().map(|id| arena.get_instruction(*id)).map(|inst| inst.get_repr(arena)).collect();
@@ -324,13 +329,14 @@ impl CfgPrintable for Instruction {
                 format!("push {};", inst.get_repr(arena))
             },
             Instruction::Operation(source_info, cfg_operation) => cfg_operation.get_repr(arena),
-            Instruction::Identifier(source_info, var_identifier) => {
-                let id = match var_identifier {
-                    VarIdentifier::GlobalVar(source_info, var_id) => var_id,
-                    VarIdentifier::Variable(source_info, var_id) => var_id,
-                };
-                let var_decl = arena.get_var(*id);
-                var_decl.name.clone()
+            Instruction::Identifier(var_identifier) => {
+                // let id = match var_identifier {
+                //     VarIdentifier::GlobalVar(source_info, var_id) => var_id,
+                //     VarIdentifier::Variable(source_info, var_id) => var_id,
+                // };
+                // let var_decl = arena.get_var(*id);
+                // var_decl.name.clone()
+                todo!("broke your code joao")
             },
             Instruction::Literal(source_info, literal) => match literal {
                 Literal::Integer(lit) => lit.to_string(),

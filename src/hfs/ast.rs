@@ -133,7 +133,7 @@ pub enum Statement {
     },
     FunctionCall {
         args: Vec<ExprId>,
-        identifier: FuncId,
+        func_id: FuncId,
         is_move: bool,
     },
 }

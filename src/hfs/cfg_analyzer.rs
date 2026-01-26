@@ -1,8 +1,8 @@
 use std::{collections::HashMap, fmt::Debug};
 
 use crate::hfs::{
-    self, BasicBlock, BlockId, CfgFunction, CfgPrintable, CfgTopLevelId, InstId, Instruction, Literal, PRIMITIVE_TYPE_COUNT,
-    SourceInfo, TermInstId, TerminatorInst, Token, TokenKind, ast::*,
+    self, BasicBlock, BlockId, CfgFunction, CfgPrintable, CfgTopLevelId, InstId, Instruction, IrFuncId, IrVarDeclaration,
+    IrVarId, Literal, PRIMITIVE_TYPE_COUNT, SourceInfo, TermInstId, TerminatorInst, Token, TokenKind, ast::*,
 };
 
 // here is where youll create the CFG pass and the new IR generation
@@ -19,8 +19,8 @@ pub struct BlockContext {
 pub struct IRContext {
     pub curr_block_context: BlockContext,
     pub curr_insert_block: BlockId,
-    pub curr_function: FuncId,
-    block_parent_functions: HashMap<BlockId, FuncId>,
+    pub curr_function: IrFuncId,
+    block_parent_functions: HashMap<BlockId, IrFuncId>,
 }
 
 #[derive(Debug, Default)]
@@ -28,12 +28,15 @@ pub struct InstArena {
     // TODO: we also need to pass metadata into this new IR
     // which includes expression provenance and etc (for optimizations and annotations)
     // we should make an annotation system and convert into it
-    pub vars: Vec<VarDeclaration>,
+    pub vars: Vec<IrVarDeclaration>,
     pub functions: Vec<CfgFunction>,
     pub instructions: Vec<Instruction>,
     pub terminators: Vec<TerminatorInst>,
     pub blocks: Vec<BasicBlock>,
     pub types: Vec<Type>,
+
+    func_id_map: HashMap<FuncId, IrFuncId>,
+    var_id_map: HashMap<VarId, IrVarId>,
 
     pub type_tokens: Vec<Token>,
     type_cache: HashMap<Type, TypeId>,
@@ -66,9 +69,10 @@ impl InstArena {
         } // If not, allocate it
         self.alloc_type_uncached(hfs_type, token)
     }
-    fn alloc_function(&mut self, func: CfgFunction) -> FuncId {
-        let id = FuncId(self.functions.len());
+    fn alloc_function(&mut self, func: CfgFunction, old_id: FuncId) -> IrFuncId {
+        let id = IrFuncId(self.functions.len());
         self.functions.push(func);
+        self.func_id_map.insert(old_id, id);
         self.ir_context.curr_function = id;
         id
     }
@@ -77,9 +81,10 @@ impl InstArena {
         self.instructions.push(inst);
         id
     }
-    pub fn alloc_var(&mut self, var: VarDeclaration) -> VarId {
-        let id = VarId(self.vars.len());
+    pub fn alloc_var(&mut self, var: IrVarDeclaration, old_id: VarId) -> IrVarId {
+        let id = IrVarId(self.vars.len());
         self.vars.push(var);
+        self.var_id_map.insert(old_id, id);
         id
     }
     pub fn alloc_terminator_for(&mut self, terminator: TerminatorInst, block_id: BlockId) -> TermInstId {
@@ -114,10 +119,10 @@ impl InstArena {
 }
 
 impl InstArena {
-    pub fn get_var(&self, id: VarId) -> &VarDeclaration {
+    pub fn get_var(&self, id: IrVarId) -> &IrVarDeclaration {
         &self.vars[id.0]
     }
-    pub fn get_func(&self, id: FuncId) -> &CfgFunction {
+    pub fn get_func(&self, id: IrFuncId) -> &CfgFunction {
         &self.functions[id.0]
     }
     pub fn get_type(&self, id: TypeId) -> &Type {
@@ -154,7 +159,7 @@ impl CfgAnalyzer {
     pub fn analyze(top_level: Vec<TopLevelId>, ast_arena: AstArena) -> InstArena {
         let mut cfg_analyzer = CfgAnalyzer::new(ast_arena);
         let analyzed_top_level = cfg_analyzer.analyze_top_level(top_level);
-        cfg_analyzer.print_hfs_mir(analyzed_top_level);
+        // cfg_analyzer.print_hfs_mir(analyzed_top_level);
         cfg_analyzer.arena
     }
 
@@ -162,14 +167,8 @@ impl CfgAnalyzer {
         let mut analyzed_nodes = Vec::<CfgTopLevelId>::new();
         for node in top_level.clone() {
             let new_node = match node {
-                TopLevelId::VariableDecl(id) => CfgTopLevelId::GlobalVarDecl(
-                    self.ast_arena.get_var_token(id).source_info.clone(),
-                    id, // currently we do nothing in particularly in this pass to globals
-                ),
-                TopLevelId::FunctionDecl(id) => CfgTopLevelId::FunctionDecl(
-                    self.ast_arena.get_function_token(id).source_info.clone(),
-                    self.analyze_function_declaration(id),
-                ),
+                TopLevelId::VariableDecl(id) => CfgTopLevelId::GlobalVarDecl(self.analyze_variable_declaration(id)),
+                TopLevelId::FunctionDecl(id) => CfgTopLevelId::FunctionDecl(self.analyze_function_declaration(id)),
                 TopLevelId::Statement(id) => panic!("there can't be statements on global scope"),
             };
             analyzed_nodes.push(new_node);
@@ -177,13 +176,22 @@ impl CfgAnalyzer {
         analyzed_nodes
     }
 
-    fn analyze_variable_declaration(&mut self, id: VarId) -> InstId {
+    fn analyze_variable_declaration(&mut self, id: VarId) -> IrVarId {
         // we don't do anything here at all right now
         // maybe if we add assignments to declarations we might want to in the future but for now this doesn't do anything
-        self.arena.alloc_inst(Instruction::VarDeclaration(self.ast_arena.get_var_token(id).source_info.clone(), id))
+        let var = self.ast_arena.get_var(id);
+        self.arena.alloc_var(
+            IrVarDeclaration {
+                source_info: self.ast_arena.get_var_token(id).source_info.clone(),
+                name: var.name.clone(),
+                hfs_type: var.hfs_type,
+                is_global: true,
+            },
+            id,
+        )
     }
 
-    fn analyze_function_declaration(&mut self, id: FuncId) -> FuncId {
+    fn analyze_function_declaration(&mut self, id: FuncId) -> IrFuncId {
         let func_decl = self.ast_arena.get_func(id).clone();
         // self.arena.alloc_function(func, self.ast_arena.get_function_token(id));
         let mut parameter_exprs = Vec::<InstId>::new();
@@ -206,7 +214,6 @@ impl CfgAnalyzer {
         self.analyze_stmt(func_decl.body);
 
         let cfg_function = CfgFunction {
-            old_func_id: id,
             source_info: self.ast_arena.get_function_token(id).source_info.clone(),
             name: func_decl.name,
             param_type: func_decl.param_type,
@@ -214,7 +221,7 @@ impl CfgAnalyzer {
             parameter_exprs,
             entry_block,
         };
-        self.arena.alloc_function(cfg_function)
+        self.arena.alloc_function(cfg_function, id)
     }
     fn analyze_stmt(&mut self, id: StmtId) {
         let source_info = self.ast_arena.get_stmt_token(id).source_info.clone();
@@ -227,6 +234,10 @@ impl CfgAnalyzer {
                 // watch out for accidentally overwriting the old terminator if we run this code without dead code elimination
                 // basically, this code expects dead code elimination to have occurred BEFORE
                 // FIXME: implement a small dead code elimination on the AST before cfg_analyzer
+                //
+                // FIXME: add checking of stack depth in each branch individually and type check
+                // the stack against the current level on other branches and at the end make sure
+                // they all tally up to the same depth and types
 
                 /* example of CFG blocks that cover many of the cases of the code below:
                   start_function:
@@ -281,6 +292,7 @@ impl CfgAnalyzer {
                     match else_stmt {
                         Statement::Else(_) | Statement::ElseIf { .. } => {
                             let else_body_block = self.arena.alloc_block(name);
+
                             // branch instruction for the original if
                             let if_branch_inst = self.arena.alloc_terminator_for(
                                 TerminatorInst::Branch {
@@ -368,32 +380,66 @@ impl CfgAnalyzer {
             Statement::Assignment { value, identifier, is_move } => {
                 // @(213) &= var; // move assignment
                 // @(213) := var; // copy assignment
+                let inst_value = self.analyze_expr(value);
+                let &var_id = match identifier {
+                    Identifier::GlobalVar(var_id) | Identifier::Variable(var_id) => match self.arena.var_id_map.get(&var_id) {
+                        Some(ir_var_id) => ir_var_id,
+                        None => panic!("[internal error] tried making an assignment before creating the associated IrVarId"),
+                    },
+                    Identifier::Function(func_id) => unreachable!("can't happen"),
+                };
+                self.arena.alloc_inst(Instruction::Store { source_info, value: inst_value, var_id, is_move });
             },
-            Statement::FunctionCall { args, identifier, is_move } => {
+            Statement::FunctionCall { args, func_id, is_move } => {
                 // @(213) &> func; // move call
                 // @(213) :> func; // copy call
+                let mut inst_args = Vec::<InstId>::new();
+                for arg in args {
+                    inst_args.push(self.analyze_expr(arg));
+                }
+                let func_id = match self.arena.func_id_map.get(&func_id) {
+                    Some(func_id) => *func_id,
+                    None => panic!("[internal error] tried making a function call before creating the associated IrFuncId"),
+                };
+                self.arena.alloc_inst(Instruction::FunctionCall { source_info, args: inst_args, func_id, is_move });
             },
         }
     }
     fn analyze_expr(&mut self, id: ExprId) -> InstId {
+        let source_info = self.ast_arena.get_expr_token(id).source_info.clone();
+        match self.ast_arena.get_expr(id).clone() {
+            Expression::Operation(operation) => todo!(),
+            Expression::Identifier(identifier) => match identifier {
+                Identifier::GlobalVar(var_id) | Identifier::Variable(var_id) => match self.arena.var_id_map.get(&var_id) {
+                    Some(ir_var_id) => Instruction::Identifier(*ir_var_id),
+                    None => panic!("[internal error] tried making assignment before creating the associated IrVarId"),
+                },
+                Identifier::Function(func_id) => panic!("[internal error] can't have function identifiers as expressions."),
+            },
+            Expression::Literal(literal) => todo!(),
+            Expression::Tuple { expressions } => todo!(),
+            Expression::Parameter { index, type_id } => todo!(),
+            Expression::StackKeyword(stack_keyword) => todo!(),
+        };
         todo!()
     }
 }
 
 // Debug printing functions (using the MIR syntax)
-impl CfgAnalyzer {
-    pub fn print_hfs_mir(&self, top_level_nodes: Vec<CfgTopLevelId>) {
-        for id in top_level_nodes {
-            match id {
-                CfgTopLevelId::GlobalVarDecl(source_info, var_id) => {
-                    let var = self.arena.get_var(var_id);
-                    println!("{}", var.get_repr(&self.arena));
-                },
-                CfgTopLevelId::FunctionDecl(source_info, func_id) => {
-                    let func = self.arena.get_func(func_id);
-                    println!("{}", func.get_repr(&self.arena));
-                },
-            }
-        }
-    }
-}
+// FIXME: joao i broke your prints again
+// impl CfgAnalyzer {
+//     pub fn print_hfs_mir(&self, top_level_nodes: Vec<CfgTopLevelId>) {
+//         for id in top_level_nodes {
+//             match id {
+//                 CfgTopLevelId::GlobalVarDecl(var_id) => {
+//                     let var = self.arena.get_var(var_id);
+//                     println!("{}", var.get_repr(&self.arena));
+//                 },
+//                 CfgTopLevelId::FunctionDecl(func_id) => {
+//                     let func = self.arena.get_func(func_id);
+//                     println!("{}", func.get_repr(&self.arena));
+//                 },
+//             }
+//         }
+//     }
+// }

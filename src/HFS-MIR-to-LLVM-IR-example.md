@@ -93,5 +93,40 @@ fn main: () -> () {
     @(1 2) &> foo;
     @pop @pop @pop;
 }
+
+fn func: () -> (i32) {
+    if @( 1 2 <) {
+        if @(true) {
+            let var: i32;
+        }
+    } else if @( 3 4 <) {
+    }
+}
+
+start:
+    if_cond_0:
+        branch 1 < 2, if_body_0, else_if_cond_0;
+        if_body_0:
+    else_if_cond_0:
+    if_end_0:
+
+
+                  start_function:
+                      branch 1 < 2.0, if_block_0, else_block_0;
+                      if_block_0:
+                          jump end_if_0;
+                      else_block_0:
+                          branch -420 < 5, else_if_block_0, else_block_1;
+                          else_if_block_0:
+                              jump end_if_0;
+                      else_block_1:
+                          branch -3 < 5, else_if_block_1, else_block_2;
+                          else_if_block_1:
+                              jump end_if_0;
+                      else_block_2:
+                          jump end_if_0, %inst4;
+                      if_end_0:
+                          jump end_function;
+                  end_function:
 ```
 

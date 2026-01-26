@@ -8,11 +8,11 @@ Control Flow Graph IR Pass (HFS MIR - Medium-level IR)
 =================================================================================================
 */
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct BlockId(pub usize);
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct InstId(pub usize);
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct TermInstId(pub usize);
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -41,7 +41,7 @@ pub struct BasicBlock {
     pub name: String,
     pub predecessors: Vec<BlockId>, // or phi node construction
     pub instructions: Vec<InstId>,
-    pub terminator: TermInstId,
+    pub terminator: Option<TermInstId>,
 }
 
 #[derive(Debug)]

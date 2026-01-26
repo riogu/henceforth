@@ -45,10 +45,16 @@ pub enum UnresolvedExpression {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum UnresolvedStatement {
+    ElseIf {
+        cond: UnresolvedStmtId,
+        body: UnresolvedStmtId,
+        else_stmt: Option<UnresolvedStmtId>,
+    },
+    Else(UnresolvedStmtId),   // Points to a UnresolvedBlockScope
     If {
         cond: UnresolvedStmtId,
         body: UnresolvedStmtId,
-        else_stmt: Option<UnresolvedElseStmt>,
+        else_stmt: Option<UnresolvedStmtId>,
     },
     While {
         cond: UnresolvedStmtId,
@@ -70,12 +76,6 @@ pub enum UnresolvedStatement {
         is_move: bool, // true for &>, false for :>
                        // value comes from stack
     },
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum UnresolvedElseStmt {
-    ElseIf(UnresolvedStmtId), // Points to an UnresolvedIfStmt
-    Else(UnresolvedStmtId),   // Points to a UnresolvedBlockScope
 }
 
 // Unresolved declarations (mirror the resolved ones but use UnresolvedStmtId)

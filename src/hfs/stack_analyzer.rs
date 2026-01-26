@@ -222,7 +222,7 @@ impl StackAnalyzer {
         let token = self.unresolved_arena.get_unresolved_stmt_token(id);
         let unresolved_stmt = self.unresolved_arena.get_unresolved_stmt(id).clone();
         match unresolved_stmt {
-            UnresolvedStatement::If { body, else_stmt, cond } => {
+            UnresolvedStatement::ElseIf { cond, body, else_stmt } | UnresolvedStatement::If { body, else_stmt, cond } => {
                 let stack_before_branches = self.arena.hfs_stack.clone();
                 // actually adds the condition to the hfs_stack, because the stack analyzer only "sees" the if statement itself
                 self.resolve_stmt(cond);
@@ -241,26 +241,33 @@ impl StackAnalyzer {
                 self.arena.hfs_stack.push(cond);
 
                 let else_stmt = match else_stmt {
-                    Some(UnresolvedElseStmt::Else(stmt_id)) => {
-                        // Reset stack to pre-if state for else branch
-                        self.arena.hfs_stack = stack_before_branches;
-                        let else_body = self.resolve_stmt(stmt_id);
-                        let else_depth_after = self.arena.hfs_stack.len();
+                    Some(else_stmt_id) => {
+                        match self.unresolved_arena.get_unresolved_stmt(else_stmt_id) {
+                            UnresolvedStatement::Else(stmt_id) => {
+                                // Reset stack to pre-if state for else branch
+                                self.arena.hfs_stack = stack_before_branches;
+                                let else_body = self.resolve_stmt(*stmt_id);
+                                let else_depth_after = self.arena.hfs_stack.len();
 
-                        // Both branches must have same stack effect
-                        if if_depth_after != else_depth_after {
-                            panic!(
-                                "if/else branches must have matching stack effects: if branch results in {} values, else branch \
-                                 results in {}",
-                                if_depth_after - if_depth_before,
-                                else_depth_after - if_depth_before
-                            );
+                                // Both branches must have same stack effect
+                                if if_depth_after != else_depth_after {
+                                    panic!(
+                                        "if/else branches must have matching stack effects: if branch results in {} values, \
+                                         else branch results in {}",
+                                        if_depth_after - if_depth_before,
+                                        else_depth_after - if_depth_before
+                                    );
+                                }
+                                Some(self.arena.alloc_stmt(Statement::Else(else_body), token.clone()))
+                            },
+                            UnresolvedStatement::ElseIf { cond, body, else_stmt } => {
+                                self.arena.hfs_stack = stack_before_branches;
+                                Some(self.resolve_stmt(else_stmt_id))
+                            },
+                            _ => {
+                                panic!("can't have other statements in else statement")
+                            },
                         }
-                        Some(ElseStmt::Else(else_body))
-                    },
-                    Some(UnresolvedElseStmt::ElseIf(stmt_id)) => {
-                        self.arena.hfs_stack = stack_before_branches;
-                        Some(ElseStmt::ElseIf(self.resolve_stmt(stmt_id)))
                     },
                     None => {
                         // If no else, the if body must have net-zero stack effect
@@ -397,6 +404,7 @@ impl StackAnalyzer {
                 // function calls dont go to the stack
                 self.arena.alloc_stmt(Statement::FunctionCall { args: expressions, identifier: func_id, is_move }, token)
             },
+            UnresolvedStatement::Else(unresolved_stmt_id) => panic!("[internal error] else statements are not solved here"),
         }
     }
 

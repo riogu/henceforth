@@ -1,6 +1,6 @@
 use std::{iter::Peekable, vec::IntoIter};
 
-use crate::hfs::{ast::*, token::*, unresolved_ast::*, ScopeKind};
+use crate::hfs::{ScopeKind, ast::*, token::*, unresolved_ast::*};
 
 pub struct Parser {
     tokens: Peekable<IntoIter<Token>>, // Own the tokens, iterate by value
@@ -170,16 +170,23 @@ impl Parser {
 
     // <else_stmt> ::= "else" "if" <stack_block>  <block_scope> <else_stmt>?
     //               | "else" <block_scope>
-    fn else_statement(&mut self) -> Option<UnresolvedElseStmt> {
+    fn else_statement(&mut self) -> Option<UnresolvedStmtId> {
         let token = self.tokens.peek().expect("unexpected end of input while parsing statement");
         match token.kind {
             TokenKind::Else => {
                 self.tokens.next();
                 let token = self.tokens.peek().expect("unexpected end of input while parsing statement");
                 if token.kind == TokenKind::If {
-                    Some(UnresolvedElseStmt::ElseIf(self.if_statement()))
+                    // TODO: check this part of the code
+                    let token = self.expect(TokenKind::If);
+                    let cond = self.stack_block();
+                    let body = self.block_scope(ScopeKind::IfStmt);
+                    let else_stmt = self.else_statement();
+                    Some(self.arena.alloc_unresolved_stmt(UnresolvedStatement::ElseIf { cond, body, else_stmt }, token))
                 } else {
-                    Some(UnresolvedElseStmt::Else(self.block_scope(ScopeKind::ElseStmt)))
+                    let tkn = token.clone();
+                    let body = self.block_scope(ScopeKind::ElseStmt);
+                    Some(self.arena.alloc_unresolved_stmt(UnresolvedStatement::Else(body), tkn))
                 }
             },
             _ => None,

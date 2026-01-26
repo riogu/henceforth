@@ -1,12 +1,12 @@
 use std::{collections::HashMap, fmt::Display};
 
-use crate::hfs::{token::*, RuntimeValue, ScopeKind};
+use crate::hfs::{RuntimeValue, ScopeKind, token::*};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct VarId(pub usize);
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct FuncId(pub usize);
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct ExprId(pub usize);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct StmtId(pub usize);
@@ -104,17 +104,17 @@ pub struct StackKeywordDeclaration<'a> {
 // Statements
 
 #[derive(Debug, Clone)]
-pub enum ElseStmt {
-    ElseIf(StmtId), // Points to an IfStmt
-    Else(StmtId),   // Points to a BlockScope
-}
-
-#[derive(Debug, Clone)]
 pub enum Statement {
+    ElseIf {
+        cond: ExprId, // boolean from the stack or operation
+        body: StmtId, // points to BlockScope
+        else_stmt: Option<StmtId>,
+    },
+    Else(StmtId), // Points to a BlockScope
     If {
         cond: ExprId, // boolean from the stack or operation
         body: StmtId, // points to BlockScope
-        else_stmt: Option<ElseStmt>,
+        else_stmt: Option<StmtId>,
     },
     While {
         cond: ExprId, // boolean from the stack or operation
@@ -200,10 +200,7 @@ impl AstArena {
         arena.alloc_type_uncached(Type::Int, Token { kind: TokenKind::Int, source_info: SourceInfo::new(0, 0, 0) });
         arena.alloc_type_uncached(Type::Float, Token { kind: TokenKind::Float, source_info: SourceInfo::new(0, 0, 0) });
         arena.alloc_type_uncached(Type::Bool, Token { kind: TokenKind::Bool, source_info: SourceInfo::new(0, 0, 0) });
-        arena.alloc_type_uncached(Type::String, Token {
-            kind: TokenKind::String,
-            source_info: SourceInfo::new(0, 0, 0),
-        });
+        arena.alloc_type_uncached(Type::String, Token { kind: TokenKind::String, source_info: SourceInfo::new(0, 0, 0) });
         arena
     }
 

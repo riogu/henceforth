@@ -7,6 +7,22 @@ use crate::hfs::{
 
 // here is where youll create the CFG pass and the new IR generation
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct BlockContext {
+    continue_to_block: BlockId,
+    break_to_block: BlockId,
+    end_block: BlockId,
+    // its useful for stuff like break statements
+}
+
+#[derive(Debug, Default)]
+pub struct IRContext {
+    pub curr_block_context: BlockContext,
+    pub curr_insert_block: BlockId,
+    pub curr_function: FuncId,
+    block_parent_functions: HashMap<BlockId, FuncId>,
+}
+
 #[derive(Debug, Default)]
 pub struct InstArena {
     // TODO: we also need to pass metadata into this new IR
@@ -23,6 +39,8 @@ pub struct InstArena {
     type_cache: HashMap<Type, TypeId>,
 
     pub hfs_stack: Vec<InstId>, // TODO: use this in the code
+
+    pub ir_context: IRContext,
 }
 
 impl InstArena {
@@ -51,6 +69,7 @@ impl InstArena {
     fn alloc_function(&mut self, func: CfgFunction) -> FuncId {
         let id = FuncId(self.functions.len());
         self.functions.push(func);
+        self.ir_context.curr_function = id;
         id
     }
     fn alloc_inst(&mut self, inst: Instruction) -> InstId {
@@ -63,14 +82,33 @@ impl InstArena {
         self.vars.push(var);
         id
     }
-    pub fn alloc_terminator(&mut self, terminator: TerminatorInst) -> TermInstId {
+    pub fn alloc_terminator_for(&mut self, terminator: TerminatorInst, block_id: BlockId) -> TermInstId {
+        // add predecessors whenever we jump or branch somewhere
+        match terminator {
+            TerminatorInst::Branch { ref source_info, cond, true_block, false_block } => {
+                self.get_block_mut(true_block).predecessors.push(block_id);
+                self.get_block_mut(false_block).predecessors.push(block_id);
+            },
+            TerminatorInst::Jump(ref source_info, jump_to_id, inst_id) =>
+                self.get_block_mut(jump_to_id).predecessors.push(block_id),
+            TerminatorInst::Return(..) | TerminatorInst::Unreachable => {}, // no successors, nothing to update
+        }
         let id = TermInstId(self.terminators.len());
         self.terminators.push(terminator);
         id
     }
-    pub fn alloc_block(&mut self, block: BasicBlock) -> BlockId {
+    pub fn alloc_block(&mut self, name: String) -> BlockId {
         let id = BlockId(self.blocks.len());
-        self.blocks.push(block);
+        self.blocks.push(BasicBlock {
+            name,
+            predecessors: Vec::new(), // always empty, filled by alloc_terminator_for
+            instructions: Vec::new(),
+            terminator: None,
+        });
+        // this block belongs to the current function
+        if self.ir_context.block_parent_functions.insert(id, self.ir_context.curr_function).is_some() {
+            panic!("[internal error] this block id already had a function associated to it")
+        }
         id
     }
 }
@@ -97,14 +135,6 @@ impl InstArena {
     pub fn get_block_mut(&mut self, id: BlockId) -> &mut BasicBlock {
         &mut self.blocks[id.0]
     }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct BlockContext {
-    entry_block: BlockId,
-    curr_block: BlockId,
-    exit_block: BlockId,
-    // its useful for stuff like break statements
 }
 
 #[derive(Debug)]
@@ -147,7 +177,7 @@ impl CfgAnalyzer {
         analyzed_nodes
     }
 
-    fn analyze_variable_declaration(&mut self, id: VarId, curr_block_context: BlockContext) -> InstId {
+    fn analyze_variable_declaration(&mut self, id: VarId) -> InstId {
         // we don't do anything here at all right now
         // maybe if we add assignments to declarations we might want to in the future but for now this doesn't do anything
         self.arena.alloc_inst(Instruction::VarDeclaration(self.ast_arena.get_var_token(id).source_info.clone(), id))
@@ -169,19 +199,11 @@ impl CfgAnalyzer {
             }
         }
 
-        let entry_block = self.arena.alloc_block(BasicBlock {
-            name: "start".to_string(),
-            predecessors: Vec::new(),
-            instructions: Vec::new(),
-            terminator: TermInstId(0), // placeholder
-        });
-        let exit_block = self.arena.alloc_block(BasicBlock {
-            name: "end".to_string(),
-            predecessors: Vec::new(),
-            instructions: Vec::new(),
-            terminator: TermInstId(0), // placeholder
-        });
-        self.analyze_stmt(func_decl.body, BlockContext { entry_block, curr_block: entry_block, exit_block });
+        let entry_block = self.arena.alloc_block("start".to_string());
+        let exit_block = self.arena.alloc_block("end".to_string());
+
+        self.arena.ir_context.curr_insert_block = entry_block;
+        self.analyze_stmt(func_decl.body);
 
         let cfg_function = CfgFunction {
             old_func_id: id,
@@ -194,123 +216,106 @@ impl CfgAnalyzer {
         };
         self.arena.alloc_function(cfg_function)
     }
-    fn analyze_stmt(&mut self, id: StmtId, curr_block_context: BlockContext) {
+    fn analyze_stmt(&mut self, id: StmtId) {
         let source_info = self.ast_arena.get_stmt_token(id).source_info.clone();
         match self.ast_arena.get_stmt(id).clone() {
-            Statement::If { cond, body, else_stmt } => {
+            Statement::Else(stmt_id) => self.analyze_stmt(stmt_id),
+            if_stmt @ Statement::ElseIf { cond, body, else_stmt } | if_stmt @ Statement::If { cond, body, else_stmt } => {
                 // TODO: dont forget about issues with dead code elimination. if we have code after
                 // a return; or something, we gotta be careful to eliminate it at some point
                 // otherwise we might have issues. maybe we should do that in StackAnalyzer instead?
                 // watch out for accidentally overwriting the old terminator if we run this code without dead code elimination
+                // basically, this code expects dead code elimination to have occurred BEFORE
+                // FIXME: implement a small dead code elimination on the AST before cfg_analyzer
 
                 /* example of CFG blocks that cover many of the cases of the code below:
                   start_function:
-                      jump if_cond_0;
-                      if_cond_0:
-                          branch var < 2.0, if_block_0, else_if_cond_0;
-                          if_block_0:
-                              jump end_if_0, (%inst0 %inst1);
+                      branch 1 < 2.0, if_body_0, else_if_cond_0;
+                      if_body_0:
+                          jump if_end_0;
                       else_if_cond_0:
-                          branch -420 < 5, else_if_block_0, else_if_cond_1;
-                          else_if_block_0:
-                              %inst2 = push (0 0 0);
-                              jump end_if_0, %inst2;
+                          branch -420 < 5, else_if_body_0, else_if_cond_1;
+                          else_if_body_0:
+                              jump if_end_0;
                       else_if_cond_1:
-                          branch -69 < 69, else_if_block_0, else_block_0;
-                          else_if_block_1:
-                              jump end_if_0, %inst6;
-                      else_block_0:
-                          jump end_if_0, %inst4;
-                      end_if_0:
+                          branch -3 < 5, else_if_body_1, else_body_0;
+                          else_if_body_1:
+                              jump if_end_0;
+                      else_body_0:
+                          jump if_end_0;
+                      if_end_0:
                           jump end_function;
                   end_function:
-                    return (1, 2, 3);
+                      return;
                 */
-                let if_cond_block = self.arena.alloc_block(BasicBlock {
-                    name: "if_cond".to_string(), // add numbering later maybe
-                    predecessors: vec![curr_block_context.curr_block],
-                    instructions: Vec::new(),
-                    terminator: TermInstId(0), // placeholder
-                });
-                let if_body_block = self.arena.alloc_block(BasicBlock {
-                    name: "if_body".to_string(), // add numbering later maybe
-                    predecessors: vec![if_cond_block],
-                    instructions: Vec::new(),
-                    terminator: TermInstId(0), // placeholder
-                });
-                let if_end_block = self.arena.alloc_block(BasicBlock {
-                    name: "if_end".to_string(),
-                    predecessors: vec![if_body_block],
-                    instructions: Vec::new(),
-                    terminator: TermInstId(0), // placeholder
-                });
-                // finish the previous block we were on (as we see in the example above)
-                self.arena.alloc_terminator(TerminatorInst::Jump(source_info, if_cond_block, None));
-                self.analyze_stmt(body, BlockContext {
-                    entry_block: curr_block_context.entry_block,
-                    curr_block: if_cond_block,
-                    exit_block: if_end_block,
-                });
+                let block_before_if = self.arena.ir_context.curr_insert_block;
+                let cond = self.analyze_expr(cond);
 
-                let source_info = self.ast_arena.get_expr_token(cond).source_info.clone();
-                let cond = self.analyze_expr(cond, curr_block_context);
+                let if_body_block = self.arena.alloc_block("if_body".to_string());
 
-                match else_stmt {
-                    Some(ElseStmt::ElseIf(stmt_id)) => {
-                        let stmt_id = stmt_id.clone();
-                        let else_body_block = self.arena.alloc_block(BasicBlock {
-                            name: "else_body".to_string(),
-                            predecessors: vec![curr_block_context.curr_block],
-                            instructions: Vec::new(),
-                            terminator: TermInstId(0), // placeholder
-                        });
-                        // branch instruction for the original if
-                        let if_terminator = self.arena.alloc_terminator(TerminatorInst::Branch {
-                            source_info,
-                            cond,
-                            true_block: if_body_block,
-                            false_block: else_body_block,
-                        });
-                        self.arena.get_block_mut(if_cond_block).terminator = if_terminator;
-                        // we have an if statement in the stmt_id
-                        self.analyze_stmt(stmt_id, curr_block_context);
-                    },
-                    Some(ElseStmt::Else(stmt_id)) => {
-                        let stmt_id = stmt_id.clone();
-                        let else_if_cond_block = self.arena.alloc_block(BasicBlock {
-                            name: "else_if_cond".to_string(),
-                            predecessors: vec![curr_block_context.curr_block],
-                            instructions: Vec::new(),
-                            terminator: TermInstId(0), // placeholder
-                        });
-                        // branch instruction for the original if
-                        let if_terminator = self.arena.alloc_terminator(TerminatorInst::Branch {
-                            source_info,
-                            cond,
-                            true_block: if_body_block,
-                            false_block: else_if_cond_block,
-                        });
-                        self.arena.get_block_mut(if_cond_block).terminator = if_terminator;
-                        // we have a block scope in the stmt_id
-                        self.analyze_stmt(stmt_id, curr_block_context);
-                        // TODO: if we have no terminators yet (didnt find a break or continue or
-                        // return), then we add the default terminator (which goes to if_end_0)
-                    },
-                    None => {
-                        /* if_cond_0:
-                               branch 1 < 20, if_block_0, if_end_0;
-                               if_block_0:
-                                   jump end_if_0, (69, 420);
-                           if_end_0:
-                               return (4, 6);
-                        */
-                        let if_terminator = self.arena.alloc_terminator(TerminatorInst::Branch {
-                            source_info,
-                            cond,
-                            true_block: if_body_block,
-                            false_block: if_end_block,
-                        });
-                    },
+                let if_end_block = if matches!(if_stmt, Statement::If { .. }) {
+                    self.arena.alloc_block("if_end".to_string())
+                } else {
+                    self.arena.ir_context.curr_block_context.end_block // keep using the same exit if we are in an else if chain
+                };
+
+                self.arena.ir_context.curr_block_context.end_block = if_end_block;
+                self.arena.ir_context.curr_insert_block = if_body_block;
+                self.analyze_stmt(body);
+                if self.arena.get_block(self.arena.ir_context.curr_insert_block).terminator.is_none() {
+                    // if there was no break or return or anything, we need to add a terminator for
+                    // whatever block we were on that goes to the end of the current if context
+                    self.arena.alloc_terminator_for(
+                        TerminatorInst::Jump(source_info.clone(), if_end_block, None),
+                        self.arena.ir_context.curr_insert_block,
+                    );
+                }
+
+                if let Some(else_id) = else_stmt {
+                    let else_stmt = self.ast_arena.get_stmt(else_id);
+                    let name = if let Statement::ElseIf { .. } = else_stmt {
+                        "else_if_cond".to_string()
+                    } else {
+                        "else_body".to_string()
+                    };
+                    match else_stmt {
+                        Statement::Else(_) | Statement::ElseIf { .. } => {
+                            let else_body_block = self.arena.alloc_block(name);
+                            // branch instruction for the original if
+                            let if_branch_inst = self.arena.alloc_terminator_for(
+                                TerminatorInst::Branch {
+                                    source_info: source_info.clone(),
+                                    cond,
+                                    true_block: if_body_block,
+                                    false_block: else_body_block,
+                                },
+                                block_before_if,
+                            );
+
+                            self.arena.ir_context.curr_insert_block = else_body_block;
+                            self.analyze_stmt(else_id);
+                            if self.arena.get_block(self.arena.ir_context.curr_insert_block).terminator.is_none() {
+                                // if there was no break or return or anything, we need to add a terminator for
+                                // whatever block we were on that goes to the end of the current if context
+                                self.arena.alloc_terminator_for(
+                                    TerminatorInst::Jump(source_info.clone(), if_end_block, None),
+                                    self.arena.ir_context.curr_insert_block,
+                                );
+                            }
+                        },
+                        _ => panic!("can't have other statements in else statement"),
+                    }
+                } else {
+                    /* branch 1 < 20, if_body_0, if_end_0;
+                       if_body_0:
+                           jump if_end_0, (69, 420);
+                       if_end_0:
+                           return (4, 6);
+                    */
+                    self.arena.alloc_terminator_for(
+                        TerminatorInst::Branch { source_info, cond, true_block: if_body_block, false_block: if_end_block },
+                        block_before_if,
+                    );
                 }
             },
             Statement::While { cond, body } => {
@@ -323,12 +328,11 @@ impl CfgAnalyzer {
                 for top_level_id in top_level_ids.clone() {
                     match top_level_id {
                         TopLevelId::VariableDecl(var_id) => {
-                            let var_inst = self.analyze_variable_declaration(var_id, curr_block_context);
-                            self.arena.get_block_mut(curr_block_context.curr_block).instructions.push(var_inst)
+                            self.analyze_variable_declaration(var_id);
                         },
                         TopLevelId::FunctionDecl(func_id) => panic!("[internal error] local functions are not allowed"),
-                        TopLevelId::Statement(stmt_id) => self.analyze_stmt(stmt_id, curr_block_context),
-                    }
+                        TopLevelId::Statement(stmt_id) => self.analyze_stmt(stmt_id),
+                    };
                 },
             Statement::Return => {
                 // note that we have already checked that the state of the stack is correct in
@@ -338,20 +342,27 @@ impl CfgAnalyzer {
                     source_info: source_info.clone(),
                     instructions: self.arena.hfs_stack.clone(),
                 });
-                let terminator = self.arena.alloc_terminator(TerminatorInst::Return(source_info, return_tuple));
-                self.arena.get_block_mut(curr_block_context.curr_block).terminator = terminator;
+                let term = self.arena.alloc_terminator_for(
+                    TerminatorInst::Return(source_info, return_tuple),
+                    self.arena.ir_context.curr_insert_block,
+                );
+                self.arena.get_block_mut(self.arena.ir_context.curr_insert_block).terminator = Some(term);
             },
             Statement::Break => {
                 // a break always ends the current block and jumps somewhere else
                 // (the exit of the current control flow construct)
-                let term = self.arena.alloc_terminator(TerminatorInst::Jump(source_info, curr_block_context.exit_block, None));
-                self.arena.get_block_mut(curr_block_context.curr_block).terminator = term;
+                self.arena.alloc_terminator_for(
+                    TerminatorInst::Jump(source_info, self.arena.ir_context.curr_block_context.break_to_block, None),
+                    self.arena.ir_context.curr_insert_block,
+                );
             },
             Statement::Continue => {
                 // the entry_block is meant to be the block that we came from to start this current
                 // context. its meant to allow the start of the next iteration
-                let term = self.arena.alloc_terminator(TerminatorInst::Jump(source_info, curr_block_context.entry_block, None));
-                self.arena.get_block_mut(curr_block_context.curr_block).terminator = term;
+                self.arena.alloc_terminator_for(
+                    TerminatorInst::Jump(source_info, self.arena.ir_context.curr_block_context.continue_to_block, None),
+                    self.arena.ir_context.curr_insert_block,
+                );
             },
             Statement::Empty => {},
             Statement::Assignment { value, identifier, is_move } => {
@@ -364,7 +375,7 @@ impl CfgAnalyzer {
             },
         }
     }
-    fn analyze_expr(&mut self, id: ExprId, curr_block_context: BlockContext) -> InstId {
+    fn analyze_expr(&mut self, id: ExprId) -> InstId {
         todo!()
     }
 }

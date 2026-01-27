@@ -311,10 +311,6 @@ impl CfgAnalyzer {
                 // watch out for accidentally overwriting the old terminator if we run this code without dead code elimination
                 // basically, this code expects dead code elimination to have occurred BEFORE
                 // FIXME: implement a small dead code elimination on the AST before cfg_analyzer
-                //
-                // FIXME: add checking of stack depth in each branch individually and type check
-                // the stack against the current level on other branches and at the end make sure
-                // they all tally up to the same depth and types
 
                 /* example of CFG blocks that cover many of the cases of the code below:
                   start_function:
@@ -374,7 +370,6 @@ impl CfgAnalyzer {
                         self.arena.cfg_context.curr_insert_block,
                     );
                 }
-
                 self.arena.push_to_hfs_stack(cond);
 
                 if let Some(else_id) = else_stmt {
@@ -425,6 +420,10 @@ impl CfgAnalyzer {
                        if_end_0:
                            return (4, 6);
                     */
+                    if self.arena.hfs_stack.len() != if_depth_before {
+                        // TODO: joao improve this error pls
+                        panic!("if statement cannot change the stack state without an associated 'else' statement.")
+                    }
                     self.arena.alloc_terminator_for(
                         TerminatorInst::Branch { source_info, cond, true_block: if_body_block, false_block: if_end_block },
                         block_before_if,

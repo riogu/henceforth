@@ -1,4 +1,7 @@
-use std::{collections::HashMap, fmt::Debug};
+use std::{
+    collections::{HashMap, HashSet},
+    fmt::Debug,
+};
 
 use crate::hfs::{
     self, BasicBlock, BlockId, CfgFunction, CfgPrintable, CfgTopLevelId, InstId, Instruction, IrFuncId, IrVarDeclaration,
@@ -38,6 +41,9 @@ pub struct InstArena {
     func_id_map: HashMap<FuncId, IrFuncId>,
     var_id_map: HashMap<VarId, IrVarId>,
 
+    analyzed_stmts: HashSet<StmtId>,
+    analyzed_exprs: HashSet<ExprId>,
+
     pub type_tokens: Vec<Token>,
     type_cache: HashMap<Type, TypeId>,
 
@@ -55,6 +61,9 @@ impl InstArena {
         arena.alloc_type_uncached(Type::String, Token { kind: TokenKind::String, source_info: SourceInfo::new(0, 0, 0) });
         arena
     }
+    // fn push_to_hfs_stack(&mut self, inst: InstId) {
+    //     self.hfs_stack.push(inst);
+    // }
 
     fn alloc_type_uncached(&mut self, hfs_type: Type, token: Token) -> TypeId {
         let id = TypeId(self.types.len());
@@ -102,10 +111,10 @@ impl InstArena {
         self.terminators.push(terminator);
         id
     }
-    pub fn alloc_block(&mut self, name: String) -> BlockId {
+    pub fn alloc_block(&mut self, name: &str) -> BlockId {
         let id = BlockId(self.blocks.len());
         self.blocks.push(BasicBlock {
-            name,
+            name: name.to_string(),
             predecessors: Vec::new(), // always empty, filled by alloc_terminator_for
             instructions: Vec::new(),
             terminator: None,
@@ -156,19 +165,19 @@ impl CfgAnalyzer {
         Self { ast_arena, arena }
     }
 
-    pub fn analyze(top_level: Vec<TopLevelId>, ast_arena: AstArena) -> InstArena {
+    pub fn lower_to_mir(top_level: Vec<TopLevelId>, ast_arena: AstArena) -> InstArena {
         let mut cfg_analyzer = CfgAnalyzer::new(ast_arena);
-        let analyzed_top_level = cfg_analyzer.analyze_top_level(top_level);
+        let analyzed_top_level = cfg_analyzer.lower_top_level(top_level);
         // cfg_analyzer.print_hfs_mir(analyzed_top_level);
         cfg_analyzer.arena
     }
 
-    fn analyze_top_level(&mut self, top_level: Vec<TopLevelId>) -> Vec<CfgTopLevelId> {
+    fn lower_top_level(&mut self, top_level: Vec<TopLevelId>) -> Vec<CfgTopLevelId> {
         let mut analyzed_nodes = Vec::<CfgTopLevelId>::new();
         for node in top_level.clone() {
             let new_node = match node {
-                TopLevelId::VariableDecl(id) => CfgTopLevelId::GlobalVarDecl(self.analyze_variable_declaration(id)),
-                TopLevelId::FunctionDecl(id) => CfgTopLevelId::FunctionDecl(self.analyze_function_declaration(id)),
+                TopLevelId::VariableDecl(id) => CfgTopLevelId::GlobalVarDecl(self.lower_variable_declaration(id)),
+                TopLevelId::FunctionDecl(id) => CfgTopLevelId::FunctionDecl(self.lower_function_declaration(id)),
                 TopLevelId::Statement(id) => panic!("there can't be statements on global scope"),
             };
             analyzed_nodes.push(new_node);
@@ -176,7 +185,7 @@ impl CfgAnalyzer {
         analyzed_nodes
     }
 
-    fn analyze_variable_declaration(&mut self, id: VarId) -> IrVarId {
+    fn lower_variable_declaration(&mut self, id: VarId) -> IrVarId {
         // we don't do anything here at all right now
         // maybe if we add assignments to declarations we might want to in the future but for now this doesn't do anything
         let var = self.ast_arena.get_var(id);
@@ -191,7 +200,7 @@ impl CfgAnalyzer {
         )
     }
 
-    fn analyze_function_declaration(&mut self, id: FuncId) -> IrFuncId {
+    fn lower_function_declaration(&mut self, id: FuncId) -> IrFuncId {
         let func_decl = self.ast_arena.get_func(id).clone();
         // self.arena.alloc_function(func, self.ast_arena.get_function_token(id));
         let mut parameter_exprs = Vec::<InstId>::new();
@@ -207,11 +216,11 @@ impl CfgAnalyzer {
             }
         }
 
-        let entry_block = self.arena.alloc_block("start".to_string());
-        let exit_block = self.arena.alloc_block("end".to_string());
+        let entry_block = self.arena.alloc_block("start");
+        let exit_block = self.arena.alloc_block("end");
 
         self.arena.ir_context.curr_insert_block = entry_block;
-        self.analyze_stmt(func_decl.body);
+        self.lower_stmt(func_decl.body);
 
         let cfg_function = CfgFunction {
             source_info: self.ast_arena.get_function_token(id).source_info.clone(),
@@ -223,10 +232,11 @@ impl CfgAnalyzer {
         };
         self.arena.alloc_function(cfg_function, id)
     }
-    fn analyze_stmt(&mut self, id: StmtId) {
+    fn lower_stmt(&mut self, id: StmtId) {
+        self.arena.analyzed_stmts.insert(id);
         let source_info = self.ast_arena.get_stmt_token(id).source_info.clone();
         match self.ast_arena.get_stmt(id).clone() {
-            Statement::Else(stmt_id) => self.analyze_stmt(stmt_id),
+            Statement::Else(stmt_id) => self.lower_stmt(stmt_id),
             if_stmt @ Statement::ElseIf { cond, body, else_stmt } | if_stmt @ Statement::If { cond, body, else_stmt } => {
                 // TODO: dont forget about issues with dead code elimination. if we have code after
                 // a return; or something, we gotta be careful to eliminate it at some point
@@ -260,19 +270,19 @@ impl CfgAnalyzer {
                       return;
                 */
                 let block_before_if = self.arena.ir_context.curr_insert_block;
-                let cond = self.analyze_expr(cond);
+                let cond = self.lower_expr(cond);
 
-                let if_body_block = self.arena.alloc_block("if_body".to_string());
+                let if_body_block = self.arena.alloc_block("if_body");
 
                 let if_end_block = if matches!(if_stmt, Statement::If { .. }) {
-                    self.arena.alloc_block("if_end".to_string())
+                    self.arena.alloc_block("if_end")
                 } else {
                     self.arena.ir_context.curr_block_context.end_block // keep using the same exit if we are in an else if chain
                 };
 
                 self.arena.ir_context.curr_block_context.end_block = if_end_block;
                 self.arena.ir_context.curr_insert_block = if_body_block;
-                self.analyze_stmt(body);
+                self.lower_stmt(body);
                 if self.arena.get_block(self.arena.ir_context.curr_insert_block).terminator.is_none() {
                     // if there was no break or return or anything, we need to add a terminator for
                     // whatever block we were on that goes to the end of the current if context
@@ -291,7 +301,7 @@ impl CfgAnalyzer {
                     };
                     match else_stmt {
                         Statement::Else(_) | Statement::ElseIf { .. } => {
-                            let else_body_block = self.arena.alloc_block(name);
+                            let else_body_block = self.arena.alloc_block(&name);
 
                             // branch instruction for the original if
                             let if_branch_inst = self.arena.alloc_terminator_for(
@@ -305,7 +315,7 @@ impl CfgAnalyzer {
                             );
 
                             self.arena.ir_context.curr_insert_block = else_body_block;
-                            self.analyze_stmt(else_id);
+                            self.lower_stmt(else_id);
                             if self.arena.get_block(self.arena.ir_context.curr_insert_block).terminator.is_none() {
                                 // if there was no break or return or anything, we need to add a terminator for
                                 // whatever block we were on that goes to the end of the current if context
@@ -331,19 +341,47 @@ impl CfgAnalyzer {
                 }
             },
             Statement::While { cond, body } => {
-                //
+                /* jump while_cond_0;
+                while_cond_0:
+                    branch example != 0, while_block_0, while_end_0;
+                    while_block_0:
+                        store example, example - 1;
+                        jump while_cond_0;
+                while_end_0:
+                    jump end;   */
+                let while_cond_block = self.arena.alloc_block("while_cond");
+                let while_body_block = self.arena.alloc_block("while_body");
+                let while_end_block = self.arena.alloc_block("while_end");
+
+                self.arena.alloc_terminator_for(
+                    TerminatorInst::Jump(source_info.clone(), while_cond_block, None),
+                    self.arena.ir_context.curr_insert_block,
+                ); // finish the previous block with a jump
+
+                self.arena.ir_context.curr_insert_block = while_cond_block;
+                self.arena.ir_context.curr_block_context.continue_to_block = while_cond_block;
+                self.arena.ir_context.curr_block_context.break_to_block = while_end_block;
+                let cond = self.lower_expr(cond);
+                self.lower_stmt(body);
+
+                self.arena.alloc_terminator_for(
+                    TerminatorInst::Branch { source_info, cond, true_block: while_body_block, false_block: while_end_block },
+                    while_cond_block,
+                );
             },
-            Statement::StackBlock(expr_ids) => {
-                //
-            },
+            Statement::StackBlock(expr_ids) =>
+                for expr_id in expr_ids {
+                    let inst = self.lower_expr(expr_id);
+                    self.arena.hfs_stack.push(inst);
+                },
             Statement::BlockScope(top_level_ids, scope_kind) =>
                 for top_level_id in top_level_ids.clone() {
                     match top_level_id {
                         TopLevelId::VariableDecl(var_id) => {
-                            self.analyze_variable_declaration(var_id);
+                            self.lower_variable_declaration(var_id);
                         },
                         TopLevelId::FunctionDecl(func_id) => panic!("[internal error] local functions are not allowed"),
-                        TopLevelId::Statement(stmt_id) => self.analyze_stmt(stmt_id),
+                        TopLevelId::Statement(stmt_id) => self.lower_stmt(stmt_id),
                     };
                 },
             Statement::Return => {
@@ -380,7 +418,18 @@ impl CfgAnalyzer {
             Statement::Assignment { value, identifier, is_move } => {
                 // @(213) &= var; // move assignment
                 // @(213) := var; // copy assignment
-                let inst_value = self.analyze_expr(value);
+                // NOTE: we are analyzing "value" twice. this is analyzed earlier by the
+                // stack block that contained it.
+                // i sure hope we can't have side effects from stuff you push to the stack else
+                // this will be a huge source of bugs in the future...
+                // we need to add fancier stack simulation to completely get rid of duplication
+                // associated to @() stack blocks
+
+                let inst_value = if is_move {
+                    self.arena.hfs_stack.pop().expect("expected value in stack for move assignment.")
+                } else {
+                    *self.arena.hfs_stack.last().expect("expected value in stack for copy assignment.")
+                };
                 let &var_id = match identifier {
                     Identifier::GlobalVar(var_id) | Identifier::Variable(var_id) => match self.arena.var_id_map.get(&var_id) {
                         Some(ir_var_id) => ir_var_id,
@@ -395,7 +444,7 @@ impl CfgAnalyzer {
                 // @(213) :> func; // copy call
                 let mut inst_args = Vec::<InstId>::new();
                 for arg in args {
-                    inst_args.push(self.analyze_expr(arg));
+                    inst_args.push(self.lower_expr(arg));
                 }
                 let func_id = match self.arena.func_id_map.get(&func_id) {
                     Some(func_id) => *func_id,
@@ -405,7 +454,7 @@ impl CfgAnalyzer {
             },
         }
     }
-    fn analyze_expr(&mut self, id: ExprId) -> InstId {
+    fn lower_expr(&mut self, id: ExprId) -> InstId {
         let source_info = self.ast_arena.get_expr_token(id).source_info.clone();
         match self.ast_arena.get_expr(id).clone() {
             Expression::Operation(operation) => todo!(),

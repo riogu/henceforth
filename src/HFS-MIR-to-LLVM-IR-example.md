@@ -13,10 +13,10 @@ fn foo: (i32 %arg0 i32 %arg1) -> (i32 i32 i32) {
         branch var < 2.0, if_block_0, else_if_cond_0;
         if_block_0:
             let var1: i32;
-            %inst0 = push (69); // where %inst0 is an InstId = 0 effectively 
+            %inst0 = 69; // where %inst0 is an InstId = 0 effectively 
             store var1, 3 + 5;
             let var2: i32;
-            %inst1 = push (69);
+            %inst1 =  69;
             store var2, 3 * 66;
             // must deconstruct the tuples ALWAYS
             // else how would you make this final tuple
@@ -24,16 +24,16 @@ fn foo: (i32 %arg0 i32 %arg1) -> (i32 i32 i32) {
     else_if_cond_0:
         branch -420 < 5, else_if_block_0, else_if_cond_1;
         else_if_block_0:
-            %inst2 = push (0 0 0);
+            %inst2 =  (0 0 0);
             jump end_if_0, %inst2;   // this came from tracking state in analysis
     else_if_cond_1:
         branch -69 < 69, else_if_block_1, else_block_0;
         else_if_block_1:
-            %inst6 = push (1 1 1);
+            %inst6 =  (1 1 1);
             jump end_if_0, %inst6;  // if you prefer this representation
-            // here we put the push() directly in the jump (pick what you prefer)
+            // here we put the () directly in the jump (pick what you prefer)
     else_block_0:
-        %inst4 = push (420 420 420);
+        %inst4 =  (420 420 420);
         jump end_if_0, %inst4;       // this came from tracking state in analysis
   end_if_0:
     // here, phi will either deconstruct the arguments, or literally return a tuple
@@ -55,7 +55,7 @@ fn foo: (i32 %arg0 i32 %arg1) -> (i32 i32 i32) {
 }
 
 fn main: () -> () {
-    %var0 = push (1 2);
+    %var0 =  (1 2);
     call foo, var0;
     keyword pop;
     keyword pop;
@@ -92,9 +92,8 @@ fn foo: (i32 i32) -> (i32 i32 i32) {
     while @(example 0 !=) {
         @(example 1 -) &= example;
     }
-
-
 }
+
 fn main: () -> () {
     @(1 2) &> foo;
     @pop @pop @pop;

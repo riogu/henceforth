@@ -159,10 +159,10 @@ impl InstArena {
             Instruction::Parameter { source_info, index, type_id } => type_id,
             Instruction::Store { source_info, value, var_id, is_move } => self.get_type_id_of_inst(value),
             Instruction::FunctionCall { source_info, args, func_id, is_move } => self.get_func(func_id).return_type,
-            // idk yet how we get the types of a phi instruction
             Instruction::Phi { source_info, incoming } => todo!(),
             Instruction::Load(source_info, ir_var_id) => self.get_var(ir_var_id).hfs_type,
             Instruction::StackKeyword { .. } => todo!(),
+            Instruction::LoadElement { source_info, index, tuple } => todo!(),
         }
     }
     pub fn get_type_of_var(&self, var_id: IrVarId) -> &Type {

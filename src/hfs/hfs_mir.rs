@@ -64,12 +64,6 @@ pub enum Instruction {
         index: usize,
         type_id: TypeId,
     },
-    Store {
-        source_info: SourceInfo,
-        value: InstId,
-        var_id: IrVarId, // GlobalVar or Variable
-        is_move: bool,
-    },
     FunctionCall {
         source_info: SourceInfo,
         args: Vec<InstId>,
@@ -98,6 +92,12 @@ pub enum Instruction {
     },
     Operation(SourceInfo, CfgOperation),
     Literal(SourceInfo, Literal),
+    Store {
+        source_info: SourceInfo,
+        value: InstId,
+        var_id: IrVarId, // GlobalVar or Variable
+        is_move: bool,
+    },
     Load(
         // Load exists instead of Identifiers
         // because using an identifier always creates a load (we dont have pointers)
@@ -106,6 +106,13 @@ pub enum Instruction {
         SourceInfo,
         IrVarId, // GlobalVar or Variable
     ),
+    LoadElement {
+        // load an element from a tuple (used to merge tuples into a new one)
+        // useful for mapping our stack tracking into LLVM IR
+        source_info: SourceInfo,
+        index: usize,
+        tuple: InstId,
+    },
 }
 
 // Terminator instructions, separated from the others
@@ -334,6 +341,7 @@ impl CfgPrintable for Instruction {
                 Literal::Bool(lit) => lit.to_string(),
             },
             Instruction::Load(source_info, ir_var_id) => todo!(),
+            Instruction::LoadElement { source_info, index, tuple } => todo!(),
         }
     }
 }

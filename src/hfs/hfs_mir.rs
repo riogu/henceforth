@@ -97,8 +97,15 @@ pub enum Instruction {
     },
     Push(SourceInfo, InstId), // always a tuple
     Operation(SourceInfo, CfgOperation),
-    Identifier(IrVarId),
     Literal(SourceInfo, Literal),
+    Load(
+        // Load exists instead of Identifiers
+        // because using an identifier always creates a load (we dont have pointers)
+        // a load is a runtime operation (in the sense that its done whenever we find it)
+        // rather than at compile time going through the identifiers to find their stored values
+        SourceInfo,
+        IrVarId, // GlobalVar or Variable
+    ),
 }
 
 // Terminator instructions, separated from the others
@@ -109,6 +116,9 @@ pub enum TerminatorInst {
     Branch { source_info: SourceInfo, cond: InstId, true_block: BlockId, false_block: BlockId },
     // if we want to jump with nothing, just have an empty vector
     Jump(SourceInfo, BlockId, Option<InstId>), // is a tuple
+    // the jump always carries around the stack variation itself
+    // for other purposes, we usually generate a phi and find the associated InstId with a pass
+    // that searches for store instructions and whatnot
     Unreachable,                               // might be useful for you later in CFG analysis
 }
 
@@ -285,14 +295,6 @@ impl CfgPrintable for Instruction {
     fn get_repr(&self, arena: &InstArena) -> String {
         match self {
             Instruction::Parameter { source_info, index, type_id: ty } => todo!(),
-            // FIXME: joao you gotta redo this one because VarDeclaration aren't
-            // meant to be instructions (they are standalone)
-            // Instruction::VarDeclaration(source_info, var_id) => {
-            //     let var = arena.get_var(*var_id);
-            //     let var_type = arena.get_type(var.hfs_type);
-            //
-            //     format!("let {}: {};", var.name, var_type.get_repr(arena))
-            // },
             Instruction::Store { source_info, value, var_id: identifier, is_move } => {
                 // let id = match identifier {
                 //     VarIdentifier::GlobalVar(source_info, var_id) => var_id,
@@ -329,21 +331,13 @@ impl CfgPrintable for Instruction {
                 format!("push {};", inst.get_repr(arena))
             },
             Instruction::Operation(source_info, cfg_operation) => cfg_operation.get_repr(arena),
-            Instruction::Identifier(var_identifier) => {
-                // let id = match var_identifier {
-                //     VarIdentifier::GlobalVar(source_info, var_id) => var_id,
-                //     VarIdentifier::Variable(source_info, var_id) => var_id,
-                // };
-                // let var_decl = arena.get_var(*id);
-                // var_decl.name.clone()
-                todo!("broke your code joao")
-            },
             Instruction::Literal(source_info, literal) => match literal {
                 Literal::Integer(lit) => lit.to_string(),
                 Literal::Float(lit) => lit.to_string(),
                 Literal::String(lit) => lit.clone(),
                 Literal::Bool(lit) => lit.to_string(),
             },
+            Instruction::Load(source_info, ir_var_id) => todo!(),
         }
     }
 }

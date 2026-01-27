@@ -61,6 +61,12 @@ fn main: () -> () {
     keyword pop;
     keyword pop;
 }
+fn func: (i32 i32) -> (i32 i32 i32) {
+    let var: i32;
+    @(69) &= var;
+    @(var 420) &= var;
+    // is the stack @(69) or @(420) ?
+}
 
 // same code but in henceforth
 fn foo: (i32 i32) -> (i32 i32 i32) {

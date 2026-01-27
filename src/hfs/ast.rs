@@ -127,12 +127,11 @@ pub enum Statement {
     Continue,
     Empty,
     Assignment {
-        value: ExprId,
         identifier: Identifier,
         is_move: bool,
     },
     FunctionCall {
-        args: Vec<ExprId>,
+        arg_count: usize,
         func_id: FuncId,
         is_move: bool,
     },

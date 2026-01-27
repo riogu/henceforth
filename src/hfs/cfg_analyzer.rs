@@ -4,8 +4,8 @@ use std::{
 };
 
 use crate::hfs::{
-    self, BasicBlock, BlockId, CfgFunction, CfgPrintable, CfgTopLevelId, InstId, Instruction, IrFuncId, IrVarDeclaration,
-    IrVarId, Literal, PRIMITIVE_TYPE_COUNT, SourceInfo, TermInstId, TerminatorInst, Token, TokenKind, ast::*,
+    self, BasicBlock, BlockId, CfgFunction, CfgOperation, CfgPrintable, CfgTopLevelId, InstId, Instruction, IrFuncId,
+    IrVarDeclaration, IrVarId, Literal, PRIMITIVE_TYPE_COUNT, SourceInfo, TermInstId, TerminatorInst, Token, TokenKind, ast::*,
 };
 
 // here is where youll create the CFG pass and the new IR generation
@@ -103,8 +103,9 @@ impl InstArena {
                 self.get_block_mut(true_block).predecessors.push(block_id);
                 self.get_block_mut(false_block).predecessors.push(block_id);
             },
-            TerminatorInst::Jump(ref source_info, jump_to_id, inst_id) =>
-                self.get_block_mut(jump_to_id).predecessors.push(block_id),
+            TerminatorInst::Jump(ref source_info, jump_to_id, value) => {
+                self.get_block_mut(jump_to_id).predecessors.push(block_id);
+            },
             TerminatorInst::Return(..) | TerminatorInst::Unreachable => {}, // no successors, nothing to update
         }
         let id = TermInstId(self.terminators.len());
@@ -128,6 +129,12 @@ impl InstArena {
 }
 
 impl InstArena {
+    pub fn pop_entire_hfs_stack(&mut self) -> Vec<InstId> {
+        let temp = self.hfs_stack.clone();
+        self.hfs_stack.clear();
+        temp
+    }
+
     pub fn get_var(&self, id: IrVarId) -> &IrVarDeclaration {
         &self.vars[id.0]
     }
@@ -205,15 +212,9 @@ impl CfgAnalyzer {
         // self.arena.alloc_function(func, self.ast_arena.get_function_token(id));
         let mut parameter_exprs = Vec::<InstId>::new();
         for param_expr_id in func_decl.parameter_exprs {
-            if let &Expression::Parameter { index, type_id } = self.ast_arena.get_expr(param_expr_id) {
-                parameter_exprs.push(self.arena.alloc_inst(Instruction::Parameter {
-                    source_info: self.ast_arena.get_expr_token(param_expr_id).source_info.clone(),
-                    index,
-                    type_id,
-                }));
-            } else {
-                panic!("[internal error] found non Expression::Parameter in function parameters")
-            }
+            let param_inst = self.lower_expr(param_expr_id);
+            parameter_exprs.push(param_inst);
+            self.arena.hfs_stack.push(param_inst);
         }
 
         let entry_block = self.arena.alloc_block("start");
@@ -230,6 +231,8 @@ impl CfgAnalyzer {
             parameter_exprs,
             entry_block,
         };
+
+        self.arena.pop_entire_hfs_stack();
         self.arena.alloc_function(cfg_function, id)
     }
     fn lower_stmt(&mut self, id: StmtId) {
@@ -342,13 +345,14 @@ impl CfgAnalyzer {
             },
             Statement::While { cond, body } => {
                 /* jump while_cond_0;
-                while_cond_0:
-                    branch example != 0, while_block_0, while_end_0;
-                    while_block_0:
-                        store example, example - 1;
-                        jump while_cond_0;
-                while_end_0:
-                    jump end;   */
+                   while_cond_0:
+                       branch example != 0, while_block_0, while_end_0;
+                       while_block_0:
+                           store example, example - 1;
+                           jump while_cond_0;
+                   while_end_0:
+                       jump end;
+                */
                 let while_cond_block = self.arena.alloc_block("while_cond");
                 let while_body_block = self.arena.alloc_block("while_body");
                 let while_end_block = self.arena.alloc_block("while_end");
@@ -358,16 +362,31 @@ impl CfgAnalyzer {
                     self.arena.ir_context.curr_insert_block,
                 ); // finish the previous block with a jump
 
+                //--------------------------------------------------------------------------
+                // set up the context for lowering the while body
                 self.arena.ir_context.curr_insert_block = while_cond_block;
                 self.arena.ir_context.curr_block_context.continue_to_block = while_cond_block;
                 self.arena.ir_context.curr_block_context.break_to_block = while_end_block;
-                let cond = self.lower_expr(cond);
-                self.lower_stmt(body);
 
+                let cond = self.lower_expr(cond);
                 self.arena.alloc_terminator_for(
-                    TerminatorInst::Branch { source_info, cond, true_block: while_body_block, false_block: while_end_block },
+                    TerminatorInst::Branch {
+                        source_info: source_info.clone(),
+                        cond,
+                        true_block: while_body_block,
+                        false_block: while_end_block,
+                    },
                     while_cond_block,
                 );
+
+                self.lower_stmt(body);
+                if self.arena.get_block(self.arena.ir_context.curr_insert_block).terminator.is_none() {
+                    self.arena.alloc_terminator_for(
+                        TerminatorInst::Jump(source_info, while_end_block, None),
+                        self.arena.ir_context.curr_insert_block,
+                    );
+                }
+                //--------------------------------------------------------------------------
             },
             Statement::StackBlock(expr_ids) =>
                 for expr_id in expr_ids {
@@ -414,8 +433,8 @@ impl CfgAnalyzer {
                     self.arena.ir_context.curr_insert_block,
                 );
             },
-            Statement::Empty => {},
-            Statement::Assignment { value, identifier, is_move } => {
+            Statement::Empty => { /* do nothing */ },
+            Statement::Assignment { identifier, is_move } => {
                 // @(213) &= var; // move assignment
                 // @(213) := var; // copy assignment
                 // NOTE: we are analyzing "value" twice. this is analyzed earlier by the
@@ -426,9 +445,9 @@ impl CfgAnalyzer {
                 // associated to @() stack blocks
 
                 let inst_value = if is_move {
-                    self.arena.hfs_stack.pop().expect("expected value in stack for move assignment.")
+                    self.arena.hfs_stack.pop().expect("expected value in stack for move assignment")
                 } else {
-                    *self.arena.hfs_stack.last().expect("expected value in stack for copy assignment.")
+                    *self.arena.hfs_stack.last().expect("expected value in stack for copy assignment")
                 };
                 let &var_id = match identifier {
                     Identifier::GlobalVar(var_id) | Identifier::Variable(var_id) => match self.arena.var_id_map.get(&var_id) {
@@ -439,12 +458,12 @@ impl CfgAnalyzer {
                 };
                 self.arena.alloc_inst(Instruction::Store { source_info, value: inst_value, var_id, is_move });
             },
-            Statement::FunctionCall { args, func_id, is_move } => {
+            Statement::FunctionCall { arg_count, func_id, is_move } => {
                 // @(213) &> func; // move call
                 // @(213) :> func; // copy call
                 let mut inst_args = Vec::<InstId>::new();
-                for arg in args {
-                    inst_args.push(self.lower_expr(arg));
+                for arg in 0..arg_count {
+                    inst_args.push(self.arena.hfs_stack.pop().expect("expected value in stack for function call"));
                 }
                 let func_id = match self.arena.func_id_map.get(&func_id) {
                     Some(func_id) => *func_id,
@@ -457,20 +476,47 @@ impl CfgAnalyzer {
     fn lower_expr(&mut self, id: ExprId) -> InstId {
         let source_info = self.ast_arena.get_expr_token(id).source_info.clone();
         match self.ast_arena.get_expr(id).clone() {
-            Expression::Operation(operation) => todo!(),
+            Expression::Operation(operation) => self.lower_operation(operation, source_info),
             Expression::Identifier(identifier) => match identifier {
                 Identifier::GlobalVar(var_id) | Identifier::Variable(var_id) => match self.arena.var_id_map.get(&var_id) {
-                    Some(ir_var_id) => Instruction::Identifier(*ir_var_id),
+                    Some(ir_var_id) => self.arena.alloc_inst(Instruction::Load(source_info, *ir_var_id)),
                     None => panic!("[internal error] tried making assignment before creating the associated IrVarId"),
                 },
                 Identifier::Function(func_id) => panic!("[internal error] can't have function identifiers as expressions."),
             },
-            Expression::Literal(literal) => todo!(),
-            Expression::Tuple { expressions } => todo!(),
-            Expression::Parameter { index, type_id } => todo!(),
+            Expression::Literal(literal) => self.arena.alloc_inst(Instruction::Literal(source_info, literal)),
+            Expression::Tuple { expressions } => {
+                let mut instructions = Vec::<InstId>::new();
+                for expr_id in expressions {
+                    instructions.push(self.lower_expr(expr_id));
+                }
+                self.arena.alloc_inst(Instruction::Tuple { source_info, instructions })
+            },
+            Expression::Parameter { index, type_id } =>
+            // not sure if this is correct for when you hold a parameter expr throughout a function
+            // its probably fine but just in case maybe test smth like that later
+                self.arena.alloc_inst(Instruction::Parameter { source_info, index, type_id }),
             Expression::StackKeyword(stack_keyword) => todo!(),
+        }
+    }
+    fn lower_operation(&mut self, op: Operation, source_info: SourceInfo) -> InstId {
+        let cfg_op = match op {
+            Operation::Add(expr_id, expr_id1) => CfgOperation::Add(self.lower_expr(expr_id), self.lower_expr(expr_id1)),
+            Operation::Sub(expr_id, expr_id1) => CfgOperation::Sub(self.lower_expr(expr_id), self.lower_expr(expr_id1)),
+            Operation::Mul(expr_id, expr_id1) => CfgOperation::Mul(self.lower_expr(expr_id), self.lower_expr(expr_id1)),
+            Operation::Div(expr_id, expr_id1) => CfgOperation::Div(self.lower_expr(expr_id), self.lower_expr(expr_id1)),
+            Operation::Mod(expr_id, expr_id1) => CfgOperation::Mod(self.lower_expr(expr_id), self.lower_expr(expr_id1)),
+            Operation::Equal(expr_id, expr_id1) => CfgOperation::Equal(self.lower_expr(expr_id), self.lower_expr(expr_id1)),
+            Operation::NotEqual(expr_id, expr_id1) => CfgOperation::NotEqual(self.lower_expr(expr_id), self.lower_expr(expr_id1)),
+            Operation::Less(expr_id, expr_id1) => CfgOperation::Less(self.lower_expr(expr_id), self.lower_expr(expr_id1)),
+            Operation::LessEqual(expr_id, expr1) => CfgOperation::LessEqual(self.lower_expr(expr_id), self.lower_expr(expr1)),
+            Operation::Greater(expr_id, expr_id1) => CfgOperation::Greater(self.lower_expr(expr_id), self.lower_expr(expr_id1)),
+            Operation::GreaterEqual(expr, expr1) => CfgOperation::GreaterEqual(self.lower_expr(expr), self.lower_expr(expr1)),
+            Operation::Or(expr_id, expr_id1) => CfgOperation::Or(self.lower_expr(expr_id), self.lower_expr(expr_id1)),
+            Operation::And(expr_id, expr_id1) => CfgOperation::And(self.lower_expr(expr_id), self.lower_expr(expr_id1)),
+            Operation::Not(expr_id) => CfgOperation::Not(self.lower_expr(expr_id)),
         };
-        todo!()
+        self.arena.alloc_inst(Instruction::Operation(source_info, cfg_op))
     }
 }
 

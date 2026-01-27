@@ -373,7 +373,7 @@ impl StackAnalyzer {
                     self.arena.last_or_error("expected value in stack for copy assignment statement.")
                 };
                 let identifier = self.resolve_var_assignment_identifier(identifier, *self.arena.get_expr_provenance(value));
-                self.arena.alloc_stmt(Statement::Assignment { value, identifier, is_move }, token)
+                self.arena.alloc_stmt(Statement::Assignment { identifier, is_move }, token)
             },
             UnresolvedStatement::FunctionCall { identifier, is_move } => {
                 // just checks if we actually had a function and finds the identifier
@@ -383,12 +383,12 @@ impl StackAnalyzer {
                 let Type::Tuple(param_types) = self.arena.get_type(func_decl.param_type) else {
                     panic!("[internal error] functions only recieve tuples at the moment.")
                 };
-                let mut expressions = Vec::<ExprId>::new();
+                let mut arg_count = 0;
                 let mut arg_types = Vec::<TypeId>::new();
                 for _ in 0..param_types.len() {
                     let arg_expr = self.arena.pop_or_error("expected more elements on stack for function call");
                     arg_types.push(self.arena.get_type_id_of_expr(arg_expr));
-                    expressions.push(arg_expr);
+                    arg_count += 1;
                 }
                 let arg_type_id = self.arena.alloc_type(Type::Tuple(arg_types), Token {
                     kind: TokenKind::LeftParen,
@@ -402,7 +402,7 @@ impl StackAnalyzer {
                     panic!("[internal error] functions only return tuples at the moment.")
                 };
                 // function calls dont go to the stack
-                self.arena.alloc_stmt(Statement::FunctionCall { args: expressions, func_id, is_move }, token)
+                self.arena.alloc_stmt(Statement::FunctionCall { arg_count, func_id, is_move }, token)
             },
             UnresolvedStatement::Else(unresolved_stmt_id) => panic!("[internal error] else statements are not solved here"),
         }

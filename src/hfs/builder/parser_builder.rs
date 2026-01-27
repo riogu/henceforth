@@ -231,10 +231,11 @@ impl FunctionOps for ParserBuilder {
     }
 
     fn func_with(mut self, name: &str, args: Option<Vec<Type>>, return_type: Option<Vec<Type>>) -> Self {
-        let param_type = self.types_to_tuple_id(args.unwrap_or_default());
-        let ret_type = self.types_to_tuple_id(return_type.unwrap_or_default());
-
-        self.current_function = Some(FunctionContext { name: name.to_string(), param_type, return_type: ret_type });
+        self.current_function = Some(FunctionContext { name: name.to_string(), param_type: TypeId(69), return_type: TypeId(69) });
+        let param_type = self.args(args);
+        self = param_type;
+        let ret_type = self.return_types(return_type);
+        self = ret_type;
 
         self.context_stack.push(BuilderContext::BlockScope { items: Vec::new(), scope_kind: ScopeKind::Function });
 

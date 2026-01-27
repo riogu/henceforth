@@ -59,8 +59,8 @@ pub enum Expression {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct StackKeyword {
-    name: String,
-    args: Vec<ExprId>,
+    pub name: String,
+    pub args: Vec<ExprId>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -348,6 +348,19 @@ impl AstArena {
         let elements_to_delete = hfs_stack.iter().zip(&stack_start).take_while(|(a, b)| a == b).count();
         hfs_stack.drain(0..elements_to_delete);
         hfs_stack
+    }
+
+    pub fn to_type(&mut self, token: Token) -> TypeId {
+        match token.kind {
+            TokenKind::Int => self.alloc_type(Type::Int, token),
+            TokenKind::String => self.alloc_type(Type::String, token),
+            TokenKind::Bool => self.alloc_type(Type::Bool, token),
+            TokenKind::Float => self.alloc_type(Type::Float, token),
+            TokenKind::Identifier(_) => {
+                panic!("[internal hfs error]: this is not how you convert identifiers to types")
+            },
+            _ => panic!("[internal hfs error]: expected token that has a type, got {:?}", token.kind),
+        }
     }
 }
 

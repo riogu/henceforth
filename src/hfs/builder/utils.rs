@@ -66,7 +66,7 @@ pub fn run_until(filename: &str, phase: Phase) -> Rc<dyn Byproduct> {
         return Rc::new(ast_arena);
     }
 
-    let inst_arena = CfgAnalyzer::analyze(top_level_nodes, ast_arena);
+    let inst_arena = CfgAnalyzer::lower_to_mir(top_level_nodes, ast_arena);
 
     if phase == Phase::CfgAnalyzer {
         return Rc::new(inst_arena);

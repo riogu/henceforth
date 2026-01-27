@@ -106,13 +106,13 @@ pub struct StackKeywordDeclaration<'a> {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Statement {
     ElseIf {
-        cond: ExprId, // boolean from the stack or operation
+        cond_stack_block: StmtId, // boolean from the stack or operation
         body: StmtId, // points to BlockScope
         else_stmt: Option<StmtId>,
     },
     Else(StmtId), // Points to a BlockScope
     If {
-        cond: ExprId, // boolean from the stack or operation
+        cond_stack_block: StmtId, // boolean from the stack or operation
         body: StmtId, // points to BlockScope
         else_stmt: Option<StmtId>,
     },

@@ -101,38 +101,41 @@ fn main: () -> () {
 }
 
 fn func: () -> (i32) {
-    if @( 1 2 <) {
-        if @(true) {
-            let var: i32;
+    @(1 2 3)
+    if @(1 2 <) {
+        let var: i32;
+        @(4 5) &= var; // @(1 2 3 4)
+        if (true) {
+            @(5 6) // @(1 2 3 4 5 6)
+        }
+        else {
+            @(5 6) // @(1 2 3 4 5 6)
         }
     } else if @( 3 4 <) {
+        @(4 5 6) // @(1 2 3 4 5 6)
     }
 }
 
-start:
-    if_cond_0:
-        branch 1 < 2, if_body_0, else_if_cond_0;
-        if_body_0:
-    else_if_cond_0:
+start_function:
+    branch 1 < 2.0, if_block_0, else_block_0;
+    if_block_0:
+        jump end_if_0;
+    else_block_0:
+        branch -420 < 5, else_if_block_0, else_block_1;
+        else_if_block_0:
+            jump end_if_0;
+    else_block_1:
+        branch -3 < 5, else_if_block_1, else_block_2;
+        else_if_block_1:
+            jump end_if_0;
+    else_block_2:
+        jump end_if_0, %inst4;
     if_end_0:
+        jump end_function;
+end_function:
 
 
-                  start_function:
-                      branch 1 < 2.0, if_block_0, else_block_0;
-                      if_block_0:
-                          jump end_if_0;
-                      else_block_0:
-                          branch -420 < 5, else_if_block_0, else_block_1;
-                          else_if_block_0:
-                              jump end_if_0;
-                      else_block_1:
-                          branch -3 < 5, else_if_block_1, else_block_2;
-                          else_if_block_1:
-                              jump end_if_0;
-                      else_block_2:
-                          jump end_if_0, %inst4;
-                      if_end_0:
-                          jump end_function;
-                  end_function:
+
+
 ```
 

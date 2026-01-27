@@ -103,7 +103,7 @@ impl<'a> Interpreter<'a> {
 
     fn interpret_stmt(&mut self, stmt_id: StmtId) {
         match self.arena.get_stmt(stmt_id) {
-            Statement::If { cond, body, else_stmt } => {
+            Statement::If { cond_stack_block: cond, body, else_stmt } => {
                 let RuntimeValue::Bool(if_cond) = self.interpret_expr(*cond) else {
                     panic!("expected boolean value on stack for if statement condition")
                 };
@@ -192,7 +192,7 @@ impl<'a> Interpreter<'a> {
                     // self.curr_call_frame_mut().local_hfs_stack.push(val);
                 }
             },
-            Statement::ElseIf { cond, body, else_stmt } => todo!(),
+            Statement::ElseIf { cond_stack_block: cond, body, else_stmt } => todo!(),
             Statement::Else(stmt_id) => todo!(),
         }
     }

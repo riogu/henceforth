@@ -52,7 +52,7 @@ impl AstArena {
 
         for (expr_id, expected_type_id) in stack_copy.iter().zip(return_types.iter()) {
             let actual_type_id = self.get_type_id_of_expr(*expr_id);
-            if let Err(err) = self.validate_type(actual_type_id, *expected_type_id) {
+            if let Err(err) = self.compare_types(actual_type_id, *expected_type_id) {
                 panic!("return value {}", err);
             }
         }
@@ -65,12 +65,12 @@ impl AstArena {
             panic!("[internal error] function parameter type must be a tuple")
         };
 
-        if let Err(err) = self.validate_type(arg_type, param_type) {
+        if let Err(err) = self.compare_types(arg_type, param_type) {
             panic!("function call argument {}", err);
         }
     }
 
-    pub fn validate_type(&self, actual_type_id: TypeId, expected_type_id: TypeId) -> Result<(), String> {
+    pub fn compare_types(&self, actual_type_id: TypeId, expected_type_id: TypeId) -> Result<(), String> {
         let actual_type = self.get_type(actual_type_id);
         let expected_type = self.get_type(expected_type_id);
 
@@ -85,7 +85,7 @@ impl AstArena {
                 }
                 // Recursively validate each element
                 for (i, (&actual_elem_id, &expected_elem_id)) in actual_types.iter().zip(expected_types.iter()).enumerate() {
-                    self.validate_type(actual_elem_id, expected_elem_id)
+                    self.compare_types(actual_elem_id, expected_elem_id)
                         .map_err(|err| format!("in tuple element {}: {}", i, err))?;
                 }
                 Ok(())
@@ -225,8 +225,7 @@ impl StackAnalyzer {
             UnresolvedStatement::ElseIf { cond, body, else_stmt } | UnresolvedStatement::If { body, else_stmt, cond } => {
                 let stack_before_branches = self.arena.hfs_stack.clone();
                 // actually adds the condition to the hfs_stack, because the stack analyzer only "sees" the if statement itself
-                self.resolve_stmt(cond);
-
+                let cond_stack_block = self.resolve_stmt(cond);
                 // condition isnt included in the stack depth count
                 let cond = self.arena.pop_or_error("expected boolean on stack for if statement");
                 if !matches!(self.arena.get_type_of_expr(cond), Type::Bool) {
@@ -281,7 +280,7 @@ impl StackAnalyzer {
                     },
                 };
 
-                self.arena.alloc_stmt(Statement::If { cond, body, else_stmt }, token)
+                self.arena.alloc_stmt(Statement::If { cond_stack_block, body, else_stmt }, token)
             },
             UnresolvedStatement::While { body, cond } => {
                 // TODO: decide how while loops should work. consume on entry or not?
@@ -624,10 +623,10 @@ mod tests {
     use pretty_assertions::assert_eq;
 
     use crate::hfs::{
+        AstArena, File, Lexer, Parser, Type, UnresolvedAstArena,
         builder::builder::{Builder, BuilderOperation, ControlFlowOps, FunctionOps, LoopOps, PassMode, StackOps, VariableOps},
         stack_analyzer_builder::StackAnalyzerBuilder,
-        utils::{run_until, Phase},
-        AstArena, File, Lexer, Parser, Type, UnresolvedAstArena,
+        utils::{Phase, run_until},
     };
 
     fn analyze_file(name: &str) -> AstArena {

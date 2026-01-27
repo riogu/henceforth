@@ -40,6 +40,7 @@ pub struct CfgFunction {
 
 #[derive(Debug)]
 pub struct BasicBlock {
+    pub parent_function: IrFuncId,
     pub name: String,
     pub predecessors: Vec<BlockId>, // or phi node construction
     pub instructions: Vec<InstId>,
@@ -56,7 +57,7 @@ pub struct IrVarDeclaration {
 }
 // each Instruction -> one value (this is just like LLVM SSA)
 // but not all instructions produce values (declarations, stores, etc)
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Instruction {
     Parameter {
         source_info: SourceInfo,
@@ -95,7 +96,6 @@ pub enum Instruction {
         source_info: SourceInfo,
         instructions: Vec<InstId>,
     },
-    Push(SourceInfo, InstId), // always a tuple
     Operation(SourceInfo, CfgOperation),
     Literal(SourceInfo, Literal),
     Load(
@@ -119,7 +119,7 @@ pub enum TerminatorInst {
     // the jump always carries around the stack variation itself
     // for other purposes, we usually generate a phi and find the associated InstId with a pass
     // that searches for store instructions and whatnot
-    Unreachable,                               // might be useful for you later in CFG analysis
+    Unreachable, // might be useful for you later in CFG analysis
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -325,10 +325,6 @@ impl CfgPrintable for Instruction {
                 let instructions_repr: Vec<String> =
                     instructions.iter().map(|id| arena.get_instruction(*id)).map(|inst| inst.get_repr(arena)).collect();
                 format!("({})", instructions_repr.join(", "))
-            },
-            Instruction::Push(source_info, inst_id) => {
-                let inst = arena.get_instruction(*inst_id);
-                format!("push {};", inst.get_repr(arena))
             },
             Instruction::Operation(source_info, cfg_operation) => cfg_operation.get_repr(arena),
             Instruction::Literal(source_info, literal) => match literal {

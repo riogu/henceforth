@@ -10,20 +10,22 @@ use crate::hfs::{
 
 // here is where youll create the CFG pass and the new IR generation
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
 pub struct BlockContext {
-    continue_to_block: BlockId,
-    break_to_block: BlockId,
-    end_block: BlockId,
+    continue_to_block: Option<BlockId>,
+    break_to_block: Option<BlockId>,
+    end_block: Option<BlockId>,
+    stack_change: Vec<InstId>,
     // its useful for stuff like break statements
 }
 
 #[derive(Debug, Default)]
-pub struct IRContext {
-    pub curr_block_context: BlockContext,
-    pub curr_insert_block: BlockId,
+pub struct CfgContext {
     pub curr_function: IrFuncId,
-    block_parent_functions: HashMap<BlockId, IrFuncId>,
+    pub curr_insert_block: BlockId,
+    // we use this to track what the stack is for each construct
+    // such as if statements. we build it up on the first branch, and then after that we compare
+    // the new branches with the first one, for the same context
 }
 
 #[derive(Debug, Default)]
@@ -44,50 +46,62 @@ pub struct InstArena {
     analyzed_stmts: HashSet<StmtId>,
     analyzed_exprs: HashSet<ExprId>,
 
-    pub type_tokens: Vec<Token>,
+    pub type_source_infos: Vec<SourceInfo>,
     type_cache: HashMap<Type, TypeId>,
 
-    pub hfs_stack: Vec<InstId>, // TODO: use this in the code
+    hfs_stack: Vec<InstId>,
+    // this is reset whenever we add a terminator instruction to the current block
+    // its used to keep track of each merging stack
+    pub curr_block_stack: Vec<InstId>,
 
-    pub ir_context: IRContext,
+    pub cfg_context: CfgContext,
 }
 
 impl InstArena {
     pub fn new() -> Self {
         let mut arena = Self::default();
-        arena.alloc_type_uncached(Type::Int, Token { kind: TokenKind::Int, source_info: SourceInfo::new(0, 0, 0) });
-        arena.alloc_type_uncached(Type::Float, Token { kind: TokenKind::Float, source_info: SourceInfo::new(0, 0, 0) });
-        arena.alloc_type_uncached(Type::Bool, Token { kind: TokenKind::Bool, source_info: SourceInfo::new(0, 0, 0) });
-        arena.alloc_type_uncached(Type::String, Token { kind: TokenKind::String, source_info: SourceInfo::new(0, 0, 0) });
+        arena.alloc_type_uncached(Type::Int, SourceInfo::new(0, 0, 0));
+        arena.alloc_type_uncached(Type::Float, SourceInfo::new(0, 0, 0));
+        arena.alloc_type_uncached(Type::Bool, SourceInfo::new(0, 0, 0));
+        arena.alloc_type_uncached(Type::String, SourceInfo::new(0, 0, 0));
         arena
     }
-    // fn push_to_hfs_stack(&mut self, inst: InstId) {
-    //     self.hfs_stack.push(inst);
-    // }
+    fn push_to_hfs_stack(&mut self, inst: InstId) {
+        self.hfs_stack.push(inst);
+        // also pushes it to the context used for verifying equality between branches
+        self.curr_block_stack.push(inst);
+    }
+    // use this instead of popping the stack directly because we keep track of other things
+    fn pop_hfs_stack(&mut self) -> Option<InstId> {
+        // also pushes it to the context used for verifying equality between branches
+        self.curr_block_stack.pop();
+        self.hfs_stack.pop()
+    }
 
-    fn alloc_type_uncached(&mut self, hfs_type: Type, token: Token) -> TypeId {
+    fn alloc_type_uncached(&mut self, hfs_type: Type, source_info: SourceInfo) -> TypeId {
         let id = TypeId(self.types.len());
         self.types.push(hfs_type.clone());
-        self.type_tokens.push(token);
+        self.type_source_infos.push(source_info);
         id
     }
-    pub fn alloc_type(&mut self, hfs_type: Type, token: Token) -> TypeId {
+    pub fn alloc_type(&mut self, hfs_type: Type, source_info: SourceInfo) -> TypeId {
         // Check if this type already exists
         if let Some(&existing_id) = self.type_cache.get(&hfs_type) {
             return existing_id;
         } // If not, allocate it
-        self.alloc_type_uncached(hfs_type, token)
+        self.alloc_type_uncached(hfs_type, source_info)
     }
     fn alloc_function(&mut self, func: CfgFunction, old_id: FuncId) -> IrFuncId {
         let id = IrFuncId(self.functions.len());
         self.functions.push(func);
         self.func_id_map.insert(old_id, id);
-        self.ir_context.curr_function = id;
+        self.cfg_context.curr_function = id;
         id
     }
-    fn alloc_inst(&mut self, inst: Instruction) -> InstId {
+    fn alloc_inst_for(&mut self, inst: Instruction, block_id: BlockId) -> InstId {
         let id = InstId(self.instructions.len());
         self.instructions.push(inst);
+        self.get_block_mut(block_id).instructions.push(id);
         id
     }
     pub fn alloc_var(&mut self, var: IrVarDeclaration, old_id: VarId) -> IrVarId {
@@ -96,15 +110,26 @@ impl InstArena {
         self.var_id_map.insert(old_id, id);
         id
     }
-    pub fn alloc_terminator_for(&mut self, terminator: TerminatorInst, block_id: BlockId) -> TermInstId {
+    pub fn alloc_terminator_for(&mut self, mut terminator: TerminatorInst, block_id: BlockId) -> TermInstId {
         // add predecessors whenever we jump or branch somewhere
         match terminator {
             TerminatorInst::Branch { ref source_info, cond, true_block, false_block } => {
                 self.get_block_mut(true_block).predecessors.push(block_id);
                 self.get_block_mut(false_block).predecessors.push(block_id);
             },
-            TerminatorInst::Jump(ref source_info, jump_to_id, value) => {
+            TerminatorInst::Jump(ref source_info, jump_to_id, ref mut value) => {
                 self.get_block_mut(jump_to_id).predecessors.push(block_id);
+                if value.is_some() {
+                    panic!(
+                        "[internal error] shouldn't manually add values to jump instructions. currently, jump instructions are \
+                         only used to handle the merging of the hfs stack (maybe you wanted to use a phi node instead?)",
+                    )
+                }
+                let instructions = std::mem::take(&mut self.curr_block_stack);
+                *value = Some(self.alloc_inst_for(
+                    Instruction::Tuple { source_info: source_info.clone(), instructions },
+                    self.cfg_context.curr_insert_block,
+                ));
             },
             TerminatorInst::Return(..) | TerminatorInst::Unreachable => {}, // no successors, nothing to update
         }
@@ -115,15 +140,12 @@ impl InstArena {
     pub fn alloc_block(&mut self, name: &str) -> BlockId {
         let id = BlockId(self.blocks.len());
         self.blocks.push(BasicBlock {
+            parent_function: self.cfg_context.curr_function,
             name: name.to_string(),
             predecessors: Vec::new(), // always empty, filled by alloc_terminator_for
             instructions: Vec::new(),
             terminator: None,
         });
-        // this block belongs to the current function
-        if self.ir_context.block_parent_functions.insert(id, self.ir_context.curr_function).is_some() {
-            panic!("[internal error] this block id already had a function associated to it")
-        }
         id
     }
 }
@@ -155,6 +177,46 @@ impl InstArena {
     }
     pub fn get_block_mut(&mut self, id: BlockId) -> &mut BasicBlock {
         &mut self.blocks[id.0]
+    }
+
+    pub fn compare_stacks(&mut self, stack1: &Vec<InstId>, stack2: &Vec<InstId>) -> Result<(), String> {
+        let expected_count = stack1.len();
+        let actual_count = stack2.len();
+        if expected_count != actual_count {
+            return Err(format!("expected {} values on stack for return, found {}", expected_count, actual_count));
+        }
+
+        for (inst_id1, inst_id2) in stack1.iter().zip(stack2.iter()) {
+            let type_id1 = self.get_type_id_of_inst(*inst_id1);
+            let type_id2 = self.get_type_id_of_inst(*inst_id2);
+            self.compare_types(type_id1, type_id2)?;
+        }
+        Ok(())
+    }
+
+    pub fn compare_types(&self, type1: TypeId, type2: TypeId) -> Result<(), String> {
+        let actual_type = self.get_type(type1);
+        let expected_type = self.get_type(type2);
+
+        match (actual_type, expected_type) {
+            (Type::Tuple(actual_types), Type::Tuple(expected_types)) => {
+                if actual_types.len() != expected_types.len() {
+                    return Err(format!(
+                        "tuple length mismatch: expected {} elements, found {}",
+                        expected_types.len(),
+                        actual_types.len()
+                    ));
+                }
+                // Recursively validate each element
+                for (i, (&actual_elem_id, &expected_elem_id)) in actual_types.iter().zip(expected_types.iter()).enumerate() {
+                    self.compare_types(actual_elem_id, expected_elem_id)
+                        .map_err(|err| format!("in tuple element {}: {}", i, err))?;
+                }
+                Ok(())
+            },
+            (actual, expected) if actual == expected => Ok(()),
+            (actual, expected) => Err(format!("type mismatch: expected '{:?}', found '{:?}'", expected, actual)),
+        }
     }
 }
 
@@ -214,14 +276,15 @@ impl CfgAnalyzer {
         for param_expr_id in func_decl.parameter_exprs {
             let param_inst = self.lower_expr(param_expr_id);
             parameter_exprs.push(param_inst);
-            self.arena.hfs_stack.push(param_inst);
+            self.arena.push_to_hfs_stack(param_inst);
         }
 
         let entry_block = self.arena.alloc_block("start");
-        let exit_block = self.arena.alloc_block("end");
+        self.arena.cfg_context.curr_insert_block = entry_block;
 
-        self.arena.ir_context.curr_insert_block = entry_block;
-        self.lower_stmt(func_decl.body);
+        let curr_block_context =
+            BlockContext { continue_to_block: None, break_to_block: None, end_block: None, stack_change: vec![] };
+        self.lower_stmt(func_decl.body, curr_block_context);
 
         let cfg_function = CfgFunction {
             source_info: self.ast_arena.get_function_token(id).source_info.clone(),
@@ -235,12 +298,13 @@ impl CfgAnalyzer {
         self.arena.pop_entire_hfs_stack();
         self.arena.alloc_function(cfg_function, id)
     }
-    fn lower_stmt(&mut self, id: StmtId) {
+    fn lower_stmt(&mut self, id: StmtId, curr_block_context: BlockContext) {
         self.arena.analyzed_stmts.insert(id);
         let source_info = self.ast_arena.get_stmt_token(id).source_info.clone();
         match self.ast_arena.get_stmt(id).clone() {
-            Statement::Else(stmt_id) => self.lower_stmt(stmt_id),
-            if_stmt @ Statement::ElseIf { cond, body, else_stmt } | if_stmt @ Statement::If { cond, body, else_stmt } => {
+            Statement::Else(stmt_id) => self.lower_stmt(stmt_id, curr_block_context),
+            if_stmt @ Statement::ElseIf { cond_stack_block, body, else_stmt }
+            | if_stmt @ Statement::If { cond_stack_block, body, else_stmt } => {
                 // TODO: dont forget about issues with dead code elimination. if we have code after
                 // a return; or something, we gotta be careful to eliminate it at some point
                 // otherwise we might have issues. maybe we should do that in StackAnalyzer instead?
@@ -272,28 +336,46 @@ impl CfgAnalyzer {
                   end_function:
                       return;
                 */
-                let block_before_if = self.arena.ir_context.curr_insert_block;
-                let cond = self.lower_expr(cond);
+
+                // means we are starting a new chain of ifs
+                let new_if_context = matches!(if_stmt, Statement::If { .. });
+
+                let block_before_if = self.arena.cfg_context.curr_insert_block;
+                self.lower_stmt(cond_stack_block, curr_block_context.clone());
 
                 let if_body_block = self.arena.alloc_block("if_body");
+                self.arena.cfg_context.curr_insert_block = if_body_block;
 
-                let if_end_block = if matches!(if_stmt, Statement::If { .. }) {
+                // condition isnt included in the stack depth count
+                let cond = self.arena.pop_hfs_stack().expect("expected condition at the end of stack block condition in if_stmt");
+                let if_depth_before = self.arena.hfs_stack.len();
+
+                self.lower_stmt(body, curr_block_context.clone());
+
+                let stack_change = self.arena.hfs_stack[if_depth_before..].to_vec();
+
+                let if_end_block = if new_if_context {
                     self.arena.alloc_block("if_end")
                 } else {
-                    self.arena.ir_context.curr_block_context.end_block // keep using the same exit if we are in an else if chain
+                    // validate that we aren't getting a different stack depth
+                    if let Err(err) = self.arena.compare_stacks(&stack_change, &curr_block_context.stack_change) {
+                        // TODO: joao you should make this error message fancier and give more useful information
+                        panic!("found different stacks while evaluating if chain context:\n\t {}", err)
+                    }
+                    // keep using the same exit if we are in an else if chain
+                    curr_block_context.end_block.expect("[internal error] forgot to set exit block for the current if stmt")
                 };
 
-                self.arena.ir_context.curr_block_context.end_block = if_end_block;
-                self.arena.ir_context.curr_insert_block = if_body_block;
-                self.lower_stmt(body);
-                if self.arena.get_block(self.arena.ir_context.curr_insert_block).terminator.is_none() {
+                if self.arena.get_block(self.arena.cfg_context.curr_insert_block).terminator.is_none() {
                     // if there was no break or return or anything, we need to add a terminator for
                     // whatever block we were on that goes to the end of the current if context
                     self.arena.alloc_terminator_for(
                         TerminatorInst::Jump(source_info.clone(), if_end_block, None),
-                        self.arena.ir_context.curr_insert_block,
+                        self.arena.cfg_context.curr_insert_block,
                     );
                 }
+
+                self.arena.push_to_hfs_stack(cond);
 
                 if let Some(else_id) = else_stmt {
                     let else_stmt = self.ast_arena.get_stmt(else_id);
@@ -317,14 +399,20 @@ impl CfgAnalyzer {
                                 block_before_if,
                             );
 
-                            self.arena.ir_context.curr_insert_block = else_body_block;
-                            self.lower_stmt(else_id);
-                            if self.arena.get_block(self.arena.ir_context.curr_insert_block).terminator.is_none() {
+                            self.arena.cfg_context.curr_insert_block = else_body_block;
+                            let curr_block_context = BlockContext {
+                                continue_to_block: curr_block_context.continue_to_block,
+                                break_to_block: curr_block_context.break_to_block,
+                                end_block: Some(if_end_block),
+                                stack_change,
+                            };
+                            self.lower_stmt(else_id, curr_block_context);
+                            if self.arena.get_block(self.arena.cfg_context.curr_insert_block).terminator.is_none() {
                                 // if there was no break or return or anything, we need to add a terminator for
                                 // whatever block we were on that goes to the end of the current if context
                                 self.arena.alloc_terminator_for(
                                     TerminatorInst::Jump(source_info.clone(), if_end_block, None),
-                                    self.arena.ir_context.curr_insert_block,
+                                    self.arena.cfg_context.curr_insert_block,
                                 );
                             }
                         },
@@ -359,15 +447,12 @@ impl CfgAnalyzer {
 
                 self.arena.alloc_terminator_for(
                     TerminatorInst::Jump(source_info.clone(), while_cond_block, None),
-                    self.arena.ir_context.curr_insert_block,
+                    self.arena.cfg_context.curr_insert_block,
                 ); // finish the previous block with a jump
 
                 //--------------------------------------------------------------------------
                 // set up the context for lowering the while body
-                self.arena.ir_context.curr_insert_block = while_cond_block;
-                self.arena.ir_context.curr_block_context.continue_to_block = while_cond_block;
-                self.arena.ir_context.curr_block_context.break_to_block = while_end_block;
-
+                self.arena.cfg_context.curr_insert_block = while_cond_block;
                 let cond = self.lower_expr(cond);
                 self.arena.alloc_terminator_for(
                     TerminatorInst::Branch {
@@ -379,19 +464,54 @@ impl CfgAnalyzer {
                     while_cond_block,
                 );
 
-                self.lower_stmt(body);
-                if self.arena.get_block(self.arena.ir_context.curr_insert_block).terminator.is_none() {
+                let curr_block_context = BlockContext {
+                    continue_to_block: Some(while_cond_block),
+                    break_to_block: Some(while_end_block),
+                    end_block: None,
+                    stack_change: vec![],
+                };
+
+                let stack_depth_before = self.arena.hfs_stack.len();
+
+                self.lower_stmt(body, curr_block_context);
+
+                // Enforce stack balance
+                let stack_depth_after = self.arena.hfs_stack.len();
+                if stack_depth_before != stack_depth_after {
+                    panic!(
+                        "while loop body must maintain stack balance: expected {} values on stack after loop body, found {}",
+                        stack_depth_before, stack_depth_after
+                    );
+                }
+                if self.arena.get_block(self.arena.cfg_context.curr_insert_block).terminator.is_none() {
                     self.arena.alloc_terminator_for(
                         TerminatorInst::Jump(source_info, while_end_block, None),
-                        self.arena.ir_context.curr_insert_block,
+                        self.arena.cfg_context.curr_insert_block,
                     );
                 }
                 //--------------------------------------------------------------------------
             },
             Statement::StackBlock(expr_ids) =>
+            /* @(1 2 3)
+               if @(1 2 <) {
+                   let var: i32;
+                   @(4 5) &= var; // @(1 2 3 4)
+                   if (true) {
+                       @(5 6) // @(1 2 3 4 5 6)
+                   }
+                   else {
+                       @(5 6) // @(1 2 3 4 5 6)
+                   }
+               } else if @( 3 4 <) {
+                   @(4 5 6) // @(1 2 3 4 5 6)
+               }
+            */
                 for expr_id in expr_ids {
                     let inst = self.lower_expr(expr_id);
-                    self.arena.hfs_stack.push(inst);
+                    self.arena.push_to_hfs_stack(inst);
+                    // we add stack operations as standalone instructions in the current block (just like normal SSA)
+                    // the stack semantics are validated but they act "like local variables"
+                    self.arena.get_block_mut(self.arena.cfg_context.curr_insert_block).instructions.push(inst);
                 },
             Statement::BlockScope(top_level_ids, scope_kind) =>
                 for top_level_id in top_level_ids.clone() {
@@ -400,37 +520,45 @@ impl CfgAnalyzer {
                             self.lower_variable_declaration(var_id);
                         },
                         TopLevelId::FunctionDecl(func_id) => panic!("[internal error] local functions are not allowed"),
-                        TopLevelId::Statement(stmt_id) => self.lower_stmt(stmt_id),
+                        TopLevelId::Statement(stmt_id) => self.lower_stmt(stmt_id, curr_block_context.clone()),
                     };
                 },
             Statement::Return => {
                 // note that we have already checked that the state of the stack is correct in
                 // terms of size and types before each return statement.
                 // what the cfg_analyzer does is also check all branches against each other.
-                let return_tuple = self.arena.alloc_inst(Instruction::Tuple {
-                    source_info: source_info.clone(),
-                    instructions: self.arena.hfs_stack.clone(),
-                });
+                let return_tuple = self.arena.alloc_inst_for(
+                    Instruction::Tuple { source_info: source_info.clone(), instructions: self.arena.hfs_stack.clone() },
+                    self.arena.cfg_context.curr_insert_block,
+                );
                 let term = self.arena.alloc_terminator_for(
                     TerminatorInst::Return(source_info, return_tuple),
-                    self.arena.ir_context.curr_insert_block,
+                    self.arena.cfg_context.curr_insert_block,
                 );
-                self.arena.get_block_mut(self.arena.ir_context.curr_insert_block).terminator = Some(term);
+                self.arena.get_block_mut(self.arena.cfg_context.curr_insert_block).terminator = Some(term);
             },
             Statement::Break => {
                 // a break always ends the current block and jumps somewhere else
                 // (the exit of the current control flow construct)
                 self.arena.alloc_terminator_for(
-                    TerminatorInst::Jump(source_info, self.arena.ir_context.curr_block_context.break_to_block, None),
-                    self.arena.ir_context.curr_insert_block,
+                    TerminatorInst::Jump(
+                        source_info,
+                        curr_block_context.break_to_block.expect("[internal error] found break outside of while context"),
+                        None,
+                    ),
+                    self.arena.cfg_context.curr_insert_block,
                 );
             },
             Statement::Continue => {
                 // the entry_block is meant to be the block that we came from to start this current
                 // context. its meant to allow the start of the next iteration
                 self.arena.alloc_terminator_for(
-                    TerminatorInst::Jump(source_info, self.arena.ir_context.curr_block_context.continue_to_block, None),
-                    self.arena.ir_context.curr_insert_block,
+                    TerminatorInst::Jump(
+                        source_info,
+                        curr_block_context.continue_to_block.expect("[internal error] found continue outside of while context"),
+                        None,
+                    ),
+                    self.arena.cfg_context.curr_insert_block,
                 );
             },
             Statement::Empty => { /* do nothing */ },
@@ -445,7 +573,7 @@ impl CfgAnalyzer {
                 // associated to @() stack blocks
 
                 let inst_value = if is_move {
-                    self.arena.hfs_stack.pop().expect("expected value in stack for move assignment")
+                    self.arena.pop_hfs_stack().expect("expected value in stack for move assignment")
                 } else {
                     *self.arena.hfs_stack.last().expect("expected value in stack for copy assignment")
                 };
@@ -456,7 +584,10 @@ impl CfgAnalyzer {
                     },
                     Identifier::Function(func_id) => unreachable!("can't happen"),
                 };
-                self.arena.alloc_inst(Instruction::Store { source_info, value: inst_value, var_id, is_move });
+                self.arena.alloc_inst_for(
+                    Instruction::Store { source_info, value: inst_value, var_id, is_move },
+                    self.arena.cfg_context.curr_insert_block,
+                );
             },
             Statement::FunctionCall { arg_count, func_id, is_move } => {
                 // @(213) &> func; // move call
@@ -469,7 +600,10 @@ impl CfgAnalyzer {
                     Some(func_id) => *func_id,
                     None => panic!("[internal error] tried making a function call before creating the associated IrFuncId"),
                 };
-                self.arena.alloc_inst(Instruction::FunctionCall { source_info, args: inst_args, func_id, is_move });
+                self.arena.alloc_inst_for(
+                    Instruction::FunctionCall { source_info, args: inst_args, func_id, is_move },
+                    self.arena.cfg_context.curr_insert_block,
+                );
             },
         }
     }
@@ -479,23 +613,30 @@ impl CfgAnalyzer {
             Expression::Operation(operation) => self.lower_operation(operation, source_info),
             Expression::Identifier(identifier) => match identifier {
                 Identifier::GlobalVar(var_id) | Identifier::Variable(var_id) => match self.arena.var_id_map.get(&var_id) {
-                    Some(ir_var_id) => self.arena.alloc_inst(Instruction::Load(source_info, *ir_var_id)),
+                    Some(ir_var_id) => self
+                        .arena
+                        .alloc_inst_for(Instruction::Load(source_info, *ir_var_id), self.arena.cfg_context.curr_insert_block),
                     None => panic!("[internal error] tried making assignment before creating the associated IrVarId"),
                 },
                 Identifier::Function(func_id) => panic!("[internal error] can't have function identifiers as expressions."),
             },
-            Expression::Literal(literal) => self.arena.alloc_inst(Instruction::Literal(source_info, literal)),
+            Expression::Literal(literal) =>
+                self.arena.alloc_inst_for(Instruction::Literal(source_info, literal), self.arena.cfg_context.curr_insert_block),
             Expression::Tuple { expressions } => {
                 let mut instructions = Vec::<InstId>::new();
                 for expr_id in expressions {
                     instructions.push(self.lower_expr(expr_id));
                 }
-                self.arena.alloc_inst(Instruction::Tuple { source_info, instructions })
+                self.arena
+                    .alloc_inst_for(Instruction::Tuple { source_info, instructions }, self.arena.cfg_context.curr_insert_block)
             },
             Expression::Parameter { index, type_id } =>
             // not sure if this is correct for when you hold a parameter expr throughout a function
             // its probably fine but just in case maybe test smth like that later
-                self.arena.alloc_inst(Instruction::Parameter { source_info, index, type_id }),
+                self.arena.alloc_inst_for(
+                    Instruction::Parameter { source_info, index, type_id },
+                    self.arena.cfg_context.curr_insert_block,
+                ),
             Expression::StackKeyword(stack_keyword) => todo!(),
         }
     }
@@ -516,7 +657,7 @@ impl CfgAnalyzer {
             Operation::And(expr_id, expr_id1) => CfgOperation::And(self.lower_expr(expr_id), self.lower_expr(expr_id1)),
             Operation::Not(expr_id) => CfgOperation::Not(self.lower_expr(expr_id)),
         };
-        self.arena.alloc_inst(Instruction::Operation(source_info, cfg_op))
+        self.arena.alloc_inst_for(Instruction::Operation(source_info, cfg_op), self.arena.cfg_context.curr_insert_block)
     }
 }
 

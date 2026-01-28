@@ -124,19 +124,19 @@ impl InstArena {
                 self.get_block_mut(true_block).predecessors.push(block_id);
                 self.get_block_mut(false_block).predecessors.push(block_id);
             },
-            TerminatorInst::Jump(ref source_info, jump_to_id, ref mut value) => {
+            TerminatorInst::Jump(ref source_info, jump_to_id) => {
                 self.get_block_mut(jump_to_id).predecessors.push(block_id);
-                if value.is_some() {
-                    panic!(
-                        "[internal error] shouldn't manually add values to jump instructions. currently, jump instructions are \
-                         only used to handle the merging of the hfs stack (maybe you wanted to use a phi node instead?)",
-                    )
-                }
-                let instructions = std::mem::take(&mut self.curr_block_stack);
-                *value = Some(self.alloc_inst_for(
-                    Instruction::Tuple { source_info: source_info.clone(), instructions },
-                    self.cfg_context.curr_insert_block,
-                ));
+                // if value.is_some() {
+                //     panic!(
+                //         "[internal error] shouldn't manually add values to jump instructions. currently, jump instructions are \
+                //          only used to handle the merging of the hfs stack (maybe you wanted to use a phi node instead?)",
+                //     )
+                // }
+                // let instructions = std::mem::take(&mut self.curr_block_stack);
+                // *value = Some(self.alloc_inst_for(
+                //     Instruction::Tuple { source_info: source_info.clone(), instructions },
+                //     self.cfg_context.curr_insert_block,
+                // ));
             },
             TerminatorInst::Return(..) | TerminatorInst::Unreachable => {}, // no successors, nothing to update
         }
@@ -323,6 +323,9 @@ impl CfgAnalyzer {
                 // basically, this code expects dead code elimination to have occurred BEFORE
                 // FIXME: implement a small dead code elimination on the AST before cfg_analyzer
 
+                // TODO: add the missing stack merging code!
+                // without this, the code wont work
+
                 /* example of CFG blocks that cover many of the cases of the code below:
                   start_function:
                       branch 1 < 2.0, if_body_0, else_if_cond_0;
@@ -378,7 +381,7 @@ impl CfgAnalyzer {
                     // if there was no break or return or anything, we need to add a terminator for
                     // whatever block we were on that goes to the end of the current if context
                     self.arena.alloc_terminator_for(
-                        TerminatorInst::Jump(source_info.clone(), if_end_block, None),
+                        TerminatorInst::Jump(source_info.clone(), if_end_block),
                         self.arena.cfg_context.curr_insert_block,
                     );
                 }
@@ -419,7 +422,7 @@ impl CfgAnalyzer {
                                 // if there was no break or return or anything, we need to add a terminator for
                                 // whatever block we were on that goes to the end of the current if context
                                 self.arena.alloc_terminator_for(
-                                    TerminatorInst::Jump(source_info.clone(), if_end_block, None),
+                                    TerminatorInst::Jump(source_info.clone(), if_end_block),
                                     self.arena.cfg_context.curr_insert_block,
                                 );
                             }
@@ -463,7 +466,7 @@ impl CfgAnalyzer {
                 self.arena.seal_block(while_end_block);
 
                 self.arena.alloc_terminator_for(
-                    TerminatorInst::Jump(source_info.clone(), while_cond_block, None),
+                    TerminatorInst::Jump(source_info.clone(), while_cond_block),
                     self.arena.cfg_context.curr_insert_block,
                 ); // finish the previous block with a jump
 
@@ -502,7 +505,7 @@ impl CfgAnalyzer {
                 }
                 if self.arena.get_block(self.arena.cfg_context.curr_insert_block).terminator.is_none() {
                     self.arena.alloc_terminator_for(
-                        TerminatorInst::Jump(source_info, while_end_block, None),
+                        TerminatorInst::Jump(source_info, while_end_block),
                         self.arena.cfg_context.curr_insert_block,
                     );
                 }
@@ -562,7 +565,7 @@ impl CfgAnalyzer {
                     TerminatorInst::Jump(
                         source_info,
                         curr_block_context.break_to_block.expect("[internal error] found break outside of while context"),
-                        None,
+                        
                     ),
                     self.arena.cfg_context.curr_insert_block,
                 );
@@ -574,7 +577,6 @@ impl CfgAnalyzer {
                     TerminatorInst::Jump(
                         source_info,
                         curr_block_context.continue_to_block.expect("[internal error] found continue outside of while context"),
-                        None,
                     ),
                     self.arena.cfg_context.curr_insert_block,
                 );

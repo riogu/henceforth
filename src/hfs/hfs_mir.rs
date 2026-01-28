@@ -115,7 +115,7 @@ pub enum TerminatorInst {
     // all others that want to return should jump to the "end" block which is tracked by each function
     Branch { source_info: SourceInfo, cond: InstId, true_block: BlockId, false_block: BlockId },
     // if we want to jump with nothing, just have an empty vector
-    Jump(SourceInfo, BlockId, Option<InstId>), // is a tuple
+    Jump(SourceInfo, BlockId), // is a tuple
     // the jump always carries around the stack variation itself
     // for other purposes, we usually generate a phi and find the associated InstId with a pass
     // that searches for store instructions and whatnot
@@ -276,15 +276,16 @@ impl CfgPrintable for TerminatorInst {
                 let false_block = arena.get_block(*false_block);
                 format!("branch {}, {}, {};", cond.get_repr(arena), true_block.name, false_block.name)
             },
-            TerminatorInst::Jump(source_info, block_id, inst_id) => {
-                let block = arena.get_block(*block_id);
-                match inst_id {
-                    Some(id) => {
-                        let inst = arena.get_instruction(*id);
-                        format!("jump {}, {};", block.name, inst.get_repr(arena))
-                    },
-                    None => format!("jump {};", block.name),
-                }
+            TerminatorInst::Jump(source_info, block_id) => {
+                todo!()
+                // let block = arena.get_block(*block_id);
+                // match inst_id {
+                //     Some(id) => {
+                //         let inst = arena.get_instruction(*id);
+                //         format!("jump {}, {};", block.name, inst.get_repr(arena))
+                //     },
+                //     None => format!("jump {};", block.name),
+                // }
             },
             TerminatorInst::Unreachable => String::from("unreachable;"),
         }

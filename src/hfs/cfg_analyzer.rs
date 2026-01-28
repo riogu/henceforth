@@ -379,6 +379,7 @@ impl CfgAnalyzer {
                 let if_stack_change = self.arena.hfs_stack[if_depth_before..].to_vec();
                 // FIXME: this wont work if the stack becomes smaller ^^^^
                 stack_changes.push((self.arena.cfg_context.curr_insert_block, if_stack_change.clone()));
+                // FIXME: verify that calls to self.arena.seal_block() are correctly placed
 
                 let if_end_block = if new_if_context {
                     self.arena.alloc_block("if_end")
@@ -437,6 +438,8 @@ impl CfgAnalyzer {
 
                             self.arena.hfs_stack = stack_before_branches.clone(); // restore stack before else
                             self.lower_stmt(else_id, curr_block_context); // pay attention to this call (we manage state around it)
+                            let else_stack_change = self.arena.hfs_stack[stack_before_branches.len()..].to_vec();
+                            stack_changes.push((self.arena.cfg_context.curr_insert_block, else_stack_change));
 
                             if self.arena.get_block(self.arena.cfg_context.curr_insert_block).terminator.is_none() {
                                 self.arena.alloc_terminator_for(
@@ -462,6 +465,7 @@ impl CfgAnalyzer {
                                     );
                                     self.arena.hfs_stack.push(phi);
                                 }
+                                self.arena.cfg_context.curr_insert_block = if_end_block;
                             }
                         },
                         _ => panic!("can't have other statements in else statement"),
@@ -535,7 +539,7 @@ impl CfgAnalyzer {
                 }
                 if self.arena.get_block(self.arena.cfg_context.curr_insert_block).terminator.is_none() {
                     self.arena.alloc_terminator_for(
-                        TerminatorInst::Jump(source_info, while_end_block),
+                        TerminatorInst::Jump(source_info, while_cond_block),
                         self.arena.cfg_context.curr_insert_block,
                     );
                 }

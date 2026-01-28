@@ -141,17 +141,6 @@ impl InstArena {
             },
             TerminatorInst::Jump(ref source_info, jump_to_id) => {
                 self.get_block_mut(jump_to_id).predecessors.push(block_id);
-                // if value.is_some() {
-                //     panic!(
-                //         "[internal error] shouldn't manually add values to jump instructions. currently, jump instructions are \
-                //          only used to handle the merging of the hfs stack (maybe you wanted to use a phi node instead?)",
-                //     )
-                // }
-                // let instructions = std::mem::take(&mut self.curr_block_stack);
-                // *value = Some(self.alloc_inst_for(
-                //     Instruction::Tuple { source_info: source_info.clone(), instructions },
-                //     self.cfg_context.curr_insert_block,
-                // ));
             },
             TerminatorInst::Return(..) | TerminatorInst::Unreachable => {}, // no successors, nothing to update
         }
@@ -379,7 +368,6 @@ impl CfgAnalyzer {
                 self.lower_stmt(cond_stack_block, curr_block_context.clone());
 
                 let if_body_block = self.arena.alloc_block("if_body");
-                self.arena.seal_block(if_body_block);
                 self.arena.cfg_context.curr_insert_block = if_body_block;
 
                 // condition isnt included in the stack depth count
@@ -423,7 +411,6 @@ impl CfgAnalyzer {
                             let is_else = matches!(else_stmt, Statement::Else(_));
 
                             let else_body_block = self.arena.alloc_block(&name);
-                            self.arena.seal_block(else_body_block);
 
                             let if_branch_inst = self.arena.alloc_terminator_for(
                                 TerminatorInst::Branch {
@@ -434,6 +421,9 @@ impl CfgAnalyzer {
                                 },
                                 block_before_if,
                             );
+
+                            self.arena.seal_block(if_body_block);
+                            self.arena.seal_block(else_body_block);
 
                             self.arena.cfg_context.curr_insert_block = else_body_block;
 
@@ -484,6 +474,7 @@ impl CfgAnalyzer {
                         TerminatorInst::Branch { source_info, cond, true_block: if_body_block, false_block: if_end_block },
                         block_before_if,
                     );
+                    self.arena.seal_block(if_body_block);
                 }
                 self.arena.seal_block(if_end_block);
             },
@@ -500,9 +491,7 @@ impl CfgAnalyzer {
                 let while_cond_block = self.arena.alloc_block("while_cond");
                 // cant seal the condition right away
                 let while_body_block = self.arena.alloc_block("while_body");
-                self.arena.seal_block(while_body_block);
                 let while_end_block = self.arena.alloc_block("while_end");
-                self.arena.seal_block(while_end_block);
 
                 self.arena.alloc_terminator_for(
                     TerminatorInst::Jump(source_info.clone(), while_cond_block),
@@ -522,6 +511,7 @@ impl CfgAnalyzer {
                     },
                     while_cond_block,
                 );
+                self.arena.seal_block(while_body_block);
 
                 let curr_block_context = BlockContext {
                     continue_to_block: Some(while_cond_block),
@@ -549,6 +539,7 @@ impl CfgAnalyzer {
                         self.arena.cfg_context.curr_insert_block,
                     );
                 }
+                self.arena.seal_block(while_end_block);
                 self.arena.seal_block(while_cond_block);
                 //--------------------------------------------------------------------------
             },

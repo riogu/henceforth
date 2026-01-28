@@ -290,6 +290,7 @@ impl CfgAnalyzer {
         }
 
         let entry_block = self.arena.alloc_block("start");
+        self.arena.seal_block(entry_block);
         self.arena.cfg_context.curr_insert_block = entry_block;
 
         let curr_block_context =
@@ -350,6 +351,7 @@ impl CfgAnalyzer {
                 self.lower_stmt(cond_stack_block, curr_block_context.clone());
 
                 let if_body_block = self.arena.alloc_block("if_body");
+                self.arena.seal_block(if_body_block);
                 self.arena.cfg_context.curr_insert_block = if_body_block;
 
                 // condition isnt included in the stack depth count
@@ -392,6 +394,7 @@ impl CfgAnalyzer {
                     match else_stmt {
                         Statement::Else(_) | Statement::ElseIf { .. } => {
                             let else_body_block = self.arena.alloc_block(&name);
+                            self.arena.seal_block(else_body_block);
 
                             // branch instruction for the original if
                             let if_branch_inst = self.arena.alloc_terminator_for(
@@ -439,6 +442,8 @@ impl CfgAnalyzer {
                         block_before_if,
                     );
                 }
+
+                self.arena.seal_block(if_end_block);
             },
             Statement::While { cond, body } => {
                 /* jump while_cond_0;
@@ -451,8 +456,11 @@ impl CfgAnalyzer {
                        jump end;
                 */
                 let while_cond_block = self.arena.alloc_block("while_cond");
+                // cant seal the condition right away
                 let while_body_block = self.arena.alloc_block("while_body");
+                self.arena.seal_block(while_body_block);
                 let while_end_block = self.arena.alloc_block("while_end");
+                self.arena.seal_block(while_end_block);
 
                 self.arena.alloc_terminator_for(
                     TerminatorInst::Jump(source_info.clone(), while_cond_block, None),
@@ -498,6 +506,7 @@ impl CfgAnalyzer {
                         self.arena.cfg_context.curr_insert_block,
                     );
                 }
+                self.arena.seal_block(while_cond_block);
                 //--------------------------------------------------------------------------
             },
             Statement::StackBlock(expr_ids) =>
@@ -591,7 +600,6 @@ impl CfgAnalyzer {
                     },
                     Identifier::Function(func_id) => unreachable!("can't happen"),
                 };
-                // FIXME: add SSA construction here
                 self.arena.write_variable(var_id, self.arena.cfg_context.curr_insert_block, inst_value);
             },
             Statement::FunctionCall { arg_count, func_id, is_move } => {
@@ -620,10 +628,7 @@ impl CfgAnalyzer {
                 Identifier::GlobalVar(var_id) | Identifier::Variable(var_id) => match self.arena.var_id_map.get(&var_id) {
                     Some(ir_var_id) => {
                         // phi code generation happens when you read a variable
-                        // self.arena
-                        //     .alloc_inst_for(Instruction::Load(source_info, *ir_var_id), self.arena.cfg_context.curr_insert_block)
-                        self.arena.read_variable(*ir_var_id, self.arena.cfg_context.curr_insert_block);
-                        todo!()
+                        self.arena.read_variable(*ir_var_id, self.arena.cfg_context.curr_insert_block)
                     },
                     None => panic!("[internal error] tried making assignment before creating the associated IrVarId"),
                 },
@@ -673,51 +678,51 @@ impl InstArena {
     // ---------------------------------------------------------------------------------
     // Simple and Efficient Construction of Static Single Assignment Form (Braun et. al)
     // ---------------------------------------------------------------------------------
-    fn write_variable(&mut self, var: IrVarId, block_id: BlockId, value: InstId) {
+    fn write_variable(&mut self, var_id: IrVarId, block_id: BlockId, value: InstId) {
         // keep track of what a variable is while in a given block simply
-        self.current_def.insert((var, block_id), value);
+        self.current_def.insert((var_id, block_id), value);
     }
-    fn read_variable(&mut self, var: IrVarId, block_id: BlockId) -> InstId {
+    fn read_variable(&mut self, var_id: IrVarId, block_id: BlockId) -> InstId {
         // Check if we have a def in this block
-        if let Some(&val) = self.current_def.get(&(var, block_id)) {
+        if let Some(&val) = self.current_def.get(&(var_id, block_id)) {
             return val;
         }
         // Otherwise, look in predecessors
-        self.read_variable_recursive(var, block_id)
+        self.read_variable_recursive(var_id, block_id)
     }
-    fn read_variable_recursive(&mut self, var: IrVarId, block_id: BlockId) -> InstId {
-        let source_info = self.get_var(var).source_info.clone();
+    fn read_variable_recursive(&mut self, var_id: IrVarId, block_id: BlockId) -> InstId {
+        let source_info = self.get_var(var_id).source_info.clone();
         let val = if !self.sealed_blocks.contains(&block_id) {
             // Incomplete CFG
             let phi = self.alloc_inst_for(Instruction::Phi { source_info, incoming: vec![] }, block_id);
-            self.incomplete_phis.entry(block_id).or_default().insert(var, phi);
+            self.incomplete_phis.entry(block_id).or_default().insert(var_id, phi);
             phi
         } else if self.get_block(block_id).predecessors.is_empty() {
             // this is the entry block which has no predecessors,
             // so the variable was used before definition
-            panic!("[internal error] variable '{}' read before initialization", self.get_var(var).name)
+            panic!("[internal error] variable '{}' read before initialization", self.get_var(var_id).name)
         } else if self.get_block(block_id).predecessors.len() == 1 {
             // Optimize the common case of one predecessor: No phi needed
-            self.read_variable(var, self.get_block(block_id).predecessors[0])
+            self.read_variable(var_id, self.get_block(block_id).predecessors[0])
         } else {
             // Break potential cycles with operandless phi
             let phi = self.alloc_inst_for(Instruction::Phi { source_info, incoming: vec![] }, block_id);
-            self.write_variable(var, block_id, phi);
-            self.add_phi_operands(var, phi, block_id)
+            self.write_variable(var_id, block_id, phi);
+            self.add_phi_operands(var_id, phi, block_id)
         };
-        self.write_variable(var, block_id, val);
+        self.write_variable(var_id, block_id, val);
         val
     }
-    fn add_phi_operands(&mut self, var: IrVarId, phi_id: InstId, block_id: BlockId) -> InstId {
+    fn add_phi_operands(&mut self, var_id: IrVarId, phi_id: InstId, block_id: BlockId) -> InstId {
         // block_id is the block that this phi comes from
         // Determine operands from predecessors
         let mut new_incoming = Vec::<(BlockId, InstId)>::new();
         let predecessors = self.get_block(block_id).predecessors.clone();
         for pred in predecessors {
-            let val = self.read_variable(var, pred);
+            let val = self.read_variable(var_id, pred);
             new_incoming.push((pred, val));
         }
-        let Instruction::Phi { source_info, incoming } = self.get_instruction_mut(phi_id) else {
+        let Instruction::Phi { incoming, .. } = self.get_instruction_mut(phi_id) else {
             panic!("[internal error] called add_phi_operands with a non-phi instruction")
         };
         incoming.append(&mut new_incoming);

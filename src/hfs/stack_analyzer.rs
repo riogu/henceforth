@@ -283,7 +283,6 @@ impl StackAnalyzer {
                 self.arena.alloc_stmt(Statement::If { cond_stack_block, body, else_stmt }, token)
             },
             UnresolvedStatement::While { body, cond } => {
-                // TODO: decide how while loops should work. consume on entry or not?
                 self.resolve_stmt(cond);
 
                 let cond = self.arena.pop_or_error("expected value on stack for while loop argument");

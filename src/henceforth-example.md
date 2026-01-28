@@ -169,3 +169,60 @@ fn main: () -> (i32) {
     // Result is now on stack, will be returned
 }
 ```
+```py 
+# Simple and Efficient Construction of Static Single Assignment Form (Braun et. al)
+    writeVariable(variable, block, value):
+        currentDef[variable][block] ← value
+    
+    readVariable(variable, block):
+        if currentDef[variable] contains block:
+            # local value numbering
+            return currentDef[variable][block]
+        # global value numbering
+        return readVariableRecursive(variable, block)
+    
+    readVariableRecursive(variable, block):
+        if block not in sealedBlocks:
+            # Incomplete CFG
+            val ← new Phi(block)
+            incompletePhis[block][variable] ← val
+        else if |block.preds| = 1:
+            # Optimize the common case of one predecessor: No phi needed
+            val ← readVariable(variable, block.preds[0])
+        else:
+            # Break potential cycles with operandless phi
+            val ← new Phi(block)
+            writeVariable(variable, block, val)
+            val ← addPhiOperands(variable, val)
+        writeVariable(variable, block, val)
+        return val
+    
+    addPhiOperands(variable, phi):
+        # Determine operands from predecessors
+        for pred in phi.block.preds:
+            phi.appendOperand(readVariable(variable, pred))
+        return tryRemoveTrivialPhi(phi)
+    
+    tryRemoveTrivialPhi(phi):
+        same ← None
+        for op in phi.operands:
+            if op = same || op = phi:
+                continue  # Unique value or self-reference
+            if same ≠ None:
+                return phi  # The phi merges at least two values: not trivial
+            same ← op
+        if same = None:
+            same ← new Undef()  # The phi is unreachable or in the start block
+        users ← phi.users.remove(phi)  # Remember all users except the phi itself
+        phi.replaceBy(same)  # Reroute all uses of phi to same and remove phi
+        # Try to recursively remove all phi users, which might have become trivial
+        for use in users:
+            if use is a Phi:
+                tryRemoveTrivialPhi(use)
+        return same
+    
+    sealBlock(block):
+        for variable in incompletePhis[block]:
+            addPhiOperands(variable, incompletePhis[block][variable])
+        sealedBlocks.add(block)
+```

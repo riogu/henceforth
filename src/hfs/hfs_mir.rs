@@ -73,7 +73,7 @@ pub enum Instruction {
 
     Phi {
         source_info: SourceInfo,
-        incoming: Vec<BlockId>, // (predecessor block, value)
+        incoming: Vec<(BlockId, InstId)>, // (predecessor block, value from that block)
     },
 
     // note we basically move stack keywords outside the stack block
@@ -92,20 +92,13 @@ pub enum Instruction {
     },
     Operation(SourceInfo, CfgOperation),
     Literal(SourceInfo, Literal),
-    Store {
-        source_info: SourceInfo,
-        value: InstId,
-        var_id: IrVarId, // GlobalVar or Variable
-        is_move: bool,
-    },
-    Load(
-        // Load exists instead of Identifiers
-        // because using an identifier always creates a load (we dont have pointers)
-        // a load is a runtime operation (in the sense that its done whenever we find it)
-        // rather than at compile time going through the identifiers to find their stored values
-        SourceInfo,
-        IrVarId, // GlobalVar or Variable
-    ),
+    // NOTE: this isnt used right now, it will only be used once we add memory operations
+    // Store {
+    //     source_info: SourceInfo,
+    //     value: InstId,
+    //     var_id: IrVarId, // GlobalVar or Variable
+    //     is_move: bool,
+    // },
     LoadElement {
         // load an element from a tuple (used to merge tuples into a new one)
         // useful for mapping our stack tracking into LLVM IR
@@ -302,16 +295,16 @@ impl CfgPrintable for Instruction {
     fn get_repr(&self, arena: &InstArena) -> String {
         match self {
             Instruction::Parameter { source_info, index, type_id: ty } => todo!(),
-            Instruction::Store { source_info, value, var_id: identifier, is_move } => {
-                // let id = match identifier {
-                //     VarIdentifier::GlobalVar(source_info, var_id) => var_id,
-                //     VarIdentifier::Variable(source_info, var_id) => var_id,
-                // };
-                // let var = arena.get_var(*id);
-                // let value = arena.get_instruction(*value);
-                // format!("store {}, {};", var.name, value.get_repr(arena))
-                todo!("joao i broke your printing code")
-            },
+            // Instruction::Store { source_info, value, var_id: identifier, is_move } => {
+            //     // let id = match identifier {
+            //     //     VarIdentifier::GlobalVar(source_info, var_id) => var_id,
+            //     //     VarIdentifier::Variable(source_info, var_id) => var_id,
+            //     // };
+            //     // let var = arena.get_var(*id);
+            //     // let value = arena.get_instruction(*value);
+            //     // format!("store {}, {};", var.name, value.get_repr(arena))
+            //     todo!("joao i broke your printing code")
+            // },
             Instruction::FunctionCall { source_info, args, func_id: identifier, is_move } => {
                 let func = arena.get_func(*identifier);
                 let args_repr: Vec<String> =
@@ -319,9 +312,10 @@ impl CfgPrintable for Instruction {
                 format!("call {}, {};", func.name, args_repr.join(", "))
             },
             Instruction::Phi { source_info, incoming } => {
-                let incoming: Vec<String> =
-                    incoming.iter().map(|id| arena.get_block(*id)).map(|block| block.name.clone()).collect();
-                format!("phi {};", incoming.join(", "))
+                todo!("joao i broke your prints")
+                // let incoming: Vec<String> =
+                //     incoming.iter().map(|id| arena.get_block(*id)).map(|block| block.name.clone()).collect();
+                // format!("phi {};", incoming.join(", "))
             },
             Instruction::StackKeyword { source_info, name, args } => {
                 let args_repr: Vec<String> =
@@ -340,7 +334,6 @@ impl CfgPrintable for Instruction {
                 Literal::String(lit) => lit.clone(),
                 Literal::Bool(lit) => lit.to_string(),
             },
-            Instruction::Load(source_info, ir_var_id) => todo!(),
             Instruction::LoadElement { source_info, index, tuple } => todo!(),
         }
     }

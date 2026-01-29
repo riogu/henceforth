@@ -1,6 +1,6 @@
 use std::{any::Any, path::PathBuf, rc::Rc};
 
-use crate::hfs::{AstArena, CfgAnalyzer, File, InstArena, Lexer, Parser, StackAnalyzer, Token, UnresolvedAstArena};
+use crate::hfs::{AstArena, CfgAnalyzer, File, IrArena, Lexer, Parser, StackAnalyzer, Token, UnresolvedAstArena};
 
 pub trait Byproduct {
     fn as_any(&self) -> &dyn Any;
@@ -16,7 +16,7 @@ impl Byproduct for AstArena {
         self
     }
 }
-impl Byproduct for InstArena {
+impl Byproduct for IrArena {
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -66,7 +66,7 @@ pub fn run_until(filename: &str, phase: Phase) -> Rc<dyn Byproduct> {
         return Rc::new(ast_arena);
     }
 
-    let inst_arena = CfgAnalyzer::lower_to_mir(top_level_nodes, ast_arena);
+    let (_, inst_arena) = CfgAnalyzer::lower_to_mir(top_level_nodes, ast_arena);
 
     if phase == Phase::CfgAnalyzer {
         return Rc::new(inst_arena);

@@ -7,6 +7,7 @@ mod hfs {
     pub mod hfs_mir;
     pub mod interpreter;
     pub mod lexer;
+    pub mod ast_interpreter;
     pub mod parser;
     pub mod scope_stack;
     pub mod stack_analyzer;
@@ -28,7 +29,7 @@ mod hfs {
 }
 use std::path::PathBuf;
 
-use clap::{arg, Parser};
+use clap::{Parser, arg};
 
 #[derive(Parser, Debug, Clone)]
 #[command(author, version, about)]
@@ -50,7 +51,7 @@ fn main() {
     let (top_level_nodes, ast_arena, scope_stack) =
         hfs::StackAnalyzer::resolve(unresolved_top_level_nodes, unresolved_ast_arena, file_name);
 
-    let _ = hfs::CfgAnalyzer::lower_to_mir(top_level_nodes, ast_arena);
+    let (top_level_insts, ir_arena) = hfs::CfgAnalyzer::lower_to_mir(top_level_nodes, ast_arena);
     // interpreter doesnt even need the top level nodes lol
-    // hfs::Interpreter::interpret(&ast_arena, &scope_stack);
+    hfs::Interpreter::interpret(ir_arena, top_level_insts, scope_stack);
 }

@@ -1,6 +1,13 @@
 use std::collections::HashMap;
 
-use crate::hfs::{ast::*, scope_stack::*, token::*, types::*};
+use crate::hfs::{
+    ast::*,
+    cfg_analyzer::*,
+    hfs_mir::*,
+    scope_stack::{self, *},
+    token::*,
+    types::*,
+};
 
 //---------------------------------------------------------------------------
 // Runtime values
@@ -24,27 +31,18 @@ impl RuntimeValue {
         }
     }
 }
-#[derive(PartialEq, Clone, Copy)]
-enum CtrlFlowState {
-    Normal,
-    Return,
-    Break,
-    Continue,
-}
 pub struct CallFrame {
-    func_id: FuncId,
-    locals: HashMap<VarId, RuntimeValue>,
-    flow_state: CtrlFlowState,
-    pub expr_values: HashMap<ExprId, RuntimeValue>,
+    func_id: IrFuncId,
+    inst_values: HashMap<InstId, RuntimeValue>,
 }
 
 //---------------------------------------------------------------------------
-pub struct Interpreter<'a> {
-    arena: &'a AstArena,
-    globals: HashMap<VarId, RuntimeValue>,
+pub struct Interpreter {
+    arena: IrArena,
+    globals: HashMap<IrVarId, RuntimeValue>,
     call_stack: Vec<CallFrame>,
 }
-impl<'a> Interpreter<'a> {
+impl Interpreter {
     // utils
     pub fn curr_call_frame(&self) -> &CallFrame {
         self.call_stack.last().expect("call stack shouldn't be empty")
@@ -53,371 +51,110 @@ impl<'a> Interpreter<'a> {
     pub fn curr_call_frame_mut(&mut self) -> &mut CallFrame {
         self.call_stack.last_mut().expect("call stack shouldn't be empty")
     }
-    pub fn curr_local_vars(&self) -> &HashMap<VarId, RuntimeValue> {
-        &self.call_stack.last().expect("call stack shouldn't be empty").locals
-    }
-    pub fn curr_local_vars_mut(&mut self) -> &mut HashMap<VarId, RuntimeValue> {
-        &mut self.call_stack.last_mut().expect("call stack shouldn't be empty").locals
-    }
 }
-
-impl<'a> Interpreter<'a> {
-    pub fn new(arena: &'a AstArena) -> Self {
+impl Interpreter {
+    pub fn new(arena: IrArena) -> Self {
         Self { arena, globals: HashMap::new(), call_stack: Vec::new() }
     }
 
-    pub fn interpret(arena: &AstArena, scope_stack: &ScopeStack) {
+    pub fn interpret(arena: IrArena, top_level_insts: Vec<CfgTopLevelId>, scope_stack: ScopeStack) {
         let mut interpreter = Interpreter::new(arena);
-        // create all our globals at the start of our program
-        for var_id in scope_stack.mangled_global_vars.values() {
-            let default_val = RuntimeValue::default(interpreter.arena.get_type_of_var(*var_id));
-            interpreter.globals.insert(*var_id, default_val);
+
+        for inst_id in top_level_insts {
+            match inst_id {
+                CfgTopLevelId::GlobalVarDecl(ir_var_id) => {
+                    let default_val = RuntimeValue::default(interpreter.arena.get_type_of_var(ir_var_id));
+                    interpreter.globals.insert(ir_var_id, default_val);
+                },
+                CfgTopLevelId::FunctionDecl(ir_func_id) => { /* do nothing, declarations dont matter for interpreting */ },
+            }
         }
+
         if let Some(main) = scope_stack.find_function("main") {
+            // get the CfgFunction version of main (not the old AST function)
+            let main = interpreter.arena.func_id_map[&main];
             interpreter.call_declared_function(main, Vec::new());
         } else {
-            panic!("this file has no 'main()' entrypoint, so it cannot be interpreted (consider compiling it instead)")
+            panic!("this file has no 'main()' entrypoint, so it cannot be interpreted")
         }
     }
 
-    fn interpret_var_decl(&mut self, var_id: VarId) {
-        let call_frame = self.call_stack.last_mut().expect("[internal error] invalid call stack");
-        call_frame.locals.insert(var_id, RuntimeValue::default(self.arena.get_type_of_var(var_id)));
-    }
-
-    fn call_declared_function(&mut self, func_id: FuncId, tuple_args: Vec<RuntimeValue>) -> Vec<RuntimeValue> {
-        self.call_stack.push(CallFrame {
-            func_id,
-            locals: HashMap::new(),
-            flow_state: CtrlFlowState::Normal,
-            expr_values: HashMap::new(),
-        });
-
+    fn call_declared_function(&mut self, func_id: IrFuncId, tuple_args: Vec<RuntimeValue>) -> Vec<RuntimeValue> {
+        self.call_stack.push(CallFrame { func_id, inst_values: HashMap::new() });
         let func = self.arena.get_func(func_id);
-        self.interpret_stmt(func.body);
-
+        self.interpret_block(func.entry_block);
+        /* example of MIR
+        fn func: (i32 i32 i32) -> (i32 i32) {
+            start_function:
+                branch 1 < 2.0, if_body_0, else_if_cond_0;
+                if_body_0:
+                    jump if_end_0;
+                else_if_cond_0:
+                    %0 = 1 + 3;
+                    %1 = %0 * 5;
+                    branch -420 < 5, else_if_body_0, else_if_cond_1;
+                    else_if_body_0:
+                        jump if_end_0;
+                else_if_cond_1:
+                    stack becomes:
+                    branch -3 < 5, else_if_body_1, else_body_0;
+                    else_if_body_1:
+                        jump if_end_0;
+                else_body_0:
+                    jump if_end_0;
+                if_end_0:
+                    jump end_function;
+            end_function:
+                return;
+        }
+        fn main: () -> () {
+            call func, (1 2 3);
+        }
+        */
         todo!()
-        // if we have nothing to return, we return an empty vector (will be iterated anyway)
-        // self.call_stack.pop().expect("pushed above").local_hfs_stack
     }
-
-    fn interpret_stmt(&mut self, stmt_id: StmtId) {
-        match self.arena.get_stmt(stmt_id) {
-            Statement::If { cond_stack_block: cond, body, else_stmt } => {
-                let RuntimeValue::Bool(if_cond) = self.interpret_expr(*cond) else {
-                    panic!("expected boolean value on stack for if statement condition")
-                };
-                if self.curr_call_frame().flow_state != CtrlFlowState::Normal {
-                    return;
-                }
-                if if_cond {
-                    self.interpret_stmt(*body);
-                    match self.curr_call_frame().flow_state {
-                        CtrlFlowState::Normal => {},
-                        CtrlFlowState::Return | CtrlFlowState::Break | CtrlFlowState::Continue => {
-                            return;
-                        },
-                    }
-                } else if let Some(else_stmt) = else_stmt {
-                    // TODO: this was from before the refactor
-                    // match else_stmt {
-                    //     ElseStmt::ElseIf(stmt_id) | ElseStmt::Else(stmt_id) => self.interpret_stmt(*stmt_id),
-                    // }
-                }
-            },
-            Statement::While { cond, body } => loop {
-                // TODO: decide the semantics of while loops
-                let RuntimeValue::Bool(while_cond) = self.interpret_expr(*cond) else {
-                    panic!("expected boolean value on stack for while loop condition")
-                };
-                if !while_cond {
-                    return;
-                }
-                self.interpret_stmt(*body);
-                match self.curr_call_frame().flow_state {
-                    CtrlFlowState::Return => return,
-                    CtrlFlowState::Break => {
-                        self.curr_call_frame_mut().flow_state = CtrlFlowState::Normal;
-                        break;
-                    },
-                    CtrlFlowState::Continue => {
-                        self.curr_call_frame_mut().flow_state = CtrlFlowState::Normal;
-                        continue;
-                    },
-                    CtrlFlowState::Normal => { /* do nothing */ },
-                }
-            },
-            Statement::StackBlock(expressions) => {
-                for expr_id in expressions {
-                    let val = self.interpret_expr(*expr_id);
-                    todo!("make stack merges actually do anything");
-                    // self.curr_call_frame_mut().local_hfs_stack.push(val);
-                }
-            },
-            Statement::BlockScope(top_level_nodes, scope_kind) => {
-                for &top_level_id in top_level_nodes {
-                    match top_level_id {
-                        TopLevelId::VariableDecl(var_id) => self.interpret_var_decl(var_id),
-                        TopLevelId::Statement(stmt_id) => self.interpret_stmt(stmt_id),
-                        TopLevelId::FunctionDecl(func_id) => { /* do nothing, function declarations are handled already */ },
-                    }
-                    match self.curr_call_frame().flow_state {
-                        CtrlFlowState::Normal => {}, // funny code lol
-                        CtrlFlowState::Return | CtrlFlowState::Break | CtrlFlowState::Continue => {
-                            return;
-                        },
-                    }
-                }
-            },
-            Statement::Return => self.curr_call_frame_mut().flow_state = CtrlFlowState::Return,
-            Statement::Break => self.curr_call_frame_mut().flow_state = CtrlFlowState::Break,
-            Statement::Continue => self.curr_call_frame_mut().flow_state = CtrlFlowState::Continue,
-            Statement::Assignment { value, identifier, is_move } => {
-                let new_value = self.interpret_expr(*value);
-                match identifier {
-                    Identifier::GlobalVar(var_id) => self.globals.insert(*var_id, new_value),
-                    Identifier::Variable(var_id) => self.curr_local_vars_mut().insert(*var_id, new_value),
-                    Identifier::Function(func_id) => {
-                        panic!("[internal error] functions aren't assignable (fix StackAnalyzer)")
-                    },
-                };
-            },
-            Statement::Empty => {},
-            Statement::FunctionCall { args, func_id: identifier, is_move } => {
-                let args: Vec<RuntimeValue> = args.iter().map(|arg| self.interpret_expr(arg.clone())).collect();
-                let return_values = self.call_declared_function(*identifier, args.clone());
-                for val in return_values {
-                    // merge returned tuples into the caller's stack
-                    todo!("make stack merges actually do anything");
-                    // self.curr_call_frame_mut().local_hfs_stack.push(val);
-                }
-            },
-            Statement::ElseIf { cond_stack_block: cond, body, else_stmt } => todo!(),
-            Statement::Else(stmt_id) => todo!(),
+    pub fn interpret_block(&mut self, block_id: BlockId) {
+        let block = self.arena.get_block(block_id);
+        for inst_ir in &block.instructions {}
+    }
+    pub fn interpret_instruction(&mut self, inst_id: InstId) {
+        // TODO: add a cache to check if this InstId has been interpreted before
+        // and just return the computed value if yes
+        match self.arena.get_instruction(inst_id) {
+            Instruction::Parameter { source_info, index, type_id } => todo!(),
+            Instruction::FunctionCall { source_info, args, func_id, is_move } => todo!(),
+            Instruction::Phi { source_info, incoming } => todo!(),
+            Instruction::StackKeyword { source_info, name, args } => todo!(),
+            Instruction::Tuple { source_info, instructions } => todo!(),
+            Instruction::Operation(source_info, cfg_operation) => self.interpret_operation(*cfg_operation),
+            Instruction::Literal(source_info, literal) => todo!(),
+            Instruction::LoadElement { source_info, index, tuple } => todo!(),
         }
     }
-
-    fn interpret_expr(&mut self, expr_id: ExprId) -> RuntimeValue {
-        // FIXME: we need to use ExprProvenance here:
-        // we need to first check if a runtime value already exists, this commonly happens anyways
-        // by ExprId that are used multiple times (which is quite common)
-        // and we also should convert the compile time values to runtimevalues directly.
-        // dont forget to add a "get or generate" logic at the start here
-        match self.arena.get_expr(expr_id) {
-            Expression::Operation(op) => self.interpret_operation(op),
-            Expression::Identifier(id) => self.interpret_identifier(id),
-            Expression::Literal(lit) => self.interpret_literal(lit),
-            Expression::Tuple { expressions } => {
-                let mut tuple_values = Vec::<RuntimeValue>::new();
-                for &expr_id in expressions {
-                    tuple_values.push(self.interpret_expr(expr_id))
-                }
-                RuntimeValue::Tuple(tuple_values)
-            },
-            Expression::Parameter { index, type_id } => {
-                // Parameters should be pre-populated in the call frame when the function is called
-                // This node shouldn't be encountered during interpretation if resolved properly
-                panic!("Parameter nodes should be replaced by semantic analyzer")
-            },
-            Expression::StackKeyword { .. } => todo!(),
+    pub fn interpret_terminator(&mut self, term_id: TermInstId) {
+        match self.arena.get_terminator_instruction(term_id) {
+            TerminatorInst::Return(source_info, inst_id) => todo!(),
+            TerminatorInst::Branch { source_info, cond, true_block, false_block } => todo!(),
+            TerminatorInst::Jump(source_info, block_id) => todo!(),
+            TerminatorInst::Unreachable => todo!(),
         }
     }
-
-    fn interpret_identifier(&mut self, id: &Identifier) -> RuntimeValue {
-        match id {
-            // pushing an identifier to the hfs_stack just copies its value
-            Identifier::GlobalVar(var_id) => self.globals.get(var_id).expect("solved in stack analyzer.").clone(),
-            Identifier::Variable(var_id) => self.curr_local_vars().get(var_id).expect("solved in stack analyzer").clone(),
-            Identifier::Function(func_id) => {
-                panic!("function identifiers shouldn't be interpreted")
-            },
-        }
-    }
-
-    fn interpret_literal(&mut self, lit: &Literal) -> RuntimeValue {
-        match lit {
-            Literal::Integer(i) => RuntimeValue::Integer(*i),
-            Literal::Float(f) => RuntimeValue::Float(*f),
-            Literal::String(s) => RuntimeValue::String(s.to_string()),
-            Literal::Bool(b) => RuntimeValue::Bool(*b),
-        }
-    }
-
-    fn interpret_operation(&mut self, op: &Operation) -> RuntimeValue {
+    pub fn interpret_operation(&mut self, op: CfgOperation) {
         match op {
-            Operation::Add(l, r) => {
-                let left = self.interpret_expr(*l);
-                let right = self.interpret_expr(*r);
-                match (left, right) {
-                    (RuntimeValue::Integer(a), RuntimeValue::Integer(b)) => RuntimeValue::Integer(a + b),
-                    (RuntimeValue::Float(a), RuntimeValue::Float(b)) => RuntimeValue::Float(a + b),
-                    (RuntimeValue::Integer(a), RuntimeValue::Float(b)) => RuntimeValue::Float(a as f32 + b),
-                    (RuntimeValue::Float(a), RuntimeValue::Integer(b)) => RuntimeValue::Float(a + b as f32),
-                    (RuntimeValue::String(a), RuntimeValue::String(b)) => RuntimeValue::String(format!("{}{}", a, b)),
-                    _ => panic!("invalid operands for addition"),
-                }
-            },
-            Operation::Sub(l, r) => {
-                let left = self.interpret_expr(*l);
-                let right = self.interpret_expr(*r);
-                match (left, right) {
-                    (RuntimeValue::Integer(a), RuntimeValue::Integer(b)) => RuntimeValue::Integer(a - b),
-                    (RuntimeValue::Float(a), RuntimeValue::Float(b)) => RuntimeValue::Float(a - b),
-                    (RuntimeValue::Integer(a), RuntimeValue::Float(b)) => RuntimeValue::Float(a as f32 - b),
-                    (RuntimeValue::Float(a), RuntimeValue::Integer(b)) => RuntimeValue::Float(a - b as f32),
-                    _ => panic!("invalid operands for subtraction"),
-                }
-            },
-            Operation::Mul(l, r) => {
-                let left = self.interpret_expr(*l);
-                let right = self.interpret_expr(*r);
-                match (left, right) {
-                    (RuntimeValue::Integer(a), RuntimeValue::Integer(b)) => RuntimeValue::Integer(a * b),
-                    (RuntimeValue::Float(a), RuntimeValue::Float(b)) => RuntimeValue::Float(a * b),
-                    (RuntimeValue::Integer(a), RuntimeValue::Float(b)) => RuntimeValue::Float(a as f32 * b),
-                    (RuntimeValue::Float(a), RuntimeValue::Integer(b)) => RuntimeValue::Float(a * b as f32),
-                    _ => panic!("invalid operands for multiplication"),
-                }
-            },
-            Operation::Div(l, r) => {
-                let left = self.interpret_expr(*l);
-                let right = self.interpret_expr(*r);
-                match (left, right) {
-                    (RuntimeValue::Integer(a), RuntimeValue::Integer(b)) => {
-                        if b == 0 {
-                            panic!("division by zero");
-                        }
-                        RuntimeValue::Integer(a / b)
-                    },
-                    (RuntimeValue::Float(a), RuntimeValue::Float(b)) => {
-                        if b == 0.0 {
-                            panic!("division by zero");
-                        }
-                        RuntimeValue::Float(a / b)
-                    },
-                    (RuntimeValue::Integer(a), RuntimeValue::Float(b)) => {
-                        if b == 0.0 {
-                            panic!("division by zero");
-                        }
-                        RuntimeValue::Float(a as f32 / b)
-                    },
-                    (RuntimeValue::Float(a), RuntimeValue::Integer(b)) => {
-                        if b == 0 {
-                            panic!("division by zero");
-                        }
-                        RuntimeValue::Float(a / b as f32)
-                    },
-                    _ => panic!("invalid operands for division"),
-                }
-            },
-            Operation::Mod(l, r) => {
-                let left = self.interpret_expr(*l);
-                let right = self.interpret_expr(*r);
-                match (left, right) {
-                    (RuntimeValue::Integer(a), RuntimeValue::Integer(b)) => {
-                        if b == 0 {
-                            panic!("modulo by zero");
-                        }
-                        RuntimeValue::Integer(a % b)
-                    },
-                    (RuntimeValue::Float(a), RuntimeValue::Float(b)) => {
-                        if b == 0.0 {
-                            panic!("modulo by zero");
-                        }
-                        RuntimeValue::Float(a % b)
-                    },
-                    (RuntimeValue::Integer(a), RuntimeValue::Float(b)) => {
-                        if b == 0.0 {
-                            panic!("modulo by zero");
-                        }
-                        RuntimeValue::Float(a as f32 % b)
-                    },
-                    (RuntimeValue::Float(a), RuntimeValue::Integer(b)) => {
-                        if b == 0 {
-                            panic!("modulo by zero")
-                        }
-                        RuntimeValue::Float(a % b as f32)
-                    },
-                    _ => panic!("invalid operands for modulo"),
-                }
-            },
-            Operation::Equal(l, r) => {
-                let left = self.interpret_expr(*l);
-                let right = self.interpret_expr(*r);
-                RuntimeValue::Bool(left == right)
-            },
-            Operation::NotEqual(l, r) => {
-                let left = self.interpret_expr(*l);
-                let right = self.interpret_expr(*r);
-                RuntimeValue::Bool(left != right)
-            },
-            Operation::Less(l, r) => {
-                let left = self.interpret_expr(*l);
-                let right = self.interpret_expr(*r);
-                match (left, right) {
-                    (RuntimeValue::Integer(a), RuntimeValue::Integer(b)) => RuntimeValue::Bool(a < b),
-                    (RuntimeValue::Float(a), RuntimeValue::Float(b)) => RuntimeValue::Bool(a < b),
-                    (RuntimeValue::Integer(a), RuntimeValue::Float(b)) => RuntimeValue::Bool((a as f32) < b),
-                    (RuntimeValue::Float(a), RuntimeValue::Integer(b)) => RuntimeValue::Bool(a < (b as f32)),
-                    _ => panic!("invalid operands for less than comparison"),
-                }
-            },
-            Operation::LessEqual(l, r) => {
-                let left = self.interpret_expr(*l);
-                let right = self.interpret_expr(*r);
-                match (left, right) {
-                    (RuntimeValue::Integer(a), RuntimeValue::Integer(b)) => RuntimeValue::Bool(a <= b),
-                    (RuntimeValue::Float(a), RuntimeValue::Float(b)) => RuntimeValue::Bool(a <= b),
-                    (RuntimeValue::Integer(a), RuntimeValue::Float(b)) => RuntimeValue::Bool((a as f32) <= b),
-                    (RuntimeValue::Float(a), RuntimeValue::Integer(b)) => RuntimeValue::Bool(a <= (b as f32)),
-                    _ => panic!("invalid operands for '<=' comparison"),
-                }
-            },
-            Operation::Greater(l, r) => {
-                let left = self.interpret_expr(*l);
-                let right = self.interpret_expr(*r);
-                match (left, right) {
-                    (RuntimeValue::Integer(a), RuntimeValue::Integer(b)) => RuntimeValue::Bool(a > b),
-                    (RuntimeValue::Float(a), RuntimeValue::Float(b)) => RuntimeValue::Bool(a > b),
-                    (RuntimeValue::Integer(a), RuntimeValue::Float(b)) => RuntimeValue::Bool((a as f32) > b),
-                    (RuntimeValue::Float(a), RuntimeValue::Integer(b)) => RuntimeValue::Bool(a > (b as f32)),
-                    _ => panic!("invalid operands for greater than comparison"),
-                }
-            },
-            Operation::GreaterEqual(l, r) => {
-                let left = self.interpret_expr(*l);
-                let right = self.interpret_expr(*r);
-                match (left, right) {
-                    (RuntimeValue::Integer(a), RuntimeValue::Integer(b)) => RuntimeValue::Bool(a >= b),
-                    (RuntimeValue::Float(a), RuntimeValue::Float(b)) => RuntimeValue::Bool(a >= b),
-                    (RuntimeValue::Integer(a), RuntimeValue::Float(b)) => RuntimeValue::Bool((a as f32) >= b),
-                    (RuntimeValue::Float(a), RuntimeValue::Integer(b)) => RuntimeValue::Bool(a >= (b as f32)),
-                    _ => panic!("invalid operands for greater than or equal comparison"),
-                }
-            },
-            Operation::Or(l, r) => {
-                let left = self.interpret_expr(*l);
-                let right = self.interpret_expr(*r);
-                match (left, right) {
-                    (RuntimeValue::Bool(a), RuntimeValue::Bool(b)) => RuntimeValue::Bool(a || b),
-                    _ => panic!("invalid operands for logical OR (expected booleans)"),
-                }
-            },
-            Operation::And(l, r) => {
-                let left = self.interpret_expr(*l);
-                let right = self.interpret_expr(*r);
-                match (left, right) {
-                    (RuntimeValue::Bool(a), RuntimeValue::Bool(b)) => RuntimeValue::Bool(a && b),
-                    _ => panic!("invalid operands for logical AND (expected booleans)"),
-                }
-            },
-            Operation::Not(expr) => {
-                let value = self.interpret_expr(*expr);
-                match value {
-                    RuntimeValue::Bool(b) => RuntimeValue::Bool(!b),
-                    _ => panic!("invalid operand for logical NOT (expected boolean)"),
-                }
-            },
+            CfgOperation::Add(inst_id, inst_id1) => todo!(),
+            CfgOperation::Sub(inst_id, inst_id1) => todo!(),
+            CfgOperation::Mul(inst_id, inst_id1) => todo!(),
+            CfgOperation::Div(inst_id, inst_id1) => todo!(),
+            CfgOperation::Mod(inst_id, inst_id1) => todo!(),
+            CfgOperation::Equal(inst_id, inst_id1) => todo!(),
+            CfgOperation::NotEqual(inst_id, inst_id1) => todo!(),
+            CfgOperation::Less(inst_id, inst_id1) => todo!(),
+            CfgOperation::LessEqual(inst_id, inst_id1) => todo!(),
+            CfgOperation::Greater(inst_id, inst_id1) => todo!(),
+            CfgOperation::GreaterEqual(inst_id, inst_id1) => todo!(),
+            CfgOperation::Or(inst_id, inst_id1) => todo!(),
+            CfgOperation::And(inst_id, inst_id1) => todo!(),
+            CfgOperation::Not(inst_id) => todo!(),
         }
     }
 }

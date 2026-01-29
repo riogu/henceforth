@@ -150,14 +150,6 @@ impl StackAnalyzer {
     }
 
     fn resolve_func_decl(&mut self, id: UnresolvedFuncId) -> FuncId {
-        // FIXME: keep track of the current function declaration
-        // and distribute the parameter_exprs to people that utilize the stack
-        // that came from the function arguments
-        // later map these ExprId to runtime values when we call the function
-        // and keep remapping those values every call
-        // so they can be used as keys to runtime values later because the body
-        // holds these exprids and requests the runtime value using them
-        // they work as unique identifiers for the parameters basically
         let token = self.unresolved_arena.get_unresolved_func_token(id);
         let (name, param_type, return_type, unresolved_body, parameter_exprs) = {
             let unresolved_func = &self.unresolved_arena.get_unresolved_func(id);
@@ -198,13 +190,6 @@ impl StackAnalyzer {
         let func_id = self.push_function_and_scope_and_alloc(&name, func, token);
         let body = self.resolve_stmt(unresolved_body);
         //------------------------------------------------------------
-        // TODO: when you add the CFG you want every block to end at the same "end" block which is
-        // just the end of the function unless its a return statement/break, etc (llvm has ret
-        // instructions). that means its up to YOU in the CFG pass to validate the stack sizes and
-        // while you are at it, maybe the types too. so you should use validate_return_stack()
-        // yourself whenever you find out that we are "leaving" a function.
-        // one REALLY good approach is to have every block always go to our "end" block. llvm will
-        // likely optimize that away and simplifies stuff.
         self.arena.validate_return_stack(self.scope_resolution_stack.get_curr_func_return_type());
         self.scope_resolution_stack.pop();
         self.arena.pop_entire_hfs_stack(); // context should be reset after each function!
@@ -237,8 +222,6 @@ impl StackAnalyzer {
                 let body = self.resolve_stmt(body);
                 let if_depth_after = self.arena.hfs_stack.len();
 
-                self.arena.hfs_stack.push(cond);
-
                 let else_stmt = match else_stmt {
                     Some(else_stmt_id) => {
                         match self.unresolved_arena.get_unresolved_stmt(else_stmt_id) {
@@ -260,6 +243,7 @@ impl StackAnalyzer {
                                 Some(self.arena.alloc_stmt(Statement::Else(else_body), token.clone()))
                             },
                             UnresolvedStatement::ElseIf { cond, body, else_stmt } => {
+                                // Reset stack to pre-if state for elseif branch
                                 self.arena.hfs_stack = stack_before_branches;
                                 Some(self.resolve_stmt(else_stmt_id))
                             },

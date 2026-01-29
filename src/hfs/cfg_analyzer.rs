@@ -30,7 +30,7 @@ pub struct CfgContext {
 }
 
 #[derive(Debug, Default)]
-pub struct InstArena {
+pub struct IrArena {
     // TODO: we also need to pass metadata into this new IR
     // which includes expression provenance and etc (for optimizations and annotations)
     // we should make an annotation system and convert into it
@@ -41,11 +41,8 @@ pub struct InstArena {
     pub blocks: Vec<BasicBlock>,
     pub types: Vec<Type>,
 
-    func_id_map: HashMap<FuncId, IrFuncId>,
+    pub func_id_map: HashMap<FuncId, IrFuncId>,
     var_id_map: HashMap<VarId, IrVarId>,
-
-    analyzed_stmts: HashSet<StmtId>,
-    analyzed_exprs: HashSet<ExprId>,
 
     pub type_source_infos: Vec<SourceInfo>,
     type_cache: HashMap<Type, TypeId>,
@@ -63,23 +60,9 @@ pub struct InstArena {
     sealed_blocks: HashSet<BlockId>,
     // Placeholder phis waiting for block to be sealed
     incomplete_phis: HashMap<BlockId, HashMap<IrVarId, InstId>>,
-    /*
-        TODO:
-        The stack is just Vec<InstId> - a list of values. At a join point, you merge each slot independently:
-        if_body ends with stack: [%1, %2, %3]
-        else_body ends with stack: [%4, %5, %6]
-
-        if_end gets:
-            stack[0] = phi [(if_body, %1), (else_body, %4)]
-            stack[1] = phi [(if_body, %2), (else_body, %5)]
-            stack[2] = phi [(if_body, %3), (else_body, %6)]
-        No tuples involved in the IR. Just track HashMap<BlockId, Vec<InstId>> for the stack state when leaving each block.
-        The tuples only matter later when you emit LLVM IR and need to actually pass multiple return values or whatever.
-        That's a codegen concern, not an SSA construction concern.
-    */
 }
 
-impl InstArena {
+impl IrArena {
     pub fn new() -> Self {
         let mut arena = Self::default();
         arena.alloc_type_uncached(Type::Int, SourceInfo::new(0, 0, 0));
@@ -161,7 +144,7 @@ impl InstArena {
     }
 }
 
-impl InstArena {
+impl IrArena {
     pub fn pop_entire_hfs_stack(&mut self) -> Vec<InstId> {
         let temp = self.hfs_stack.clone();
         self.hfs_stack.clear();
@@ -237,22 +220,22 @@ impl InstArena {
 #[derive(Debug)]
 pub struct CfgAnalyzer {
     pub ast_arena: AstArena,
-    pub arena: InstArena,
+    pub arena: IrArena,
     // similar to StackAnalyzer, pretty much that
 }
 
 impl CfgAnalyzer {
     pub fn new(ast_arena: AstArena) -> Self {
-        let mut arena = InstArena::new();
+        let mut arena = IrArena::new();
         arena.types.extend_from_slice(&ast_arena.types[PRIMITIVE_TYPE_COUNT..]);
         Self { ast_arena, arena }
     }
 
-    pub fn lower_to_mir(top_level: Vec<TopLevelId>, ast_arena: AstArena) -> InstArena {
+    pub fn lower_to_mir(top_level: Vec<TopLevelId>, ast_arena: AstArena) -> (Vec<CfgTopLevelId>, IrArena) {
         let mut cfg_analyzer = CfgAnalyzer::new(ast_arena);
         let analyzed_top_level = cfg_analyzer.lower_top_level(top_level);
         // cfg_analyzer.print_hfs_mir(analyzed_top_level);
-        cfg_analyzer.arena
+        (analyzed_top_level, cfg_analyzer.arena)
     }
 
     fn lower_top_level(&mut self, top_level: Vec<TopLevelId>) -> Vec<CfgTopLevelId> {
@@ -319,7 +302,6 @@ impl CfgAnalyzer {
         self.arena.alloc_function(cfg_function, id)
     }
     fn lower_stmt(&mut self, id: StmtId, curr_block_context: BlockContext) {
-        self.arena.analyzed_stmts.insert(id);
         let source_info = self.ast_arena.get_stmt_token(id).source_info.clone();
         match self.ast_arena.get_stmt(id).clone() {
             Statement::Else(stmt_id) => self.lower_stmt(stmt_id, curr_block_context),
@@ -332,12 +314,8 @@ impl CfgAnalyzer {
                 // basically, this code expects dead code elimination to have occurred BEFORE
                 // FIXME: implement a small dead code elimination on the AST before cfg_analyzer
 
-                // TODO: add the missing stack merging code!
-                // without this, the code wont work
-
                 /* example of CFG blocks that cover many of the cases of the code below:
                   start_function:
-
                       branch 1 < 2.0, if_body_0, else_if_cond_0;
                       if_body_0:
                           jump if_end_0;
@@ -376,10 +354,9 @@ impl CfgAnalyzer {
 
                 self.lower_stmt(body, curr_block_context.clone()); // pay attention to this call (we manage state around it)
 
-                let if_stack_change = self.arena.hfs_stack[if_depth_before..].to_vec();
-                // FIXME: this wont work if the stack becomes smaller ^^^^
+                let if_depth_after = self.arena.hfs_stack.len();
+                let if_stack_change = self.arena.hfs_stack[if_depth_after - if_depth_before..].to_vec();
                 stack_changes.push((self.arena.cfg_context.curr_insert_block, if_stack_change.clone()));
-                // FIXME: verify that calls to self.arena.seal_block() are correctly placed
 
                 let if_end_block = if new_if_context {
                     self.arena.alloc_block("if_end")
@@ -710,7 +687,7 @@ impl CfgAnalyzer {
         self.arena.alloc_inst_for(Instruction::Operation(source_info, cfg_op), self.arena.cfg_context.curr_insert_block)
     }
 }
-impl InstArena {
+impl IrArena {
     // ---------------------------------------------------------------------------------
     // Simple and Efficient Construction of Static Single Assignment Form (Braun et. al)
     // ---------------------------------------------------------------------------------

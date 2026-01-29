@@ -1,6 +1,6 @@
 use std::fmt::{Display, format};
 
-use crate::hfs::{InstArena, Literal, SourceInfo, ast::*};
+use crate::hfs::{IrArena, Literal, SourceInfo, ast::*};
 /*
 =================================================================================================
 Control Flow Graph IR Pass (HFS MIR - Medium-level IR)
@@ -92,7 +92,9 @@ pub enum Instruction {
     },
     Operation(SourceInfo, CfgOperation),
     Literal(SourceInfo, Literal),
-    // NOTE: this isnt used right now, it will only be used once we add memory operations
+    // NOTE: this isnt used right now, it will only be used once we add memory operations and
+    // actually use globals
+    // we dont really use globals much in the language
     // Store {
     //     source_info: SourceInfo,
     //     value: InstId,
@@ -141,16 +143,16 @@ pub enum CfgOperation {
 }
 
 // Debug printing trait and implementations
-fn get_repr_many<T: CfgPrintable>(items: &Vec<T>, arena: &InstArena, sep: &str) -> String {
+fn get_repr_many<T: CfgPrintable>(items: &Vec<T>, arena: &IrArena, sep: &str) -> String {
     items.iter().map(|item| item.get_repr(arena)).collect::<Vec<String>>().join(sep)
 }
 
 pub trait CfgPrintable {
-    fn get_repr(&self, arena: &InstArena) -> String;
+    fn get_repr(&self, arena: &IrArena) -> String;
 }
 
 impl CfgPrintable for Type {
-    fn get_repr(&self, arena: &InstArena) -> String {
+    fn get_repr(&self, arena: &IrArena) -> String {
         match self {
             Type::Int => String::from("i32"),
             Type::String => String::from("str"),
@@ -168,7 +170,7 @@ impl CfgPrintable for Type {
 }
 
 impl CfgPrintable for CfgFunction {
-    fn get_repr(&self, arena: &InstArena) -> String {
+    fn get_repr(&self, arena: &IrArena) -> String {
         let params = arena.get_type(self.param_type).clone();
         let returns = arena.get_type(self.return_type).clone();
         // let blocks_repr = self
@@ -184,14 +186,14 @@ impl CfgPrintable for CfgFunction {
 }
 
 impl CfgPrintable for VarDeclaration {
-    fn get_repr(&self, arena: &InstArena) -> String {
+    fn get_repr(&self, arena: &IrArena) -> String {
         let typ = arena.get_type(self.hfs_type);
         format!("let {}: {};", self.name, typ.get_repr(arena))
     }
 }
 
 impl CfgPrintable for CfgOperation {
-    fn get_repr(&self, arena: &InstArena) -> String {
+    fn get_repr(&self, arena: &IrArena) -> String {
         match self {
             CfgOperation::Add(inst_id1, inst_id2) => format!(
                 "{} + {}",
@@ -264,7 +266,7 @@ impl CfgPrintable for CfgOperation {
 }
 
 impl CfgPrintable for TerminatorInst {
-    fn get_repr(&self, arena: &InstArena) -> String {
+    fn get_repr(&self, arena: &IrArena) -> String {
         match self {
             TerminatorInst::Return(source_info, inst_id) => {
                 let inst = arena.get_instruction(*inst_id);
@@ -293,7 +295,7 @@ impl CfgPrintable for TerminatorInst {
 }
 
 impl CfgPrintable for Instruction {
-    fn get_repr(&self, arena: &InstArena) -> String {
+    fn get_repr(&self, arena: &IrArena) -> String {
         match self {
             Instruction::Parameter { source_info, index, type_id: ty } => todo!(),
             // Instruction::Store { source_info, value, var_id: identifier, is_move } => {
@@ -341,7 +343,7 @@ impl CfgPrintable for Instruction {
 }
 
 impl CfgPrintable for BasicBlock {
-    fn get_repr(&self, arena: &InstArena) -> String {
+    fn get_repr(&self, arena: &IrArena) -> String {
         // let non_term_inst_repr = get_repr_many(&self.instructions, arena, "\n");
         // let terminator_repr = self.terminator.get_repr(arena);
         // format!("{}\n{}", non_term_inst_repr, terminator_repr)

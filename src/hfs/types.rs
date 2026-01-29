@@ -1,4 +1,4 @@
-use crate::hfs::{CfgOperation, InstArena, InstId, Instruction, IrFuncId, IrVarId, ast::*, token::*};
+use crate::hfs::{CfgOperation, IrArena, InstId, Instruction, IrFuncId, IrVarId, ast::*, token::*};
 
 pub const PRIMITIVE_TYPE_COUNT: usize = 4;
 
@@ -93,7 +93,7 @@ impl AstArena {
     }
 }
 
-impl InstArena {
+impl IrArena {
     // Convenience methods for common types
     pub fn int_type(&self) -> TypeId {
         TypeId(0)

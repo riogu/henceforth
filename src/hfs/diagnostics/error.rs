@@ -20,6 +20,7 @@ pub trait CompileError: Display + Debug {
 #[derive(Debug)]
 pub enum LexerError {
     UnexpectedChar { path: PathBuf, source_info: SourceInfo },
+    UnexpectedEof { path: PathBuf, source_info: SourceInfo },
 }
 
 pub fn number_length(n: usize) -> usize {
@@ -31,12 +32,24 @@ impl CompileError for LexerError {
         match self {
             LexerError::UnexpectedChar { path, .. } =>
                 format!("{} {}", "error:".red().bold(), "unexpected character".bold()).into(),
+            LexerError::UnexpectedEof { path, .. } => format!("{} {}", "error:".red().bold(), "unexpected EOF".bold()).into(),
         }
     }
 
     fn location(&self) -> ColoredString {
         match self {
             LexerError::UnexpectedChar { path, source_info } => {
+                let colored_string = format!(
+                    " {} {}:{}:{}",
+                    "-->".blue(),
+                    path.to_str().unwrap(),
+                    source_info.line_number,
+                    source_info.line_offset
+                )
+                .into();
+                colored_string
+            },
+            LexerError::UnexpectedEof { path, source_info } => {
                 let colored_string = format!(
                     " {} {}:{}:{}",
                     "-->".blue(),
@@ -62,6 +75,28 @@ impl CompileError for LexerError {
 
                 let mut error_pointer = " ".repeat(source_info.line_offset - 1);
                 error_pointer.push_str("^ unexpected character");
+                return Ok(ColoredString::from(format!(
+                    "{} {}\n{} {} {}\n{} {} {}",
+                    " ".repeat(number_length(source_info.line_number)),
+                    "|".blue().bold(),
+                    source_info.line_number.to_string().blue().bold(),
+                    "|".blue().bold(),
+                    line,
+                    " ".repeat(number_length(source_info.line_number)),
+                    "|".blue().bold(),
+                    error_pointer.red().bold()
+                )));
+            },
+            LexerError::UnexpectedEof { path, source_info } => {
+                let source = fs::read_to_string(path).map_err(|e| format!("Could not read source file: {}", e))?;
+
+                let line = source
+                    .lines()
+                    .nth(source_info.line_number - 1)
+                    .ok_or_else(|| format!("Line {} not found in file", source_info.line_number))?;
+
+                let mut error_pointer = " ".repeat(source_info.line_offset - 1);
+                error_pointer.push_str("^ unexpected EOF");
                 return Ok(ColoredString::from(format!(
                     "{} {}\n{} {} {}\n{} {} {}",
                     " ".repeat(number_length(source_info.line_number)),

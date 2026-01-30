@@ -46,6 +46,7 @@ impl Lexer {
                         while let Some(c) =
                             chars_iter.next_if(|c| ('a'..='z').contains(c) || ('A'..='Z').contains(c) || c == &'_')
                         {
+                            line_offset += 1;
                             lit.push(c);
                         }
                         if VALID_STACK_KEYWORDS.contains(&lit.as_str()) {
@@ -159,9 +160,13 @@ impl Lexer {
                                 break;
                             } else {
                                 if let Some(c) = chars_iter.next() {
+                                    line_offset += 1;
                                     lit.push(c);
                                 } else {
-                                    panic!("unexpected eof")
+                                    return Err(Box::new(LexerError::UnexpectedEof {
+                                        path: file.path.clone(),
+                                        source_info: SourceInfo::new(line_number + 1, line_offset + 1, 1),
+                                    }));
                                 }
                             }
                         }
@@ -170,6 +175,7 @@ impl Lexer {
                     '0'..='9' => {
                         let mut lit = char.to_string();
                         while let Some(c) = chars_iter.next_if(|c| ('0'..='9').contains(c) || c == &'.') {
+                            line_offset += 1;
                             lit.push(c);
                         }
                         // funny use of result types
@@ -190,6 +196,7 @@ impl Lexer {
                         while let Some(c) = chars_iter.next_if(|c| {
                             ('a'..='z').contains(c) || ('A'..='Z').contains(c) || ('0'..='9').contains(c) || c == &'_'
                         }) {
+                            line_offset += 1;
                             lit.push(c);
                         }
                         match lit.as_str() {

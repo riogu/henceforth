@@ -5,6 +5,16 @@ pub enum Literal {
     String(String),
     Bool(bool),
 }
+impl Literal {
+    fn get_width(&self) -> usize {
+        match self {
+            Literal::Integer(int) => int.to_string().len(),
+            Literal::Float(float) => float.to_string().len(),
+            Literal::String(string) => string.len(),
+            Literal::Bool(bool) => bool.to_string().len(),
+        }
+    }
+}
 
 impl From<i32> for Literal {
     fn from(value: i32) -> Self {
@@ -189,15 +199,15 @@ impl fmt::Display for TokenKind {
 
 #[derive(Debug, Clone, PartialEq, Hash, Eq, Default)]
 pub struct SourceInfo {
-    line_number: usize,
-    line_offset: usize,
-    token_width: usize,
+    pub line_number: usize,
+    pub line_offset: usize,
+    pub token_width: usize,
     // line_string: &'a str,
 }
 
 impl SourceInfo {
     pub fn new(line_number: usize, line_offset: usize, token_width: usize) -> Self {
-        Self { line_number, line_offset, token_width}
+        Self { line_number, line_offset, token_width }
     }
 }
 
@@ -340,6 +350,51 @@ impl TokenKind {
             | TokenKind::And
             | TokenKind::Or => true,
             _ => false,
+        }
+    }
+
+    pub fn get_width(&self) -> usize {
+        match self {
+            TokenKind::Literal(literal) => literal.get_width(),
+            TokenKind::Identifier(str) => str.len(),
+            TokenKind::StackKeyword(str) => str.len() + 1,
+            TokenKind::Float | TokenKind::Int | TokenKind::DotDotDot | TokenKind::Let => 3,
+            TokenKind::LessEqual
+            | TokenKind::GreaterEqual
+            | TokenKind::Arrow
+            | TokenKind::CopyAssign
+            | TokenKind::MoveAssign
+            | TokenKind::CopyCall
+            | TokenKind::MoveCall
+            | TokenKind::NotEqual
+            | TokenKind::Fn
+            | TokenKind::If
+            | TokenKind::Or
+            | TokenKind::Equal
+            | TokenKind::And => 2,
+            TokenKind::Bool | TokenKind::Else | TokenKind::Elif => 4,
+            TokenKind::While | TokenKind::Break => 5,
+            TokenKind::Continue => 8,
+            TokenKind::Return | TokenKind::String => 6,
+            TokenKind::Plus
+            | TokenKind::Minus
+            | TokenKind::Star
+            | TokenKind::Slash
+            | TokenKind::Percent
+            | TokenKind::Greater
+            | TokenKind::Less
+            | TokenKind::LeftParen
+            | TokenKind::RightParen
+            | TokenKind::LeftBrace
+            | TokenKind::RightBrace
+            | TokenKind::LeftBracket
+            | TokenKind::RightBracket
+            | TokenKind::Colon
+            | TokenKind::Not
+            | TokenKind::At
+            | TokenKind::Semicolon
+            | TokenKind::Comma => 1,
+            TokenKind::Newline => 0,
         }
     }
 }

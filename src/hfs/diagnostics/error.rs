@@ -9,10 +9,10 @@ use std::{
 
 use colored::{ColoredString, Colorize};
 
-use crate::hfs::{File, SourceInfo};
+use crate::hfs::{File, SourceInfo, Token, VALID_STACK_KEYWORDS};
 
 pub trait CompileError: Display + Debug {
-    fn message(&self) -> String;
+    fn message(&self) -> (String, String);
     fn header(&self) -> ColoredString;
     fn location(&self) -> ColoredString;
     fn source_code(&self) -> Result<ColoredString, Box<dyn Error>>;
@@ -22,6 +22,7 @@ pub trait CompileError: Display + Debug {
 pub enum LexerErrorKind {
     UnexpectedChar,
     UnexpectedEof,
+    InvalidStackKeyword,
 }
 
 #[derive(Debug)]
@@ -32,8 +33,8 @@ pub struct LexerError {
 }
 
 impl LexerError {
-    pub fn new(kind: LexerErrorKind, path: PathBuf, source_info: SourceInfo) -> Self {
-        Self { kind, path, source_info }
+    pub fn new(kind: LexerErrorKind, path: PathBuf, source_info: SourceInfo) -> Result<Vec<Token>, Box<dyn CompileError>> {
+        Err(Box::new(Self { kind, path, source_info }))
     }
 }
 
@@ -43,12 +44,13 @@ pub fn number_length(n: usize) -> usize {
 
 impl CompileError for LexerError {
     fn header(&self) -> ColoredString {
-        format!("{} {}", "error:".red().bold(), self.message().bold()).into()
+        format!("{} {}", "error:".red().bold(), self.message().0.bold()).into()
     }
 
     fn location(&self) -> ColoredString {
         format!(
-            " {} {}:{}:{}",
+            "{}{} {}:{}:{}",
+            " ".repeat(number_length(self.source_info.line_number)),
             "-->".blue(),
             self.path.to_str().unwrap(),
             self.source_info.line_number,
@@ -66,7 +68,7 @@ impl CompileError for LexerError {
             .ok_or_else(|| format!("Line {} not found in file", self.source_info.line_number))?;
 
         let mut error_pointer = " ".repeat(self.source_info.line_offset - 1);
-        error_pointer.push_str(format!("{} unexpected character", "^".repeat(self.source_info.token_width)).as_str());
+        error_pointer.push_str(format!("{} {}", "^".repeat(self.source_info.token_width), self.message().1).as_str());
         return Ok(ColoredString::from(format!(
             "{} {}\n{} {} {}\n{} {} {}",
             " ".repeat(number_length(self.source_info.line_number)),
@@ -80,10 +82,17 @@ impl CompileError for LexerError {
         )));
     }
 
-    fn message(&self) -> String {
+    fn message(&self) -> (String, String) {
         match self.kind {
-            LexerErrorKind::UnexpectedChar => String::from("unexpected message"),
-            LexerErrorKind::UnexpectedEof => String::from("unexpected EOF"),
+            LexerErrorKind::UnexpectedChar => (String::from("unexpected character"), String::from("unexpected character")),
+            LexerErrorKind::UnexpectedEof => (String::from("unexpected EOF"), String::from("unexpected EOF")),
+            LexerErrorKind::InvalidStackKeyword => (
+                format!(
+                    "invalid stack keyword, the valid keywords are {}",
+                    VALID_STACK_KEYWORDS.iter().map(|kw| format!("`{}`", kw)).collect::<Vec<String>>().join(", ")
+                ),
+                String::new(),
+            ),
         }
     }
 }

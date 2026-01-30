@@ -54,7 +54,11 @@ impl Lexer {
                         } else if lit.as_str() == "@" {
                             TokenKind::At
                         } else {
-                            panic!("invalid stack keyword")
+                            return LexerError::new(
+                                LexerErrorKind::InvalidStackKeyword,
+                                file.path.clone(),
+                                SourceInfo::new(line_number + 1, line_offset - (lit.len() - 1), lit.len()),
+                            );
                         }
                     },
                     '+' => TokenKind::Plus,
@@ -64,18 +68,18 @@ impl Lexer {
                             if let Some(_) = chars_iter.next_if_eq(&'.') {
                                 TokenKind::DotDotDot
                             } else {
-                                return Err(Box::new(LexerError::new(
+                                return LexerError::new(
                                     LexerErrorKind::UnexpectedChar,
                                     file.path.clone(),
                                     SourceInfo::new(line_number + 1, line_offset + 1, 1),
-                                )));
+                                );
                             }
                         } else {
-                            return Err(Box::new(LexerError::new(
+                            return LexerError::new(
                                 LexerErrorKind::UnexpectedChar,
                                 file.path.clone(),
                                 SourceInfo::new(line_number + 1, line_offset + 1, 1),
-                            )));
+                            );
                         },
                     ':' =>
                         if let Some(_) = chars_iter.next_if_eq(&'=') {
@@ -104,11 +108,11 @@ impl Lexer {
                         if let Some(_) = chars_iter.next_if_eq(&'=') {
                             TokenKind::Equal
                         } else {
-                            return Err(Box::new(LexerError::new(
+                            return LexerError::new(
                                 LexerErrorKind::UnexpectedChar,
                                 file.path.clone(),
                                 SourceInfo::new(line_number + 1, line_offset + 1, 1),
-                            )));
+                            );
                         }, // ==
                     '!' =>
                         if let Some(_) = chars_iter.next_if_eq(&'=') {
@@ -138,11 +142,11 @@ impl Lexer {
                                 if let Some(_) = chars_iter.next_if_eq(&'>') {
                                     TokenKind::MoveCall
                                 } else {
-                                    return Err(Box::new(LexerError::new(
+                                    return LexerError::new(
                                         LexerErrorKind::UnexpectedChar,
                                         file.path.clone(),
                                         SourceInfo::new(line_number + 1, line_offset + 1, 1),
-                                    )));
+                                    );
                                 }
                             }
                         } // &&
@@ -151,11 +155,11 @@ impl Lexer {
                         if let Some(_) = chars_iter.next_if_eq(&'|') {
                             TokenKind::Or
                         } else {
-                            return Err(Box::new(LexerError::new(
+                            return LexerError::new(
                                 LexerErrorKind::UnexpectedChar,
                                 file.path.clone(),
                                 SourceInfo::new(line_number + 1, line_offset + 1, 1),
-                            )));
+                            );
                         }, // ||
 
                     '"' => {
@@ -168,11 +172,11 @@ impl Lexer {
                                     line_offset += 1;
                                     lit.push(c);
                                 } else {
-                                    return Err(Box::new(LexerError::new(
+                                    return LexerError::new(
                                         LexerErrorKind::UnexpectedEof,
                                         file.path.clone(),
                                         SourceInfo::new(line_number + 1, line_offset + 1, 1),
-                                    )));
+                                    );
                                 }
                             }
                         }
@@ -226,15 +230,15 @@ impl Lexer {
                         }
                     },
                     _ =>
-                        return Err(Box::new(LexerError::new(
+                        return LexerError::new(
                             LexerErrorKind::UnexpectedChar,
                             file.path.clone(),
                             SourceInfo::new(line_number + 1, line_offset, 1),
-                        ))),
+                        ),
                 };
                 let width = kind.get_width();
-                line_offset += width;
                 tokens.push(Token::new(kind.clone(), SourceInfo::new(line_number, line_offset, width)));
+                line_offset += width;
             }
         }
         Ok(tokens)

@@ -57,6 +57,7 @@ impl Lexer {
                         }
                     },
                     '+' => TokenKind::Plus,
+                    // unused token
                     '.' =>
                         if let Some(_) = chars_iter.next_if_eq(&'.') {
                             if let Some(_) = chars_iter.next_if_eq(&'.') {
@@ -214,7 +215,8 @@ impl Lexer {
                     _ =>
                         return Err(Box::new(LexerError::UnexpectedChar {
                             path: file.path.clone(),
-                            source_info: SourceInfo::new(line_number + 1, line_offset + 1, 1),
+                            // current token so don't add 1 to offset
+                            source_info: SourceInfo::new(line_number + 1, line_offset, 1),
                         })),
                 };
                 let width = kind.get_width();

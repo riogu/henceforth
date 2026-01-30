@@ -1,19 +1,20 @@
 use std::{fs, path::PathBuf};
 
 use crate::hfs::{
+    error::{CompileError, LexerError},
     lexer,
     token::{Literal, SourceInfo, Token, TokenKind},
     VALID_STACK_KEYWORDS,
 };
 
 #[derive(Debug)]
-pub struct File<'a> {
+pub struct File {
     pub contents: Vec<String>,
-    pub path: &'a PathBuf,
+    pub path: PathBuf,
 }
 
-impl File<'_> {
-    pub fn new<'a>(path: &'a PathBuf) -> File<'a> {
+impl File {
+    pub fn new(path: PathBuf) -> File {
         File { contents: fs::read_to_string(&path).expect("Could not read file.").lines().map(String::from).collect(), path }
     }
 }
@@ -22,15 +23,18 @@ pub struct Lexer {} // idk how to make this a namespace
 
 impl Lexer {
     #[must_use]
-    pub fn tokenize<'a>(file: &'a File) -> Vec<Token> {
+    pub fn tokenize<'a>(file: &'a File) -> Result<Vec<Token>, Box<dyn CompileError>> {
         let mut tokens = Vec::<Token>::new();
-        let mut line_offset = 0;
 
         for (line_number, line_string) in file.contents.iter().enumerate() {
+            let mut line_offset = 1;
             let mut chars_iter = line_string.chars().peekable();
             while let Some(char) = chars_iter.next() {
                 let kind = match char {
-                    ' ' | '\t' | '\r' => continue,
+                    ' ' | '\t' | '\r' => {
+                        line_offset += 1;
+                        continue;
+                    },
                     '(' => TokenKind::LeftParen,
                     ')' => TokenKind::RightParen,
                     '{' => TokenKind::LeftBrace,
@@ -90,7 +94,10 @@ impl Lexer {
                         if let Some(_) = chars_iter.next_if_eq(&'=') {
                             TokenKind::Equal
                         } else {
-                            panic!("lexer error")
+                            return Err(Box::new(LexerError::UnexpectedChar {
+                                path: file.path.clone(),
+                                source_info: SourceInfo::new(line_number + 1, line_offset + 1, 1),
+                            }));
                         }, // ==
                     '!' =>
                         if let Some(_) = chars_iter.next_if_eq(&'=') {
@@ -193,11 +200,12 @@ impl Lexer {
                     },
                     _ => panic!("lexer error"),
                 };
-                line_offset += 1;
-                tokens.push(Token::new(kind, SourceInfo::new(line_number, line_offset, 1)));
+                let width = kind.get_width();
+                line_offset += width;
+                tokens.push(Token::new(kind.clone(), SourceInfo::new(line_number, line_offset, width)));
             }
         }
-        tokens
+        Ok(tokens)
     }
 }
 
@@ -215,6 +223,7 @@ mod tests {
 
     pub fn tokenize_file_into_kinds(name: &str) -> Vec<TokenKind> {
         run_until(name, Phase::Lexer)
+            .expect("compilation failed")
             .as_any()
             .downcast_ref::<Vec<Token>>()
             .expect("Expected Vec<Token> from Lexer")

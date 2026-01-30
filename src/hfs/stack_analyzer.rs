@@ -606,14 +606,15 @@ mod tests {
     use pretty_assertions::assert_eq;
 
     use crate::hfs::{
-        AstArena, File, Lexer, Parser, Type, UnresolvedAstArena,
         builder::builder::{Builder, BuilderOperation, ControlFlowOps, FunctionOps, LoopOps, PassMode, StackOps, VariableOps},
         stack_analyzer_builder::StackAnalyzerBuilder,
-        utils::{Phase, run_until},
+        utils::{run_until, Phase},
+        AstArena, Type,
     };
 
     fn analyze_file(name: &str) -> AstArena {
         run_until(name, Phase::StackAnalyzer)
+            .expect("compilation failed")
             .as_any()
             .downcast_ref::<AstArena>()
             .expect("Expected AstArena from StackAnalyzer")

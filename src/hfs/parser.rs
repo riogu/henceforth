@@ -335,6 +335,7 @@ mod tests {
 
     fn parse_file(name: &str) -> UnresolvedAstArena {
         run_until(name, Phase::Parser)
+            .expect("compilation failed")
             .as_any()
             .downcast_ref::<UnresolvedAstArena>()
             .expect("Expected UnresolvedAstArena from Parser")

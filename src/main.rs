@@ -2,12 +2,13 @@
 
 mod hfs {
     pub mod ast;
+    pub mod ast_interpreter;
     pub mod builder;
     pub mod cfg_analyzer;
+    pub mod diagnostics;
     pub mod hfs_mir;
     pub mod interpreter;
     pub mod lexer;
-    pub mod ast_interpreter;
     pub mod parser;
     pub mod scope_stack;
     pub mod stack_analyzer;
@@ -17,6 +18,7 @@ mod hfs {
     pub use ast::*;
     pub use builder::*;
     pub use cfg_analyzer::*;
+    pub use diagnostics::*;
     pub use hfs_mir::*;
     pub use interpreter::*;
     pub use lexer::*;
@@ -27,9 +29,11 @@ mod hfs {
     pub use types::*;
     pub use unresolved_ast::*;
 }
-use std::path::PathBuf;
+use std::{error::Error, path::PathBuf, process::exit};
 
-use clap::{Parser, arg};
+use clap::{arg, Parser};
+
+use crate::hfs::error::CompileError;
 
 #[derive(Parser, Debug, Clone)]
 #[command(author, version, about)]
@@ -39,12 +43,12 @@ struct Args {
     output: PathBuf,
 }
 
-fn main() {
+fn run() -> Result<(), Box<dyn CompileError>> {
     let args = Args::parse();
-    let file = hfs::File::new(&args.source);
+    let file = hfs::File::new(args.source);
     let file_name = file.path.to_str().unwrap().to_string();
 
-    let tokens = hfs::Lexer::tokenize(&file);
+    let tokens = hfs::Lexer::tokenize(&file)?;
 
     let (unresolved_top_level_nodes, unresolved_ast_arena) = hfs::Parser::parse_tokens(tokens);
 
@@ -54,4 +58,13 @@ fn main() {
     let (top_level_insts, ir_arena) = hfs::CfgAnalyzer::lower_to_mir(top_level_nodes, ast_arena);
     // interpreter doesnt even need the top level nodes lol
     hfs::Interpreter::interpret(ir_arena, top_level_insts, scope_stack);
+
+    Ok(())
+}
+
+fn main() {
+    if let Err(e) = run() {
+        eprintln!("{}", e);
+        exit(1);
+    }
 }

@@ -10,7 +10,7 @@ impl Literal {
         match self {
             Literal::Integer(int) => int.to_string().len(),
             Literal::Float(float) => float.to_string().len(),
-            Literal::String(string) => string.len(),
+            Literal::String(string) => string.len() + 2,
             Literal::Bool(bool) => bool.to_string().len(),
         }
     }

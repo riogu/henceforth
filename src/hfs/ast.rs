@@ -1,6 +1,6 @@
 use std::{collections::HashMap, fmt::Display};
 
-use crate::hfs::{token::*, RuntimeValue, ScopeKind};
+use crate::hfs::{RuntimeValue, ScopeKind, token::*};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct VarId(pub usize);
@@ -54,6 +54,9 @@ pub enum Expression {
         index: usize,    // Which parameter (0, 1, 2...)
         type_id: TypeId, // Parameter type
     },
+    // type of the temporary returned from a function
+    ReturnValue(TypeId),
+
     StackKeyword(StackKeyword),
 }
 
@@ -107,13 +110,13 @@ pub struct StackKeywordDeclaration<'a> {
 pub enum Statement {
     ElseIf {
         cond_stack_block: StmtId, // boolean from the stack or operation
-        body: StmtId, // points to BlockScope
+        body: StmtId,             // points to BlockScope
         else_stmt: Option<StmtId>,
     },
     Else(StmtId), // Points to a BlockScope
     If {
         cond_stack_block: StmtId, // boolean from the stack or operation
-        body: StmtId, // points to BlockScope
+        body: StmtId,             // points to BlockScope
         else_stmt: Option<StmtId>,
     },
     While {
@@ -134,6 +137,7 @@ pub enum Statement {
         arg_count: usize,
         func_id: FuncId,
         is_move: bool,
+        return_values: Vec<ExprId>,
     },
 }
 

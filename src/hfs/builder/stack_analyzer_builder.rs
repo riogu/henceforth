@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 
 use crate::hfs::{
-    builder::builder::{Builder, BuilderOperation, ControlFlowOps, FunctionOps, LoopOps, PassMode, StackOps, VariableOps},
     AstArena, ExprId, ExprProvenance, Expression, FuncId, FunctionDeclaration, Identifier, Literal, Operation, ScopeKind,
     SourceInfo, StackKeyword, Statement, StmtId, Token, TokenKind, TopLevelId, Type, TypeId, VarDeclaration, VarId,
+    builder::builder::{Builder, BuilderOperation, ControlFlowOps, FunctionOps, LoopOps, PassMode, StackOps, VariableOps},
 };
 
 pub struct StackAnalyzerBuilder {
@@ -382,7 +382,8 @@ impl FunctionOps for StackAnalyzerBuilder {
         };
 
         let is_move = matches!(mode, PassMode::Move);
-        let stmt = Statement::FunctionCall { arg_count, func_id, is_move };
+        // let stmt = Statement::FunctionCall { arg_count, func_id, is_move };
+        let stmt = todo!("sorry joao i broke your testing code with ast changes");
         let token = Self::dummy_token();
         let stmt_id = self.arena.alloc_stmt(stmt, token.clone());
         self.arena.stmt_tokens.push(token);

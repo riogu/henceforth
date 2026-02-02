@@ -1,4 +1,7 @@
-use std::fmt::{Display, format};
+use std::{
+    collections::HashMap,
+    fmt::{Display, format},
+};
 
 use crate::hfs::{IrArena, Literal, SourceInfo, ast::*};
 /*
@@ -34,7 +37,7 @@ pub struct CfgFunction {
     pub param_type: TypeId,
     pub return_type: TypeId,
 
-    pub parameter_exprs: Vec<InstId>,
+    pub parameter_insts: Vec<InstId>,
     pub entry_block: BlockId, // CFG of blocks
 }
 
@@ -64,16 +67,23 @@ pub enum Instruction {
         index: usize,
         type_id: TypeId,
     },
+    ReturnValue {
+        // this is the temporary representation of the result of a function call as "local values"
+        // we just store the type, the value is mapped at runtime by the interpreter
+        source_info: SourceInfo,
+        type_id: TypeId,
+    },
     FunctionCall {
         source_info: SourceInfo,
         args: Vec<InstId>,
         func_id: IrFuncId,
         is_move: bool,
+        return_values: Vec<InstId>,
     },
 
     Phi {
         source_info: SourceInfo,
-        incoming: Vec<(BlockId, InstId)>, // (predecessor block, value from that block)
+        incoming: HashMap<BlockId, InstId>, // (predecessor block, value from that block)
     },
 
     // note we basically move stack keywords outside the stack block
@@ -298,17 +308,7 @@ impl CfgPrintable for Instruction {
     fn get_repr(&self, arena: &IrArena) -> String {
         match self {
             Instruction::Parameter { source_info, index, type_id: ty } => todo!(),
-            // Instruction::Store { source_info, value, var_id: identifier, is_move } => {
-            //     // let id = match identifier {
-            //     //     VarIdentifier::GlobalVar(source_info, var_id) => var_id,
-            //     //     VarIdentifier::Variable(source_info, var_id) => var_id,
-            //     // };
-            //     // let var = arena.get_var(*id);
-            //     // let value = arena.get_instruction(*value);
-            //     // format!("store {}, {};", var.name, value.get_repr(arena))
-            //     todo!("joao i broke your printing code")
-            // },
-            Instruction::FunctionCall { source_info, args, func_id: identifier, is_move } => {
+            Instruction::FunctionCall { source_info, args, func_id: identifier, is_move, return_values } => {
                 let func = arena.get_func(*identifier);
                 let args_repr: Vec<String> =
                     args.iter().map(|id| arena.get_instruction(*id)).map(|inst| inst.get_repr(arena)).collect();
@@ -338,6 +338,7 @@ impl CfgPrintable for Instruction {
                 Literal::Bool(lit) => lit.to_string(),
             },
             Instruction::LoadElement { source_info, index, tuple } => todo!(),
+            Instruction::ReturnValue { source_info, type_id } => todo!(),
         }
     }
 }

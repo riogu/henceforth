@@ -268,7 +268,11 @@ impl CfgAnalyzer {
 
     fn lower_function_declaration(&mut self, id: FuncId) -> IrFuncId {
         let func_decl = self.ast_arena.get_func(id).clone();
-        // self.arena.alloc_function(func, self.ast_arena.get_function_token(id));
+        let source_info = self.ast_arena.get_function_token(id).source_info.clone();
+
+        let entry_block = self.arena.alloc_block("start"); // create before analyzing the parameters
+        self.arena.cfg_context.curr_insert_block = entry_block;
+
         let mut parameter_exprs = Vec::<InstId>::new();
         for param_expr_id in func_decl.parameter_exprs {
             let param_inst = self.lower_expr(param_expr_id);
@@ -276,9 +280,7 @@ impl CfgAnalyzer {
             self.arena.push_to_hfs_stack(param_inst);
         }
 
-        let entry_block = self.arena.alloc_block("start");
-        self.arena.seal_block(entry_block);
-        self.arena.cfg_context.curr_insert_block = entry_block;
+        self.arena.seal_block(entry_block); // we can seal it once we have the parameters
 
         let curr_block_context = BlockContext {
             continue_to_block: None,
@@ -288,17 +290,28 @@ impl CfgAnalyzer {
             stack_changes: vec![],
         };
         self.lower_stmt(func_decl.body, curr_block_context);
+        if self.arena.get_block(self.arena.cfg_context.curr_insert_block).terminator.is_none() {
+            // add implicit return at the end of the function if the block is unfinished
+            let instructions = self.arena.pop_entire_hfs_stack();
+            let return_tuple = self.arena.alloc_inst_for(
+                Instruction::Tuple { source_info: source_info.clone(), instructions },
+                self.arena.cfg_context.curr_insert_block,
+            );
+            let term = self.arena.alloc_terminator_for(
+                TerminatorInst::Return(source_info.clone(), return_tuple),
+                self.arena.cfg_context.curr_insert_block,
+            );
+        }
 
         let cfg_function = CfgFunction {
-            source_info: self.ast_arena.get_function_token(id).source_info.clone(),
+            source_info,
             name: func_decl.name,
             param_type: func_decl.param_type,
             return_type: func_decl.return_type,
-            parameter_exprs,
+            parameter_insts: parameter_exprs,
             entry_block,
         };
 
-        self.arena.pop_entire_hfs_stack();
         self.arena.alloc_function(cfg_function, id)
     }
     fn lower_stmt(&mut self, id: StmtId, curr_block_context: BlockContext) {
@@ -350,6 +363,9 @@ impl CfgAnalyzer {
 
                 // condition isnt included in the stack depth count
                 let cond = self.arena.pop_hfs_stack().expect("expected condition at the end of stack block condition in if_stmt");
+                if !matches!(self.arena.get_type_of_inst(cond), Type::Bool) {
+                    panic!("expected expression of type 'bool' in if statement condition")
+                }
                 let if_depth_before = self.arena.hfs_stack.len();
 
                 self.lower_stmt(body, curr_block_context.clone()); // pay attention to this call (we manage state around it)
@@ -432,9 +448,9 @@ impl CfgAnalyzer {
                                 for stack_idx in 0..if_stack_change.len() {
                                     // take all stacks and group each element with each other into a phi
                                     // for ex: we group every 1st pushed value together for each branch
-                                    let mut incoming = Vec::<(BlockId, InstId)>::new();
+                                    let mut incoming = HashMap::<BlockId, InstId>::new();
                                     for (block_id, stack_change) in &stack_changes {
-                                        incoming.push((*block_id, stack_change[stack_idx]));
+                                        incoming.insert(*block_id, stack_change[stack_idx]);
                                     }
                                     let phi = self.arena.alloc_inst_for(
                                         Instruction::Phi { source_info: source_info.clone(), incoming },
@@ -483,6 +499,9 @@ impl CfgAnalyzer {
                 // set up the context for lowering the while body
                 self.arena.cfg_context.curr_insert_block = while_cond_block;
                 let cond = self.lower_expr(cond);
+                if !matches!(self.arena.get_type_of_inst(cond), Type::Bool) {
+                    panic!("expected expression of type 'bool' in while loop condition")
+                }
                 self.arena.alloc_terminator_for(
                     TerminatorInst::Branch {
                         source_info: source_info.clone(),
@@ -615,7 +634,7 @@ impl CfgAnalyzer {
                 };
                 self.arena.write_variable(var_id, self.arena.cfg_context.curr_insert_block, inst_value);
             },
-            Statement::FunctionCall { arg_count, func_id, is_move } => {
+            Statement::FunctionCall { arg_count, func_id, is_move, return_values } => {
                 // @(213) &> func; // move call
                 // @(213) :> func; // copy call
                 let mut inst_args = Vec::<InstId>::new();
@@ -626,8 +645,21 @@ impl CfgAnalyzer {
                     Some(func_id) => *func_id,
                     None => panic!("[internal error] tried making a function call before creating the associated IrFuncId"),
                 };
+                let mut new_return_vals = Vec::new();
+                for val in return_values {
+                    let source_info = self.ast_arena.get_expr_token(val).source_info.clone();
+                    let Expression::ReturnValue(type_id) = self.ast_arena.get_expr(val) else {
+                        panic!("[internal error] expected Expression::ReturnValue in return_values")
+                    };
+                    let retval = self.arena.alloc_inst_for(
+                        Instruction::ReturnValue { source_info, type_id: *type_id },
+                        self.arena.cfg_context.curr_insert_block,
+                    );
+                    self.arena.push_to_hfs_stack(retval); // keep the stack state correct
+                    new_return_vals.push(retval);
+                }
                 self.arena.alloc_inst_for(
-                    Instruction::FunctionCall { source_info, args: inst_args, func_id, is_move },
+                    Instruction::FunctionCall { source_info, args: inst_args, func_id, is_move, return_values: new_return_vals },
                     self.arena.cfg_context.curr_insert_block,
                 );
             },
@@ -658,13 +690,21 @@ impl CfgAnalyzer {
                     .alloc_inst_for(Instruction::Tuple { source_info, instructions }, self.arena.cfg_context.curr_insert_block)
             },
             Expression::Parameter { index, type_id } =>
-            // not sure if this is correct for when you hold a parameter expr throughout a function
-            // its probably fine but just in case maybe test smth like that later
+            // NOTE: Expression::Parameter are weird because this instruction isnt really used or
+            // will even really be lowered to any assembly in reality. it probably doesnt need to
+            // be added to any block, it can be kept inside the CfgFunction struct
                 self.arena.alloc_inst_for(
                     Instruction::Parameter { source_info, index, type_id },
                     self.arena.cfg_context.curr_insert_block,
                 ),
-            Expression::StackKeyword(stack_keyword) => todo!(),
+            Expression::StackKeyword(stack_keyword) =>
+            // NOTE: in my opinion, StackKeywords shouldnt exist in MIR. we should create MIR that
+            // is the result of each StackKeyword in cfg_analyzer instead. if you do this,
+            // eliminate this instruction
+                todo!(),
+            Expression::ReturnValue(type_id) => self
+                .arena
+                .alloc_inst_for(Instruction::ReturnValue { source_info, type_id }, self.arena.cfg_context.curr_insert_block),
         }
     }
     fn lower_operation(&mut self, op: Operation, source_info: SourceInfo) -> InstId {
@@ -707,7 +747,7 @@ impl IrArena {
         let source_info = self.get_var(var_id).source_info.clone();
         let val = if !self.sealed_blocks.contains(&block_id) {
             // Incomplete CFG
-            let phi = self.alloc_inst_for(Instruction::Phi { source_info, incoming: vec![] }, block_id);
+            let phi = self.alloc_inst_for(Instruction::Phi { source_info, incoming: HashMap::new() }, block_id);
             self.incomplete_phis.entry(block_id).or_default().insert(var_id, phi);
             phi
         } else if self.get_block(block_id).predecessors.is_empty() {
@@ -719,7 +759,7 @@ impl IrArena {
             self.read_variable(var_id, self.get_block(block_id).predecessors[0])
         } else {
             // Break potential cycles with operandless phi
-            let phi = self.alloc_inst_for(Instruction::Phi { source_info, incoming: vec![] }, block_id);
+            let phi = self.alloc_inst_for(Instruction::Phi { source_info, incoming: HashMap::new() }, block_id);
             self.write_variable(var_id, block_id, phi);
             self.add_phi_operands(var_id, phi, block_id)
         };
@@ -738,7 +778,9 @@ impl IrArena {
         let Instruction::Phi { incoming, .. } = self.get_instruction_mut(phi_id) else {
             panic!("[internal error] called add_phi_operands with a non-phi instruction")
         };
-        incoming.append(&mut new_incoming);
+        for (block_id, inst_id) in new_incoming {
+            incoming.insert(block_id, inst_id);
+        }
         self.try_remove_trivial_phi(phi_id)
     }
     fn seal_block(&mut self, block_id: BlockId) {

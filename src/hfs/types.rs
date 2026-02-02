@@ -1,4 +1,4 @@
-use crate::hfs::{CfgOperation, IrArena, InstId, Instruction, IrFuncId, IrVarId, ast::*, token::*};
+use crate::hfs::{CfgOperation, InstId, Instruction, IrArena, IrFuncId, IrVarId, ast::*, token::*};
 
 pub const PRIMITIVE_TYPE_COUNT: usize = 4;
 
@@ -78,6 +78,7 @@ impl AstArena {
             },
             Expression::Parameter { index, type_id } => type_id,
             Expression::StackKeyword { .. } => todo!(),
+            Expression::ReturnValue(type_id) => type_id,
         }
     }
     pub fn get_type_of_var(&self, var_id: VarId) -> &Type {
@@ -157,10 +158,12 @@ impl IrArena {
                 self.alloc_type(tuple_type, source_info.clone())
             },
             Instruction::Parameter { source_info, index, type_id } => type_id,
-            Instruction::FunctionCall { source_info, args, func_id, is_move } => self.get_func(func_id).return_type,
+            Instruction::FunctionCall { source_info, args, func_id, is_move, return_values } =>
+                self.get_func(func_id).return_type,
             Instruction::Phi { source_info, incoming } => todo!(),
             Instruction::StackKeyword { .. } => todo!(),
             Instruction::LoadElement { source_info, index, tuple } => todo!(),
+            Instruction::ReturnValue { source_info, type_id } => type_id,
         }
     }
     pub fn get_type_of_var(&self, var_id: IrVarId) -> &Type {

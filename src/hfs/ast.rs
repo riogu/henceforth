@@ -224,12 +224,14 @@ impl AstArena {
         self.exprs.push(expr);
         self.hfs_stack.push(id);
         self.expr_provenances.push(provenance);
+        self.expr_tokens.push(token);
         id
     }
 
     pub fn alloc_stmt(&mut self, stmt: Statement, token: Token) -> StmtId {
         let id = StmtId(self.stmts.len());
         self.stmts.push(stmt);
+        self.stmt_tokens.push(token);
         id
     }
 
@@ -237,6 +239,7 @@ impl AstArena {
         let id = VarId(self.vars.len());
         self.vars.push(var);
         self.curr_var_provenances.push(ExprProvenance::CompiletimeValue);
+        self.var_tokens.push(token);
         // by default, variables start as compile time variables.
         // this is changed throughout semantic analysis, they could become runtime
         // if they are assigned a RuntimeValue (they can regain compile time if we reassign them)
@@ -251,6 +254,7 @@ impl AstArena {
         // this isnt really used extensively, its here to match variables if we want it later for
         // compile-time analysis of functions and other things
         self.curr_func_call_provenances.push(ExprProvenance::RuntimeValue);
+        self.function_tokens.push(token);
         id
     }
 
@@ -267,7 +271,6 @@ impl AstArena {
         if let Some(&existing_id) = self.type_cache.get(&hfs_type) {
             return existing_id;
         }
-
         // If not, allocate it
         self.alloc_type_uncached(hfs_type, token)
     }

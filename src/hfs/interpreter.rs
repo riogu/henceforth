@@ -157,7 +157,7 @@ impl Interpreter {
         // NOTE: i need to be careful wether we want to reuse already generated instids, or
         // actually generate them here. i can't tell if we wont lose side-effects by always caching
         // i added a disable_cache variable for cases where you know you need to reinterpret this InstId
-        // (i want to make it work as a sentinel later
+        // (i want to make it work as a sentinel later)
         if !self.disable_cache && self.curr_call_frame().inst_values.contains_key(&inst_id) {
             return self.curr_call_frame().inst_values[&inst_id].clone();
         }

@@ -50,7 +50,7 @@ fn run() -> Result<(), Box<dyn CompileError>> {
 
     let tokens = hfs::Lexer::tokenize(&file)?;
 
-    let (unresolved_top_level_nodes, unresolved_ast_arena) = hfs::Parser::parse_tokens(tokens);
+    let (unresolved_top_level_nodes, unresolved_ast_arena) = hfs::Parser::parse_tokens(tokens, file.path)?;
 
     let (top_level_nodes, ast_arena, scope_stack) =
         hfs::StackAnalyzer::resolve(unresolved_top_level_nodes, unresolved_ast_arena, file_name);

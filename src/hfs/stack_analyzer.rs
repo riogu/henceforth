@@ -615,10 +615,10 @@ mod tests {
     use pretty_assertions::assert_eq;
 
     use crate::hfs::{
-        AstArena, Type,
         builder::builder::{Builder, BuilderOperation, ControlFlowOps, FunctionOps, LoopOps, PassMode, StackOps, VariableOps},
         stack_analyzer_builder::StackAnalyzerBuilder,
-        utils::{Phase, run_until},
+        utils::{run_until, Phase},
+        AstArena, Type,
     };
 
     fn analyze_file(name: &str) -> AstArena {

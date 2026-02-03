@@ -193,7 +193,7 @@ impl Lexer {
                             Ok(number) => Ok(number),
                             Err(_) => match lit.parse::<f32>() {
                                 Ok(number) => Err(number),
-                                Err(_) => panic!("[internal hfs error] number conversion error"),
+                                Err(_) => panic!("[internal error] number conversion error"),
                             },
                         };
                         match number {

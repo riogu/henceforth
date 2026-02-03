@@ -55,7 +55,7 @@ pub fn run_until(filename: &str, phase: Phase) -> Result<Rc<dyn Byproduct>, Box<
         return Ok(Rc::new(tokens));
     }
 
-    let (unresolved_top_level_nodes, unresolved_ast_arena) = Parser::parse_tokens(tokens);
+    let (unresolved_top_level_nodes, unresolved_ast_arena) = Parser::parse_tokens(tokens, file.path)?;
 
     if phase == Phase::Parser {
         return Ok(Rc::new(unresolved_ast_arena));

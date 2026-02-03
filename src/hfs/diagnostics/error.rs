@@ -9,7 +9,7 @@ use std::{
 
 use colored::{ColoredString, Colorize};
 
-use crate::hfs::{File, SourceInfo, Token, VALID_STACK_KEYWORDS};
+use crate::hfs::{File, SourceInfo, Token, TokenKind, VALID_STACK_KEYWORDS};
 
 pub trait CompileError: Display + Debug {
     fn message(&self) -> (String, String);
@@ -97,7 +97,73 @@ impl CompileError for LexerError {
     }
 }
 
-impl<'a> Display for LexerError {
+impl Display for LexerError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let source_code = match self.source_code() {
+            Ok(source_code) => source_code,
+            Err(e) => ColoredString::from(format!("<source unavailable: {}>", e)),
+        };
+        write!(f, "{}\n{}\n{}", self.header(), self.location(), source_code)
+    }
+}
+
+#[derive(Debug)]
+pub enum Expectable {
+    Token(TokenKind),
+    Identifier,
+}
+
+impl Display for Expectable {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Expectable::Token(token_kind) => write!(f, "{}", token_kind),
+            Expectable::Identifier => write!(f, "identifier"),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum ParserErrorKind {
+    ExpectedButFound(Expectable, Option<TokenKind>),
+}
+
+#[derive(Debug)]
+pub struct ParserError {
+    kind: ParserErrorKind,
+    path: PathBuf,
+    source_info: Vec<SourceInfo>,
+}
+
+impl ParserError {
+    pub fn new<T>(kind: ParserErrorKind, path: PathBuf, source_info: Vec<SourceInfo>) -> Result<T, Box<dyn CompileError>> {
+        Err(Box::new(Self { kind, path, source_info }))
+    }
+}
+
+impl CompileError for ParserError {
+    fn message(&self) -> (String, String) {
+        match &self.kind {
+            ParserErrorKind::ExpectedButFound(expected, found) => match found {
+                Some(found) => (format!("expected {}, found {}", expected, found), String::new()),
+                None => (format!("expected {}", expected), String::new()),
+            },
+        }
+    }
+
+    fn header(&self) -> ColoredString {
+        todo!()
+    }
+
+    fn location(&self) -> ColoredString {
+        todo!()
+    }
+
+    fn source_code(&self) -> Result<ColoredString, Box<dyn Error>> {
+        todo!()
+    }
+}
+
+impl Display for ParserError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let source_code = match self.source_code() {
             Ok(source_code) => source_code,

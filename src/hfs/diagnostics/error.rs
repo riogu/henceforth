@@ -18,6 +18,23 @@ pub trait CompileError: Display + Debug {
     fn source_code(&self) -> Result<ColoredString, Box<dyn Error>>;
 }
 
+pub struct DiagnosticInfo {
+    pub path: PathBuf,
+    pub eof_pos: SourceInfo,
+}
+
+impl DiagnosticInfo {
+    pub fn new(path: PathBuf, tokens: &Vec<Token>) -> Self {
+        let eof_pos = if tokens.len() > 0 {
+            let last = tokens.last().expect("[internal error] no tokens after len > 0 check");
+            SourceInfo::new(last.source_info.line_number, last.source_info.line_offset + last.source_info.token_width, 1)
+        } else {
+            SourceInfo::new(1, 1, 1)
+        };
+        Self { path, eof_pos }
+    }
+}
+
 #[derive(Debug)]
 pub enum LexerErrorKind {
     UnexpectedChar,
@@ -111,6 +128,8 @@ impl Display for LexerError {
 pub enum Expectable {
     Token(TokenKind),
     Identifier,
+    StackKeyword,
+    Type,
 }
 
 impl Display for Expectable {
@@ -118,6 +137,8 @@ impl Display for Expectable {
         match self {
             Expectable::Token(token_kind) => write!(f, "{}", token_kind),
             Expectable::Identifier => write!(f, "identifier"),
+            Expectable::StackKeyword => write!(f, "stack keyword"),
+            Expectable::Type => write!(f, "type"),
         }
     }
 }
@@ -151,15 +172,42 @@ impl CompileError for ParserError {
     }
 
     fn header(&self) -> ColoredString {
-        todo!()
+        format!("{} {}", "error:".red().bold(), self.message().0.bold()).into()
     }
 
     fn location(&self) -> ColoredString {
-        todo!()
+        format!(
+            "{}{} {}:{}:{}",
+            " ".repeat(number_length(self.source_info[0].line_number)),
+            "-->".blue(),
+            self.path.to_str().unwrap(),
+            self.source_info[0].line_number,
+            self.source_info[0].line_offset
+        )
+        .into()
     }
 
     fn source_code(&self) -> Result<ColoredString, Box<dyn Error>> {
-        todo!()
+        let source = fs::read_to_string(&self.path).map_err(|e| format!("Could not read source file: {}", e))?;
+
+        let line = source
+            .lines()
+            .nth(self.source_info[0].line_number - 1)
+            .ok_or_else(|| format!("Line {} not found in file", self.source_info[0].line_number))?;
+
+        let mut error_pointer = " ".repeat(self.source_info[0].line_offset - 1);
+        error_pointer.push_str(format!("{} {}", "^".repeat(self.source_info[0].token_width), self.message().1).as_str());
+        return Ok(ColoredString::from(format!(
+            "{} {}\n{} {} {}\n{} {} {}",
+            " ".repeat(number_length(self.source_info[0].line_number)),
+            "|".blue().bold(),
+            self.source_info[0].line_number.to_string().blue().bold(),
+            "|".blue().bold(),
+            line,
+            " ".repeat(number_length(self.source_info[0].line_number)),
+            "|".blue().bold(),
+            error_pointer.red().bold()
+        )));
     }
 }
 

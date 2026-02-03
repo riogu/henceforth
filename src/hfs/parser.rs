@@ -2,7 +2,7 @@ use std::{iter::Peekable, path::PathBuf, vec::IntoIter};
 
 use crate::hfs::{
     ast::*,
-    error::{CompileError, Expectable, ParserError, ParserErrorKind},
+    error::{CompileError, DiagnosticInfo, Expectable, ParserError, ParserErrorKind},
     token::*,
     unresolved_ast::*,
     ScopeKind,
@@ -11,7 +11,7 @@ use crate::hfs::{
 pub struct Parser {
     tokens: Peekable<IntoIter<Token>>, // Own the tokens, iterate by value
     arena: UnresolvedAstArena,
-    path: PathBuf,
+    diagnostic_info: DiagnosticInfo,
 }
 
 impl Parser {
@@ -20,64 +20,109 @@ impl Parser {
             Some(token) if std::mem::discriminant(&token.kind) == std::mem::discriminant(&token_kind) => Ok(token),
             Some(found) => ParserError::new(
                 ParserErrorKind::ExpectedButFound(Expectable::Token(token_kind), Some(found.kind)),
-                self.path.clone(),
+                self.diagnostic_info.path.clone(),
                 vec![found.source_info],
             ),
-            None =>
-                ParserError::new(ParserErrorKind::ExpectedButFound(Expectable::Token(token_kind), None), self.path.clone(), vec![
-                    self.tokens
-                        .clone()
-                        .last()
-                        .expect("[internal error] was expecting something specific but had no tokens")
-                        .source_info,
-                ]),
+            None => ParserError::new(
+                ParserErrorKind::ExpectedButFound(Expectable::Token(token_kind), None),
+                self.diagnostic_info.path.clone(),
+                vec![self.diagnostic_info.eof_pos.clone()],
+            ),
         }
     }
 
     fn expect_identifier(&mut self) -> Result<(String, Token), Box<dyn CompileError>> {
-        let token = self.tokens.next().expect("unexpected end of input");
+        let token = match self.tokens.next() {
+            Some(token) => token,
+            None =>
+                return ParserError::new(
+                    ParserErrorKind::ExpectedButFound(Expectable::Identifier, None),
+                    self.diagnostic_info.path.clone(),
+                    vec![self.diagnostic_info.eof_pos.clone()],
+                ),
+        };
         match &token.kind {
             TokenKind::Identifier(name) => Ok((name.clone(), token)),
             _ => ParserError::new(
                 ParserErrorKind::ExpectedButFound(Expectable::Identifier, Some(token.kind)),
-                self.path.clone(),
+                self.diagnostic_info.path.clone(),
                 vec![token.source_info],
             ),
         }
     }
 
     fn expect_stack_keyword(&mut self) -> Result<(String, Token), Box<dyn CompileError>> {
-        let token = self.tokens.next().expect("unexpected end of input");
+        let token = match self.tokens.next() {
+            Some(token) => token,
+            None =>
+                return ParserError::new(
+                    ParserErrorKind::ExpectedButFound(Expectable::StackKeyword, None),
+                    self.diagnostic_info.path.clone(),
+                    vec![self.diagnostic_info.eof_pos.clone()],
+                ),
+        };
         match &token.kind {
             TokenKind::StackKeyword(name) => Ok((name.clone(), token)),
-            _ => panic!("expected stack keyword, got {:?}", token.kind),
+            _ => ParserError::new(
+                ParserErrorKind::ExpectedButFound(Expectable::StackKeyword, Some(token.kind)),
+                self.diagnostic_info.path.clone(),
+                vec![token.source_info],
+            ),
         }
     }
-    fn expect_type(&mut self) -> TypeId {
-        let token = self.tokens.peek().expect("unexpected end of input").clone();
+
+    fn expect_type(&mut self) -> Result<TypeId, Box<dyn CompileError>> {
+        let token = match self.tokens.next() {
+            Some(token) => token,
+            None =>
+                return ParserError::new(
+                    ParserErrorKind::ExpectedButFound(Expectable::Type, None),
+                    self.diagnostic_info.path.clone(),
+                    vec![self.diagnostic_info.eof_pos.clone()],
+                ),
+        };
         match &token.kind {
             kind if kind.is_type() => {
                 self.tokens.next();
-                self.arena.to_type(token)
+                Ok(self.arena.to_type(token))
             },
             TokenKind::LeftParen => {
-                let hfs_type = Type::Tuple(self.type_list());
-                self.arena.alloc_type(hfs_type, token)
+                let hfs_type = Type::Tuple(self.type_list()?);
+                Ok(self.arena.alloc_type(hfs_type, token))
             },
-            kind => panic!("expected type, got {:?}", kind),
+            kind => ParserError::new(
+                ParserErrorKind::ExpectedButFound(Expectable::Type, Some(token.kind)),
+                self.diagnostic_info.path.clone(),
+                vec![token.source_info],
+            ),
         }
     }
-    fn type_list(&mut self) -> Vec<TypeId> {
+
+    fn type_list(&mut self) -> Result<Vec<TypeId>, Box<dyn CompileError>> {
         self.expect(TokenKind::LeftParen);
         let mut types = Vec::<TypeId>::new();
         loop {
-            match self.tokens.next().expect("unexpected end of input") {
+            let token = match self.tokens.next() {
+                Some(token) => token,
+                None =>
+                    return ParserError::new(
+                        ParserErrorKind::ExpectedButFound(Expectable::Type, None),
+                        self.diagnostic_info.path.clone(),
+                        vec![self.diagnostic_info.eof_pos.clone()],
+                    ),
+            };
+            match token {
                 token if token.kind == TokenKind::RightParen => break,
                 token if token.is_type() => types.push(self.arena.to_type(token)),
-                token => panic!("expected type, found {:?}", token.kind),
+                token =>
+                    return ParserError::new(
+                        ParserErrorKind::ExpectedButFound(Expectable::Type, Some(token.kind)),
+                        self.diagnostic_info.path.clone(),
+                        vec![token.source_info],
+                    ),
             };
         }
-        types
+        Ok(types)
     }
 }
 
@@ -85,9 +130,9 @@ impl Parser {
 impl Parser {
     // <function_decl> ::= "fn" <identifier> ":" <signature> "{" <block_scope> "}"
     fn function_declaration(&mut self) -> Result<UnresolvedFuncId, Box<dyn CompileError>> {
-        self.expect(TokenKind::Fn);
+        self.expect(TokenKind::Fn)?;
         let (name, token) = self.expect_identifier()?;
-        let (param_types, return_types) = self.function_signature();
+        let (param_types, return_types) = self.function_signature()?;
         let body = self.block_scope(ScopeKind::Function)?;
         Ok(self.arena.alloc_unresolved_function(
             UnresolvedFunctionDeclaration { name, param_type: param_types, return_type: return_types, body },
@@ -96,22 +141,22 @@ impl Parser {
     }
     // <var_decl> ::= "let" <identifier> ":" <type> ";"
     fn variable_declaration(&mut self) -> Result<UnresolvedVarId, Box<dyn CompileError>> {
-        self.expect(TokenKind::Let);
+        self.expect(TokenKind::Let)?;
         let (name, token) = self.expect_identifier()?;
-        self.expect(TokenKind::Colon);
-        let hfs_type = self.expect_type();
-        self.expect(TokenKind::Semicolon);
+        self.expect(TokenKind::Colon)?;
+        let hfs_type = self.expect_type()?;
+        self.expect(TokenKind::Semicolon)?;
         Ok(self.arena.alloc_unresolved_var(UnresolvedVarDeclaration { name, hfs_type }, token))
     }
     // <signature> ::= "(" <type_list>? ")" "->" "(" <type_list>? ")"
-    fn function_signature(&mut self) -> (TypeId, TypeId) {
-        self.expect(TokenKind::Colon);
-        let param_types = self.expect_type(); // tuple or single type
+    fn function_signature(&mut self) -> Result<(TypeId, TypeId), Box<dyn CompileError>> {
+        self.expect(TokenKind::Colon)?;
+        let param_types = self.expect_type()?; // tuple or single type
 
-        self.expect(TokenKind::Arrow);
-        let return_types = self.expect_type();
+        self.expect(TokenKind::Arrow)?;
+        let return_types = self.expect_type()?;
 
-        (param_types, return_types)
+        Ok((param_types, return_types))
     }
 }
 
@@ -123,7 +168,8 @@ impl Parser {
         tokens: Vec<Token>,
         path: PathBuf,
     ) -> Result<(Vec<UnresolvedTopLevelId>, UnresolvedAstArena), Box<dyn CompileError>> {
-        let mut parser = Parser { tokens: tokens.into_iter().peekable(), arena: UnresolvedAstArena::new(), path };
+        let diagnostic_info = DiagnosticInfo::new(path, &tokens);
+        let mut parser = Parser { tokens: tokens.into_iter().peekable(), arena: UnresolvedAstArena::new(), diagnostic_info };
         let mut top_level = Vec::<UnresolvedTopLevelId>::new();
         while let Some(token) = parser.tokens.peek() {
             match &token.kind {
@@ -163,7 +209,7 @@ impl Parser {
             TokenKind::While => Ok(self.while_statement()?),
             TokenKind::Break | TokenKind::Continue | TokenKind::Return => {
                 let token = self.tokens.next().expect("unexpected end of input while parsing statement");
-                self.expect(TokenKind::Semicolon);
+                self.expect(TokenKind::Semicolon)?;
                 match token.kind {
                     TokenKind::Break => Ok(self.arena.alloc_unresolved_stmt(UnresolvedStatement::Break, token)),
                     TokenKind::Continue => Ok(self.arena.alloc_unresolved_stmt(UnresolvedStatement::Continue, token)),
@@ -232,11 +278,11 @@ impl Parser {
 
         let mut expressions = Vec::new();
 
-        self.expect(TokenKind::LeftParen);
+        self.expect(TokenKind::LeftParen)?;
         loop {
             match self.tokens.peek().expect("unexpected end of input") {
                 token if token.kind == TokenKind::RightParen => {
-                    self.expect(TokenKind::RightParen);
+                    self.expect(TokenKind::RightParen)?;
                     break;
                 },
                 _ => expressions.push(self.stack_expression()?),
@@ -324,7 +370,7 @@ impl Parser {
         let (name, token) = self.expect_identifier()?;
         let identifier = self.arena.alloc_unresolved_expr(UnresolvedExpression::Identifier(name), token);
 
-        self.expect(TokenKind::Semicolon);
+        self.expect(TokenKind::Semicolon)?;
         Ok(self.arena.alloc_unresolved_stmt(UnresolvedStatement::Assignment { identifier, is_move }, assign_tkn))
     }
 
@@ -336,7 +382,7 @@ impl Parser {
         let (name, token) = self.expect_identifier()?;
         let identifier = self.arena.alloc_unresolved_expr(UnresolvedExpression::Identifier(name), token);
 
-        self.expect(TokenKind::Semicolon);
+        self.expect(TokenKind::Semicolon)?;
         Ok(self.arena.alloc_unresolved_stmt(UnresolvedStatement::FunctionCall { identifier, is_move }, assign_tkn))
     }
 

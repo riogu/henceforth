@@ -46,7 +46,6 @@ impl Lexer {
                         while let Some(c) =
                             chars_iter.next_if(|c| ('a'..='z').contains(c) || ('A'..='Z').contains(c) || c == &'_')
                         {
-                            line_offset += 1;
                             lit.push(c);
                         }
                         if VALID_STACK_KEYWORDS.contains(&lit.as_str()) {
@@ -57,7 +56,7 @@ impl Lexer {
                             return LexerError::new(
                                 LexerErrorKind::InvalidStackKeyword,
                                 file.path.clone(),
-                                SourceInfo::new(line_number + 1, line_offset - (lit.len() - 1), lit.len()),
+                                SourceInfo::new(line_number + 1, line_offset, lit.len()),
                             );
                         }
                     },
@@ -180,12 +179,12 @@ impl Lexer {
                                 }
                             }
                         }
+                        line_offset -= lit.len();
                         TokenKind::Literal(Literal::String(lit))
                     },
                     '0'..='9' => {
                         let mut lit = char.to_string();
                         while let Some(c) = chars_iter.next_if(|c| ('0'..='9').contains(c) || c == &'.') {
-                            line_offset += 1;
                             lit.push(c);
                         }
                         // funny use of result types
@@ -206,7 +205,6 @@ impl Lexer {
                         while let Some(c) = chars_iter.next_if(|c| {
                             ('a'..='z').contains(c) || ('A'..='Z').contains(c) || ('0'..='9').contains(c) || c == &'_'
                         }) {
-                            line_offset += 1;
                             lit.push(c);
                         }
                         match lit.as_str() {
@@ -237,7 +235,7 @@ impl Lexer {
                         ),
                 };
                 let width = kind.get_width();
-                tokens.push(Token::new(kind.clone(), SourceInfo::new(line_number, line_offset, width)));
+                tokens.push(Token::new(kind.clone(), SourceInfo::new(line_number + 1, line_offset, width)));
                 line_offset += width;
             }
         }

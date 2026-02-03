@@ -33,7 +33,7 @@ use std::{error::Error, path::PathBuf, process::exit};
 
 use clap::{arg, Parser};
 
-use crate::hfs::error::CompileError;
+use crate::hfs::error::{CompileError, DiagnosticInfo};
 
 #[derive(Parser, Debug, Clone)]
 #[command(author, version, about)]

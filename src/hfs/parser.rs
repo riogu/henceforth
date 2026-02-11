@@ -19,12 +19,12 @@ impl Parser {
         match self.tokens.next() {
             Some(token) if std::mem::discriminant(&token.kind) == std::mem::discriminant(&token_kind) => Ok(token),
             Some(found) => ParserError::new(
-                ParserErrorKind::ExpectedButFound(Expectable::Token(token_kind), Some(found.kind)),
+                ParserErrorKind::ExpectedButFound(vec![Expectable::Token(token_kind)], Some(found.kind)),
                 self.diagnostic_info.path.clone(),
                 vec![found.source_info],
             ),
             None => ParserError::new(
-                ParserErrorKind::ExpectedButFound(Expectable::Token(token_kind), None),
+                ParserErrorKind::ExpectedButFound(vec![Expectable::Token(token_kind)], None),
                 self.diagnostic_info.path.clone(),
                 vec![self.diagnostic_info.eof_pos.clone()],
             ),
@@ -36,7 +36,7 @@ impl Parser {
             Some(token) => token,
             None =>
                 return ParserError::new(
-                    ParserErrorKind::ExpectedButFound(Expectable::Identifier, None),
+                    ParserErrorKind::ExpectedButFound(vec![Expectable::Identifier], None),
                     self.diagnostic_info.path.clone(),
                     vec![self.diagnostic_info.eof_pos.clone()],
                 ),
@@ -44,7 +44,7 @@ impl Parser {
         match &token.kind {
             TokenKind::Identifier(name) => Ok((name.clone(), token)),
             _ => ParserError::new(
-                ParserErrorKind::ExpectedButFound(Expectable::Identifier, Some(token.kind)),
+                ParserErrorKind::ExpectedButFound(vec![Expectable::Identifier], Some(token.kind)),
                 self.diagnostic_info.path.clone(),
                 vec![token.source_info],
             ),
@@ -56,7 +56,7 @@ impl Parser {
             Some(token) => token,
             None =>
                 return ParserError::new(
-                    ParserErrorKind::ExpectedButFound(Expectable::StackKeyword, None),
+                    ParserErrorKind::ExpectedButFound(vec![Expectable::StackKeyword], None),
                     self.diagnostic_info.path.clone(),
                     vec![self.diagnostic_info.eof_pos.clone()],
                 ),
@@ -64,7 +64,7 @@ impl Parser {
         match &token.kind {
             TokenKind::StackKeyword(name) => Ok((name.clone(), token)),
             _ => ParserError::new(
-                ParserErrorKind::ExpectedButFound(Expectable::StackKeyword, Some(token.kind)),
+                ParserErrorKind::ExpectedButFound(vec![Expectable::StackKeyword], Some(token.kind)),
                 self.diagnostic_info.path.clone(),
                 vec![token.source_info],
             ),
@@ -72,11 +72,11 @@ impl Parser {
     }
 
     fn expect_type(&mut self) -> Result<TypeId, Box<dyn CompileError>> {
-        let token = match self.tokens.next() {
-            Some(token) => token,
+        let token = match self.tokens.peek() {
+            Some(token) => token.clone(),
             None =>
                 return ParserError::new(
-                    ParserErrorKind::ExpectedButFound(Expectable::Type, None),
+                    ParserErrorKind::ExpectedButFound(vec![Expectable::Type], None),
                     self.diagnostic_info.path.clone(),
                     vec![self.diagnostic_info.eof_pos.clone()],
                 ),
@@ -91,7 +91,7 @@ impl Parser {
                 Ok(self.arena.alloc_type(hfs_type, token))
             },
             kind => ParserError::new(
-                ParserErrorKind::ExpectedButFound(Expectable::Type, Some(token.kind)),
+                ParserErrorKind::ExpectedButFound(vec![Expectable::Type], Some(token.kind)),
                 self.diagnostic_info.path.clone(),
                 vec![token.source_info],
             ),
@@ -106,7 +106,7 @@ impl Parser {
                 Some(token) => token,
                 None =>
                     return ParserError::new(
-                        ParserErrorKind::ExpectedButFound(Expectable::Type, None),
+                        ParserErrorKind::ExpectedButFound(vec![Expectable::Type, Expectable::Token(TokenKind::RightParen)], None),
                         self.diagnostic_info.path.clone(),
                         vec![self.diagnostic_info.eof_pos.clone()],
                     ),
@@ -116,7 +116,10 @@ impl Parser {
                 token if token.is_type() => types.push(self.arena.to_type(token)),
                 token =>
                     return ParserError::new(
-                        ParserErrorKind::ExpectedButFound(Expectable::Type, Some(token.kind)),
+                        ParserErrorKind::ExpectedButFound(
+                            vec![Expectable::Type, Expectable::Token(TokenKind::RightParen)],
+                            Some(token.kind),
+                        ),
                         self.diagnostic_info.path.clone(),
                         vec![token.source_info],
                     ),
@@ -168,14 +171,22 @@ impl Parser {
         tokens: Vec<Token>,
         path: PathBuf,
     ) -> Result<(Vec<UnresolvedTopLevelId>, UnresolvedAstArena), Box<dyn CompileError>> {
-        let diagnostic_info = DiagnosticInfo::new(path, &tokens);
+        let diagnostic_info = DiagnosticInfo::new(path.clone(), &tokens);
         let mut parser = Parser { tokens: tokens.into_iter().peekable(), arena: UnresolvedAstArena::new(), diagnostic_info };
         let mut top_level = Vec::<UnresolvedTopLevelId>::new();
         while let Some(token) = parser.tokens.peek() {
             match &token.kind {
                 TokenKind::Let => top_level.push(UnresolvedTopLevelId::VariableDecl(parser.variable_declaration()?)),
                 TokenKind::Fn => top_level.push(UnresolvedTopLevelId::FunctionDecl(parser.function_declaration()?)),
-                _ => panic!("expected variable or function declaration"),
+                _ =>
+                    return ParserError::new(
+                        ParserErrorKind::ExpectedButFound(
+                            vec![Expectable::FunctionDecl, Expectable::VariableDecl],
+                            Some(token.kind.clone()),
+                        ),
+                        path,
+                        vec![token.source_info.clone()],
+                    ),
             };
         }
         Ok((top_level, parser.arena))
@@ -185,7 +196,24 @@ impl Parser {
         let mut top_level_ids = Vec::<UnresolvedTopLevelId>::new();
         let token = self.expect(TokenKind::LeftBrace)?;
         loop {
-            match &self.tokens.peek().expect("unexpected end of input").kind {
+            let token = match self.tokens.peek() {
+                Some(token) => token,
+                None =>
+                    return ParserError::new(
+                        ParserErrorKind::ExpectedButFound(
+                            vec![
+                                Expectable::VariableDecl,
+                                Expectable::FunctionDecl,
+                                Expectable::Statement,
+                                Expectable::Token(TokenKind::RightBrace),
+                            ],
+                            None,
+                        ),
+                        self.diagnostic_info.path.clone(),
+                        vec![self.diagnostic_info.eof_pos.clone()],
+                    ),
+            };
+            match &token.kind {
                 kind if *kind == TokenKind::RightBrace => break,
                 TokenKind::Let => top_level_ids.push(UnresolvedTopLevelId::VariableDecl(self.variable_declaration()?)),
                 TokenKind::Fn => top_level_ids.push(UnresolvedTopLevelId::FunctionDecl(self.function_declaration()?)),
@@ -201,14 +229,25 @@ impl Parser {
     // <statement> ::= <if_stmt> | <stack_block> | <while_stmt> | <return_stmt>
     //               | <break_stmt> | <continue_stmt> | <assignment_stmt> | ";"
     fn statement(&mut self) -> Result<UnresolvedStmtId, Box<dyn CompileError>> {
-        let token = self.tokens.peek().expect("unexpected end of input while parsing statement");
+        let token = match self.tokens.peek() {
+            Some(token) => token,
+            None =>
+                return ParserError::new(
+                    ParserErrorKind::ExpectedButFound(vec![Expectable::Statement], None),
+                    self.diagnostic_info.path.clone(),
+                    vec![self.diagnostic_info.eof_pos.clone()],
+                ),
+        };
         match token.kind {
             TokenKind::If => Ok(self.if_statement()?),
             TokenKind::At => Ok(self.stack_block()?),
             TokenKind::LeftBrace => Ok(self.block_scope(ScopeKind::Block)?),
             TokenKind::While => Ok(self.while_statement()?),
             TokenKind::Break | TokenKind::Continue | TokenKind::Return => {
-                let token = self.tokens.next().expect("unexpected end of input while parsing statement");
+                let token = match self.tokens.next() {
+                    Some(token) => token,
+                    None => panic!("[internal error] peeked token but couldn't next it"),
+                };
                 self.expect(TokenKind::Semicolon)?;
                 match token.kind {
                     TokenKind::Break => Ok(self.arena.alloc_unresolved_stmt(UnresolvedStatement::Break, token)),
@@ -218,7 +257,10 @@ impl Parser {
                 }
             },
             TokenKind::Semicolon => {
-                let token = self.tokens.next().expect("unexpected end of input while parsing statement");
+                let token = match self.tokens.next() {
+                    Some(token) => token,
+                    None => panic!("[internal error] peeked token but couldn't next it"),
+                };
                 Ok(self.arena.alloc_unresolved_stmt(UnresolvedStatement::Empty, token))
             },
             TokenKind::CopyAssign => Ok(self.assignment(false)?),
@@ -226,7 +268,12 @@ impl Parser {
             TokenKind::CopyCall => Ok(self.function_call(false)?),
             TokenKind::MoveCall => Ok(self.function_call(true)?),
 
-            _ => Ok(panic!("expected statement, found '{:?}'", token.kind)),
+            _ =>
+                return ParserError::new(
+                    ParserErrorKind::ExpectedButFound(vec![Expectable::Statement], Some(token.kind.clone())),
+                    self.diagnostic_info.path.clone(),
+                    vec![token.source_info.clone()],
+                ),
         }
     }
 
@@ -242,11 +289,27 @@ impl Parser {
     // <else_stmt> ::= "else" "if" <stack_block>  <block_scope> <else_stmt>?
     //               | "else" <block_scope>
     fn else_statement(&mut self) -> Result<Option<UnresolvedStmtId>, Box<dyn CompileError>> {
-        let token = self.tokens.peek().expect("unexpected end of input while parsing statement");
+        let token = match self.tokens.peek() {
+            Some(token) => token,
+            None =>
+                return ParserError::new(
+                    ParserErrorKind::ExpectedButFound(vec![Expectable::AnyToken], None),
+                    self.diagnostic_info.path.clone(),
+                    vec![self.diagnostic_info.eof_pos.clone()],
+                ),
+        };
         match token.kind {
             TokenKind::Else => {
                 self.tokens.next();
-                let token = self.tokens.peek().expect("unexpected end of input while parsing statement");
+                let token = match self.tokens.peek() {
+                    Some(token) => token,
+                    None =>
+                        return ParserError::new(
+                            ParserErrorKind::ExpectedButFound(vec![Expectable::AnyToken], None),
+                            self.diagnostic_info.path.clone(),
+                            vec![self.diagnostic_info.eof_pos.clone()],
+                        ),
+                };
                 if token.kind == TokenKind::If {
                     // TODO: check this part of the code
                     let token = self.expect(TokenKind::If)?;
@@ -280,20 +343,32 @@ impl Parser {
 
         self.expect(TokenKind::LeftParen)?;
         loop {
-            match self.tokens.peek().expect("unexpected end of input") {
-                token if token.kind == TokenKind::RightParen => {
+            match self.tokens.peek() {
+                Some(token) if token.kind == TokenKind::RightParen => {
                     self.expect(TokenKind::RightParen)?;
                     break;
                 },
-                _ => expressions.push(self.stack_expression()?),
+                Some(token) => expressions.push(self.stack_expression()?),
+                None =>
+                    return ParserError::new(
+                        ParserErrorKind::ExpectedButFound(
+                            vec![Expectable::StackExpression, Expectable::Token(TokenKind::RightParen)],
+                            None,
+                        ),
+                        self.diagnostic_info.path.clone(),
+                        vec![self.diagnostic_info.eof_pos.clone()],
+                    ),
             };
         }
         Ok(self.arena.alloc_unresolved_stmt(UnresolvedStatement::StackBlock(expressions), token))
     }
     // <stack_expression> ::= <stack_operation> | <identifier> | <literal> | <function_call>
     fn stack_expression(&mut self) -> Result<UnresolvedExprId, Box<dyn CompileError>> {
-        let kind = self.tokens.peek().expect("unexpected end of input while parsing statement").kind.clone();
-        match kind {
+        let token = match self.tokens.peek() {
+            Some(token) => token,
+            None => panic!("[internal error] peeked stack expression the first time but failed the second time"),
+        };
+        match &token.kind {
             kind if kind.is_stack_operator() => self.stack_operation(),
             TokenKind::StackKeyword(keyword) => self.stack_keyword_expr(),
             TokenKind::Identifier(_) => {
@@ -301,16 +376,24 @@ impl Parser {
                 Ok(self.arena.alloc_unresolved_expr(UnresolvedExpression::Identifier(name), token))
             },
             TokenKind::Literal(lit) =>
-                Ok(self.arena.alloc_unresolved_expr(UnresolvedExpression::Literal(lit), self.tokens.next().unwrap())),
+                Ok(self.arena.alloc_unresolved_expr(UnresolvedExpression::Literal(lit.clone()), self.tokens.next().unwrap())),
             TokenKind::LeftParen => self.tuple_expression(),
-            _ => panic!("expected expression, found '{:?}'", kind),
+            _ =>
+                return ParserError::new(
+                    ParserErrorKind::ExpectedButFound(vec![Expectable::StackExpression], Some(token.kind.clone())),
+                    self.diagnostic_info.path.clone(),
+                    vec![token.source_info.clone()],
+                ),
         }
     }
     // <stack_operation> ::= <binary_op> | <unary_op>
     // <binary_op> ::= "+" | "-" | "*" | "/" | ">" | "<" | "==" | "&&" | "||"
     // <unary_op>  ::= "!" | "~"
     fn stack_operation(&mut self) -> Result<UnresolvedExprId, Box<dyn CompileError>> {
-        let token = self.tokens.next().expect("unexpected end of input while parsing statement");
+        let token = match self.tokens.next() {
+            Some(token) => token,
+            None => panic!("[internal error] couldn't next peeked stack operation"), // maybe change to parser error in the future
+        };
         let kind = token.kind.clone();
         match kind {
             kind if kind.is_binary_operator() => match kind {
@@ -345,7 +428,12 @@ impl Parser {
             },
             TokenKind::Not =>
                 Ok(self.arena.alloc_unresolved_expr(UnresolvedExpression::Operation(UnresolvedOperation::Not), token)),
-            _ => panic!("expected stack operator"),
+            _ =>
+                return ParserError::new(
+                    ParserErrorKind::ExpectedButFound(vec![Expectable::StackOperation], Some(kind)),
+                    self.diagnostic_info.path.clone(),
+                    vec![token.source_info.clone()], // shouldn't happen
+                ),
         }
     }
 
@@ -354,8 +442,8 @@ impl Parser {
         let mut expressions = Vec::<UnresolvedExprId>::new();
         let token = self.expect(TokenKind::LeftParen)?;
         loop {
-            match self.tokens.next().expect("unexpected end of input") {
-                token if token.kind == TokenKind::RightParen => break,
+            match self.tokens.next() {
+                Some(token) if token.kind == TokenKind::RightParen => break,
                 _ => expressions.push(self.stack_expression()?),
             };
         }

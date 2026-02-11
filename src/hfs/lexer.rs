@@ -31,8 +31,12 @@ impl Lexer {
             let mut chars_iter = line_string.chars().peekable();
             while let Some(char) = chars_iter.next() {
                 let kind = match char {
-                    ' ' | '\t' | '\r' => {
+                    ' ' | '\r' => {
                         line_offset += 1;
+                        continue;
+                    },
+                    '\t' => {
+                        line_offset += 4;
                         continue;
                     },
                     '(' => TokenKind::LeftParen,

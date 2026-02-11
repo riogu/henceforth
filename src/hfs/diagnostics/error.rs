@@ -1,7 +1,7 @@
 use std::{
     env,
     error::Error,
-    fmt::{Debug, Display},
+    fmt::{write, Debug, Display},
     fs,
     io::Read,
     path::PathBuf,
@@ -82,7 +82,8 @@ impl CompileError for LexerError {
         let line = source
             .lines()
             .nth(self.source_info.line_number - 1)
-            .ok_or_else(|| format!("Line {} not found in file", self.source_info.line_number))?;
+            .ok_or_else(|| format!("Line {} not found in file", self.source_info.line_number))?
+            .replace("\t", "    ");
 
         let mut error_pointer = " ".repeat(self.source_info.line_offset - 1);
         error_pointer.push_str(format!("{} {}", "^".repeat(self.source_info.token_width), self.message().1).as_str());
@@ -126,10 +127,16 @@ impl Display for LexerError {
 
 #[derive(Debug)]
 pub enum Expectable {
+    AnyToken,
     Token(TokenKind),
     Identifier,
     StackKeyword,
     Type,
+    VariableDecl,
+    FunctionDecl,
+    Statement,
+    StackExpression,
+    StackOperation,
 }
 
 impl Display for Expectable {
@@ -139,13 +146,19 @@ impl Display for Expectable {
             Expectable::Identifier => write!(f, "identifier"),
             Expectable::StackKeyword => write!(f, "stack keyword"),
             Expectable::Type => write!(f, "type"),
+            Expectable::VariableDecl => write!(f, "variable declaration"),
+            Expectable::FunctionDecl => write!(f, "function declaration"),
+            Expectable::Statement => write!(f, "statement"),
+            Expectable::AnyToken => write!(f, "token"),
+            Expectable::StackExpression => write!(f, "stack expression"),
+            Expectable::StackOperation => write!(f, "stack operation"),
         }
     }
 }
 
 #[derive(Debug)]
 pub enum ParserErrorKind {
-    ExpectedButFound(Expectable, Option<TokenKind>),
+    ExpectedButFound(Vec<Expectable>, Option<TokenKind>),
 }
 
 #[derive(Debug)]
@@ -165,8 +178,20 @@ impl CompileError for ParserError {
     fn message(&self) -> (String, String) {
         match &self.kind {
             ParserErrorKind::ExpectedButFound(expected, found) => match found {
-                Some(found) => (format!("expected {}, found {}", expected, found), String::new()),
-                None => (format!("expected {}", expected), String::new()),
+                Some(found) => {
+                    let expected_repr = format!(
+                        "{}",
+                        expected.iter().map(|expected| format!("{}", expected)).collect::<Vec<String>>().join(" or ")
+                    );
+                    (format!("expected {}, found {}", expected_repr, found), String::new())
+                },
+                None => {
+                    let expected_repr = format!(
+                        "{}",
+                        expected.iter().map(|expected| format!("{}", expected)).collect::<Vec<String>>().join(" or ")
+                    );
+                    (format!("expected {}", expected_repr), String::new())
+                },
             },
         }
     }
@@ -193,7 +218,8 @@ impl CompileError for ParserError {
         let line = source
             .lines()
             .nth(self.source_info[0].line_number - 1)
-            .ok_or_else(|| format!("Line {} not found in file", self.source_info[0].line_number))?;
+            .ok_or_else(|| format!("Line {} not found in file", self.source_info[0].line_number))?
+            .replace("\t", "    ");
 
         let mut error_pointer = " ".repeat(self.source_info[0].line_offset - 1);
         error_pointer.push_str(format!("{} {}", "^".repeat(self.source_info[0].token_width), self.message().1).as_str());

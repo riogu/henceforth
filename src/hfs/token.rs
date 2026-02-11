@@ -37,6 +37,17 @@ impl From<bool> for Literal {
     }
 }
 
+impl std::fmt::Display for Literal {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Literal::Integer(val) => write!(f, "{}", val),
+            Literal::Float(val) => write!(f, "{}", val),
+            Literal::String(val) => write!(f, "{}", val),
+            Literal::Bool(val) => write!(f, "{}", val),
+        }
+    }
+}
+
 pub const VALID_STACK_KEYWORDS: &[&str] = &["@pop", "@pop_all", "@dup", "@swap", "@over", "@rot", "@rrot", "@nip", "@tuck"];
 
 #[derive(Debug, Clone, PartialEq)]
@@ -146,7 +157,7 @@ use crate::hfs::{ast::Type, builder::builder::BuilderOperation};
 impl fmt::Display for TokenKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            TokenKind::Literal(literal) => write!(f, "{:?}", literal),
+            TokenKind::Literal(literal) => write!(f, "{}", literal),
             TokenKind::Let => write!(f, "let"),
             TokenKind::If => write!(f, "if"),
             TokenKind::Else => write!(f, "else"),

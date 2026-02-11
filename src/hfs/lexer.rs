@@ -1,8 +1,8 @@
 use std::{fs, path::PathBuf};
 
 use crate::hfs::{
-    error::{CompileError, LexerError, LexerErrorKind},
-    lexer,
+    error::CompileError,
+    lexer_errors::{LexerError, LexerErrorKind},
     token::{Literal, SourceInfo, Token, TokenKind},
     VALID_STACK_KEYWORDS,
 };

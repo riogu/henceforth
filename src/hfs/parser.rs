@@ -2,7 +2,8 @@ use std::{iter::Peekable, path::PathBuf, vec::IntoIter};
 
 use crate::hfs::{
     ast::*,
-    error::{CompileError, DiagnosticInfo, Expectable, ParserError, ParserErrorKind},
+    error::{CompileError, DiagnosticInfo},
+    parser_errors::{Expectable, ParserError, ParserErrorKind},
     token::*,
     unresolved_ast::*,
     ScopeKind,

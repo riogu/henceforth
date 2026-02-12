@@ -4,8 +4,8 @@ use std::{
 };
 
 use crate::hfs::{
-    self, BasicBlock, BlockId, CfgFunction, CfgOperation, CfgPrintable, CfgTopLevelId, InstId, Instruction, IrFuncId,
-    IrVarDeclaration, IrVarId, Literal, PRIMITIVE_TYPE_COUNT, SourceInfo, TermInstId, TerminatorInst, Token, TokenKind, ast::*,
+    self, ast::*, BasicBlock, BlockId, CfgFunction, CfgOperation, CfgPrintable, CfgTopLevelId, InstId, Instruction, IrFuncId,
+    IrVarDeclaration, IrVarId, Literal, SourceInfo, TermInstId, TerminatorInst, Token, TokenKind, PRIMITIVE_TYPE_COUNT,
 };
 
 // here is where youll create the CFG pass and the new IR generation
@@ -802,20 +802,19 @@ impl IrArena {
 }
 
 // Debug printing functions (using the MIR syntax)
-// FIXME: joao i broke your prints again
-// impl CfgAnalyzer {
-//     pub fn print_hfs_mir(&self, top_level_nodes: Vec<CfgTopLevelId>) {
-//         for id in top_level_nodes {
-//             match id {
-//                 CfgTopLevelId::GlobalVarDecl(var_id) => {
-//                     let var = self.arena.get_var(var_id);
-//                     println!("{}", var.get_repr(&self.arena));
-//                 },
-//                 CfgTopLevelId::FunctionDecl(func_id) => {
-//                     let func = self.arena.get_func(func_id);
-//                     println!("{}", func.get_repr(&self.arena));
-//                 },
-//             }
-//         }
-//     }
-// }
+impl CfgAnalyzer {
+    pub fn print_hfs_mir(&self, top_level_nodes: Vec<CfgTopLevelId>) {
+        for id in top_level_nodes {
+            match id {
+                CfgTopLevelId::GlobalVarDecl(var_id) => {
+                    let var = self.arena.get_var(var_id);
+                    println!("{}", var.get_repr(&self.arena));
+                },
+                CfgTopLevelId::FunctionDecl(func_id) => {
+                    let func = self.arena.get_func(func_id);
+                    println!("{}", func.get_repr(&self.arena));
+                },
+            }
+        }
+    }
+}

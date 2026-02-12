@@ -1,9 +1,9 @@
 use std::{
     collections::HashMap,
-    fmt::{Display, format},
+    fmt::{format, Display},
 };
 
-use crate::hfs::{IrArena, Literal, SourceInfo, ast::*};
+use crate::hfs::{ast::*, IrArena, Literal, SourceInfo};
 /*
 =================================================================================================
 Control Flow Graph IR Pass (HFS MIR - Medium-level IR)
@@ -179,23 +179,51 @@ impl CfgPrintable for Type {
     }
 }
 
+impl CfgFunction {
+    fn collect_blocks<'a>(&'a self, arena: &'a IrArena) -> Vec<&BasicBlock> {
+        let mut visited = std::collections::HashSet::new();
+        let mut worklist = vec![self.entry_block];
+        let mut blocks = Vec::new();
+
+        while let Some(block_id) = worklist.pop() {
+            if !visited.insert(block_id) {
+                continue;
+            }
+
+            let curr_block = arena.get_block(block_id);
+            blocks.push(curr_block);
+
+            match curr_block.terminator {
+                Some(id) => match arena.get_terminator_instruction(id) {
+                    TerminatorInst::Return(source_info, inst_id) => {},
+                    TerminatorInst::Branch { source_info, cond, true_block, false_block } => {
+                        worklist.push(*false_block);
+                        worklist.push(*true_block);
+                    },
+                    TerminatorInst::Jump(source_info, block_id) => {
+                        worklist.push(*block_id);
+                    },
+                    TerminatorInst::Unreachable => {},
+                },
+                None => {},
+            }
+        }
+
+        blocks
+    }
+}
+
 impl CfgPrintable for CfgFunction {
     fn get_repr(&self, arena: &IrArena) -> String {
         let params = arena.get_type(self.param_type).clone();
         let returns = arena.get_type(self.return_type).clone();
-        // let blocks_repr = self
-        //     .body_blocks
-        //     .iter()
-        //     .map(|block_id| arena.get_block(*block_id).get_repr(arena))
-        //     .collect::<Vec<String>>()
-        //     .join("\n");
+        let blocks_repr =
+            self.collect_blocks(arena).iter().map(|block| block.get_repr(arena)).collect::<Vec<String>>().join("\n");
         format!("fn {}: ({}) -> ({}) {{\n{}\n   }}", self.name, params.get_repr(arena), returns.get_repr(arena), "")
-        // FIXME: this is a graph traversal (CFG blocks are linked lists)
-        // joao pls fix this later when you work on this part
     }
 }
 
-impl CfgPrintable for VarDeclaration {
+impl CfgPrintable for IrVarDeclaration {
     fn get_repr(&self, arena: &IrArena) -> String {
         let typ = arena.get_type(self.hfs_type);
         format!("let {}: {};", self.name, typ.get_repr(arena))
@@ -289,15 +317,8 @@ impl CfgPrintable for TerminatorInst {
                 format!("branch {}, {}, {};", cond.get_repr(arena), true_block.name, false_block.name)
             },
             TerminatorInst::Jump(source_info, block_id) => {
-                todo!()
-                // let block = arena.get_block(*block_id);
-                // match inst_id {
-                //     Some(id) => {
-                //         let inst = arena.get_instruction(*id);
-                //         format!("jump {}, {};", block.name, inst.get_repr(arena))
-                //     },
-                //     None => format!("jump {};", block.name),
-                // }
+                let block = arena.get_block(*block_id);
+                format!("jump {};", block.name)
             },
             TerminatorInst::Unreachable => String::from("unreachable;"),
         }
@@ -307,7 +328,8 @@ impl CfgPrintable for TerminatorInst {
 impl CfgPrintable for Instruction {
     fn get_repr(&self, arena: &IrArena) -> String {
         match self {
-            Instruction::Parameter { source_info, index, type_id: ty } => todo!(),
+            Instruction::Parameter { source_info, index, type_id: ty } =>
+                format!("{} %arg{}", arena.get_type(*ty).get_repr(arena), index),
             Instruction::FunctionCall { source_info, args, func_id: identifier, is_move, return_values } => {
                 let func = arena.get_func(*identifier);
                 let args_repr: Vec<String> =
@@ -315,10 +337,9 @@ impl CfgPrintable for Instruction {
                 format!("call {}, {};", func.name, args_repr.join(", "))
             },
             Instruction::Phi { source_info, incoming } => {
-                todo!("joao i broke your prints")
-                // let incoming: Vec<String> =
-                //     incoming.iter().map(|id| arena.get_block(*id)).map(|block| block.name.clone()).collect();
-                // format!("phi {};", incoming.join(", "))
+                let incoming: Vec<String> =
+                    incoming.iter().map(|ids| arena.get_block(*ids.0)).map(|block| block.name.clone()).collect();
+                format!("phi {};", incoming.join(", "))
             },
             Instruction::StackKeyword { source_info, name, args } => {
                 let args_repr: Vec<String> =
@@ -337,20 +358,22 @@ impl CfgPrintable for Instruction {
                 Literal::String(lit) => lit.clone(),
                 Literal::Bool(lit) => lit.to_string(),
             },
-            Instruction::LoadElement { source_info, index, tuple } => todo!(),
-            Instruction::ReturnValue { source_info, type_id } => todo!(),
+            Instruction::LoadElement { source_info, index, tuple } =>
+                format!("load_element {}, {}", index, arena.get_instruction(*tuple).get_repr(arena)),
+            Instruction::ReturnValue { source_info, type_id } => arena.get_type(*type_id).get_repr(arena),
         }
     }
 }
 
 impl CfgPrintable for BasicBlock {
     fn get_repr(&self, arena: &IrArena) -> String {
-        // let non_term_inst_repr = get_repr_many(&self.instructions, arena, "\n");
-        // let terminator_repr = self.terminator.get_repr(arena);
-        // format!("{}\n{}", non_term_inst_repr, terminator_repr)
-        todo!()
-        // FIXME: (for joao) your get_repr_many() method wont work because we actually have
-        // InstId not Instruction (i wrote it wrong initially) and you wrote it thinking
-        // of that. Remake it so it expects a Vec<InstId> or use a map() or smth
+        let instructions =
+            self.instructions.iter().map(|inst| arena.get_instruction(*inst).clone()).collect::<Vec<Instruction>>();
+        let non_term_inst_repr = get_repr_many(&instructions, arena, "\n");
+        let terminator_repr = match self.terminator {
+            Some(id) => arena.get_terminator_instruction(id).get_repr(arena),
+            None => String::new(),
+        };
+        format!("{}\n{}", non_term_inst_repr, terminator_repr)
     }
 }

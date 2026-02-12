@@ -62,6 +62,15 @@ pub struct IrVarDeclaration {
 // but not all instructions produce values (declarations, stores, etc)
 #[derive(Debug, Clone)]
 pub enum Instruction {
+    Load {
+        source_info: SourceInfo,
+        address: InstId,
+    },
+    Store {
+        source_info: SourceInfo,
+        address: InstId,
+        value: InstId,
+    },
     Parameter {
         source_info: SourceInfo,
         index: usize,
@@ -102,15 +111,6 @@ pub enum Instruction {
     },
     Operation(SourceInfo, CfgOperation),
     Literal(SourceInfo, Literal),
-    // NOTE: this isnt used right now, it will only be used once we add memory operations and
-    // actually use globals
-    // we dont really use globals much in the language
-    // Store {
-    //     source_info: SourceInfo,
-    //     value: InstId,
-    //     var_id: IrVarId, // GlobalVar or Variable
-    //     is_move: bool,
-    // },
     LoadElement {
         // load an element from a tuple (used to merge tuples into a new one)
         // useful for mapping our stack tracking into LLVM IR
@@ -361,6 +361,12 @@ impl CfgPrintable for Instruction {
             Instruction::LoadElement { source_info, index, tuple } =>
                 format!("load_element {}, {}", index, arena.get_instruction(*tuple).get_repr(arena)),
             Instruction::ReturnValue { source_info, type_id } => arena.get_type(*type_id).get_repr(arena),
+            Instruction::Load { source_info, address } => format!("load {}", arena.get_instruction(*address).get_repr(arena)),
+            Instruction::Store { source_info, address, value } => format!(
+                "store {}, {}",
+                arena.get_instruction(*value).get_repr(arena),
+                arena.get_instruction(*address).get_repr(arena)
+            ),
         }
     }
 }

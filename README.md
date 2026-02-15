@@ -1,6 +1,6 @@
 # henceforth
 
-A statically-typed stack-based programming language exploring middle-end compiler design — SSA-form IR, CFG construction, and dataflow-driven optimization.
+A statically-typed stack-based programming language exploring middle-end compiler design (SSA-form IR, CFG construction, and dataflow-driven optimization).
 
 ## Example
 
@@ -48,7 +48,7 @@ Source → Lexer → Parser → Stack Analyzer → CFG → MIR → (planned) LLV
 
 The frontend is hand-written: lexer, recursive descent parser, two-pass stack analyzer for identifier resolution and type checking. The CFG analyzer validates stack depth and types at control flow boundaries.
 
-MIR is the current focus — an SSA-form intermediate representation with CFG structure, designed as the target for dataflow analysis and optimization passes.
+MIR is the current focus for this project. It's an SSA-form intermediate representation with CFG structure, designed as the target for dataflow analysis and optimization passes.
 
 ## Middle-End (in progress)
 

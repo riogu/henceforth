@@ -1,188 +1,92 @@
-# Henceforth Programming Language
+# henceforth
 
-A statically-typed stack-based programming language with explicit stack manipulation, implemented in Rust.
+A statically-typed stack-based programming language exploring middle-end compiler design — SSA-form IR, CFG construction, and dataflow-driven optimization.
 
----
-
-## Quick Overview
-
-Henceforth is a stack-based programming language featuring:
-- Explicit stack manipulation with dedicated syntax
-- Static typing with compile-time type checking
-- Stack-based function signatures and control flow
-- Copy and move semantics for stack operations
-- Interpreted execution with planned compilation support (LLVM backend)
-
-For detailed information, see [the github page](https://riogu.github.io/henceforth) for language specification and usage documentation.
-
----
-
-## Example Program
+## Example
 
 ```rust
-// Calculate factorial using stack operations
 fn factorial: (i32) -> (i32) {
     let n: i32;
     let result: i32;
 
-    &= n;                    // pop stack and assign to n
-    @(1) &= result;          // push 1 and assign to result
+    &= n;
+    @(1) &= result;
 
-    while @(n 1 >) {         // push n, push 1, compare
-        @(result n *) &= result;  // result * n, pop and assign
-        @(n 1 -) &= n;            // n - 1, pop and assign
+    while @(n 1 >) {
+        @(result n *) &= result;
+        @(n 1 -) &= n;
     }
 
-    @(result);               // push result to stack for return
+    @(result);
 }
 
-// FizzBuzz implementation
-fn fizz_buzz: (i32) -> (str) {
-    if @(15 % 0 ==) {
-        @("fizzbuzz");
-    } else if @(3 % 0 ==) {
-        @("fizz");
-    } else if @(5 % 0 ==) {
-        @("buzz");
-    } else {
-        @pop;                // remove unused value
-        @("no fizzbuzz");
-    }
-}
-
-// Main program: calculate and test factorial of 5
 fn main: () -> () {
-    @(5) &> factorial;       // call factorial with 5
-    @(120 ==);              // compare result with 120
-
-    @(15) :> fizz_buzz;     // call fizz_buzz (copy argument)
-    @pop;                   // discard result
+    @(5) &> factorial;
+    @(120 ==);
 }
 ```
 
----
+Stack blocks (`@(...)`) make data flow explicit. Values are pushed, manipulated, and consumed through stack operations rather than implicit variable binding.
 
-## Language Features
+## Language
 
-### Stack-Based Execution
-- **Explicit Stack Blocks:** `@(1 2 +)` pushes 1, pushes 2, then adds them
-- **Stack Manipulation:** `@dup` duplicates top value, `@pop` removes top value
-- **Stack Introspection:** `@depth` checks current stack depth
+**Types:** `i32`, `f32`, `bool`, `str`, tuple types for function signatures.
 
-### Type System
-- **Primitive Types:** `i32`, `f32`, `bool`, `str`
-- **Tuple Types:** Function parameters and return values are tuples
-- **Static Type Checking:** Types validated during stack analysis pass
+**Stack operations:** `@(expr)` pushes values, `@dup` duplicates, `@pop` discards, `@depth` introspects. `:=`/`:>` copy, `&=`/`&>` move.
 
-### Control Flow
-- **Conditional Statements:** `if`/`else if`/`else` with stack-based conditions
-- **Loops:** `while` loops with stack balance enforcement
-- **Branch Validation:** All branches must leave stack in consistent state
+**Control flow:** `if`/`else if`/`else`, `while` loops. All branches must leave the stack in a consistent state — enforced at compile time.
 
-### Memory Semantics
-- **Copy Operations:** `:=` for assignment, `:>` for function calls (copies values)
-- **Move Operations:** `&=` for assignment, `&>` for function calls (moves values)
-- **Explicit Semantics:** No implicit copying or moving of stack values
+**Functions:** Stack-based signatures `(params) -> (returns)` with function-scoped stacks.
 
----
+## Compiler Pipeline
 
-## Implementation
-
-### Frontend
-- Hand-written lexer with token support for stack operations
-- Hand-written recursive descent parser generating unresolved AST
-- Two-pass stack analyzer for identifier resolution and type checking
-- Scope resolution with stack depth validation
-
-### Execution
-- Tree-walking interpreter with runtime stack management
-- LLVM IR backend (planned)
-
-### Compiler Pipeline
 ```
-Source → Lexer → Parser/Unresolved AST → Stack Analyzer/Resolved AST → CFG → (planned) MIR -> LLVM IR → Compilation
-                                                                             ↓
-                                                                             Interpreter
+Source → Lexer → Parser → Stack Analyzer → CFG → MIR → (planned) LLVM IR
+                                                    ↓
+                                                Interpreter
 ```
 
----
+The frontend is hand-written: lexer, recursive descent parser, two-pass stack analyzer for identifier resolution and type checking. The CFG analyzer validates stack depth and types at control flow boundaries.
 
-## Currently Working On
+MIR is the current focus — an SSA-form intermediate representation with CFG structure, designed as the target for dataflow analysis and optimization passes.
 
-### Control Flow Graph (CFG) Analysis
-Stack depth and type validation at control flow boundaries. Ensuring proper stack balance across function exits, early returns, and loop bodies.
+## Middle-End (in progress)
 
-**Current Status:** Basic CFG analyzer structure exists. Currently implementing:
-- Stack validation at every function exit point
-- Type checking at block boundaries
-- Integration with existing stack analyzer
+The compiler's middle-end is being built around an SSA-form MIR with explicit control flow graphs. Current and planned work:
 
-### Stack Keyword System
-Built-in stack manipulation operations (`@dup`, `@pop`, `@depth`, `@swap`).
+**IR construction:** SSA construction using Braun et al.'s algorithm (on-the-fly phi insertion during IR generation). CFG with basic blocks, explicit predecessor/successor edges.
 
-**Current Status:** Partial implementation. Lexer -> Parser -> Stack Analyzer support complete.
+**Dataflow analysis infrastructure:** Iterative fixed-point solver operating over the CFG. Planning to implement liveness analysis, available expressions, and reaching definitions as the foundation for optimization passes.
 
----
+**Optimization passes (planned):**
+- Dead code elimination via liveness / SSA use-lists
+- Constant propagation (sparse conditional constant propagation on SSA)
+- Loop-invariant code motion — studying LLVM's approach using dominance, alias analysis, and MemorySSA rather than classical LCM
+- Global common subexpression elimination via value numbering on SSA
+- Strength reduction for induction variables
 
-## Planned Features
-
-### Compilation
-- MIR (Mid-level IR) generation from resolved AST
-- LLVM backend for native code generation
-- Optimization passes at MIR level
-
-### Type System Extensions
-- User-defined struct types
-- Generic types with stack-aware semantics
-- Type inference for variable declarations
-
-### Stack Operations
-- Complete stack keyword system (`@swap`, `@rot`, `@over`, etc.)
-- Stack frame introspection during debugging
-- Compile-time stack depth checking improvements
-
-### Standard Library
-- I/O operations (currently no built-in printing)
-- String manipulation beyond literals
-- Collection types with stack-based iteration
-
----
-
-## Project Goals
-
-This language explores stack-based programming in a modern, statically-typed context. Unlike traditional stack languages (ex: Forth), Henceforth provides:
-- Explicit stack manipulation syntax
-- Function-scoped stacks with controlled merging
-- Static type checking before execution
-- Familiar control flow structures
-
-The goal is to demonstrate that stack-based programming can be both explicit and ergonomic, serving as a foundation for exploring:
-- Alternative evaluation models
-- Explicit data flow in programs
-- Compile-time stack analysis techniques
-
----
-
-## Documentation
-
-Documentation is available in the [the github page](https://riogu.github.io/henceforth)
-
----
+**Backend (planned):** LLVM IR generation from optimized MIR.
 
 ## Project Structure
 
 ```
 src/hfs/
 ├── lexer.rs              # Tokenization
-├── parser.rs             # Unresolved AST generation
-├── unresolved_ast.rs     # First-pass AST representation
-├── stack_analyzer.rs     # Stack analysis and AST resolution
-├── ast.rs                # Resolved AST representation
-├── cfg_analyzer.rs       # Control flow graph analysis (planned)
-├── hfs_mir.rs            # Mid-level IR (planned)
-├── interpreter.rs        # AST interpreter
-├── types.rs              # Type checking and type operations
 ├── token.rs              # Token definitions
-├── scope_stack.rs        # Symbol resolution
-└── builder/              # Test builders
+├── parser.rs             # Recursive descent parser, produces unresolved AST
+├── unresolved_ast.rs     # First-pass AST before name resolution
+├── stack_analyzer.rs     # Stack analysis, identifier resolution, type checking
+├── ast.rs                # Resolved AST
+├── scope_stack.rs        # Symbol table / scope resolution
+├── types.rs              # Type system
+├── cfg_analyzer.rs       # CFG construction and stack validation
+├── hfs_mir.rs            # SSA-form mid-level IR
+├── interpreter.rs        # MIR interpreter
+├── ast_interpreter.rs    # AST tree-walking interpreter
+├── diagnostics/          # Error reporting
+└── builder/              # Test infrastructure
 ```
+
+## Documentation
+
+Language specification and usage docs at [riogu.github.io/henceforth](https://riogu.github.io/henceforth).

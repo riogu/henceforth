@@ -8,6 +8,7 @@ use std::{collections::HashMap, rc::Rc};
 // this is 'basically' interpreting, but only at the level of "is it in the stack or not"
 // the goal is to make Henceforth a compiled language, therefore we do multiple stack passes
 use super::*;
+use crate::type_effect;
 
 impl AstArena {
     // clears the stack and returns it to the user
@@ -478,8 +479,7 @@ impl StackAnalyzer {
             UnresolvedExpression::StackKeyword(name) => {
                 let kw_declaration = self.arena.get_stack_keyword_from_name(name.as_str());
 
-                // Copy out the function pointer so we dont have mutable borrow while there is an immutable borrow
-                // let effect = kw_declaration.type_effect;
+                let effect = kw_declaration.type_effect;
 
                 let args = match kw_declaration.expected_args_size {
                     Some(n) => self
@@ -487,29 +487,51 @@ impl StackAnalyzer {
                         .popn_or_error(n, format!("expected {} arguments for stack keyword {}", n, kw_declaration.name).as_str()),
                     None => self.arena.pop_entire_hfs_stack(), // for @pop_all
                 };
-                todo!();
+
                 // // simulate stack
-                // let simulated_stack: Vec<TypeId> = args.iter().map(|id| self.arena.get_type_id_of_expr(*id)).collect();
-                // let return_values = effect(simulated_stack);
-                // let mut return_value_ids = Vec::new();
-                // return_values
-                //     .iter()
-                //     .for_each(|ret| {
-                //         if let Expression::ReturnValue(id) = ret {
-                //             let return_val_id = self
-                //                 .arena
-                //                 .alloc_and_push_to_hfs_stack(ret.clone(), ExprProvenance::RuntimeValue,
-                //                                              self.arena.get_type_token(*id).clone());
-                //             return_value_ids.push(return_val_id);
-                //         } else {
-                //             panic!("[internal error] stack keyword effect should return a Expression::ReturnValue")
-                //         }
-                // });
-                //
-                // let id = self.arena.alloc_and_push_to_hfs_stack(Expression::StackKeyword { name, args, return_values: return_value_ids },
-                //                                                 ExprProvenance::RuntimeValue, token);
-                // self.arena.pop_or_error("could not pop stack keyword");
-                // id
+                let simulated_stack: Vec<TypeId> = args.iter().map(|id| self.arena.get_type_id_of_expr(*id)).collect();
+
+                let return_values = effect(simulated_stack.clone());
+                let mut return_value_ids = Vec::new();
+                return_values.iter().for_each(|ret| {
+                    if let Expression::ReturnValue(id) = ret {
+                        let return_val_id = self.arena.alloc_and_push_to_hfs_stack(
+                            ret.clone(),
+                            ExprProvenance::RuntimeValue,
+                            self.arena.get_type_token(*id).clone(),
+                        );
+                        return_value_ids.push(return_val_id);
+                    } else {
+                        panic!("[internal error] stack keyword effect should return a Expression::ReturnValue")
+                    }
+                });
+
+                let return_value_types: Vec<TypeId> =
+                    return_value_ids.iter().map(|id| self.arena.get_type_id_of_expr(*id)).collect();
+
+                // create tuples for param and return type
+                let param_type = self.arena.alloc_type(Type::Tuple(simulated_stack), Token {
+                    kind: TokenKind::LeftParen,
+                    source_info: SourceInfo { line_number: 0, line_offset: 0, token_width: 0 },
+                });
+                let return_type = self.arena.alloc_type(Type::Tuple(return_value_types), Token {
+                    kind: TokenKind::LeftParen,
+                    source_info: SourceInfo { line_number: 0, line_offset: 0, token_width: 0 },
+                });
+
+                let id = self.arena.alloc_and_push_to_hfs_stack(
+                    Expression::StackKeyword(StackKeyword {
+                        name,
+                        parameter_exprs: args,
+                        param_type,
+                        return_type,
+                        return_values: return_value_ids,
+                    }),
+                    ExprProvenance::RuntimeValue,
+                    token,
+                );
+                self.arena.pop_or_error("could not pop stack keyword");
+                id
             },
         }
     }

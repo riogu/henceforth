@@ -93,11 +93,6 @@ pub struct UnresolvedFunctionDeclaration {
     pub body: UnresolvedStmtId, // Uses unresolved ID
 }
 
-#[derive(Debug, Clone)]
-pub struct UnresolvedStackKeyword {
-    pub name: String,
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct UnresolvedVarId(pub usize);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

@@ -31,7 +31,7 @@ mod hfs {
 }
 use std::{error::Error, path::PathBuf, process::exit};
 
-use clap::{Parser, arg};
+use clap::{arg, Parser};
 
 use crate::hfs::error::{CompileError, DiagnosticInfo};
 

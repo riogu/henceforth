@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 
 use crate::hfs::{
+    builder::builder::{Builder, BuilderOperation, ControlFlowOps, FunctionOps, LoopOps, PassMode, StackOps, VariableOps},
     AstArena, ExprId, ExprProvenance, Expression, FuncId, FunctionDeclaration, Identifier, Literal, Operation, ScopeKind,
     SourceInfo, StackKeyword, Statement, StmtId, Token, TokenKind, TopLevelId, Type, TypeId, VarDeclaration, VarId,
-    builder::builder::{Builder, BuilderOperation, ControlFlowOps, FunctionOps, LoopOps, PassMode, StackOps, VariableOps},
 };
 
 pub struct StackAnalyzerBuilder {
@@ -274,7 +274,13 @@ impl StackOps for StackAnalyzerBuilder {
     }
 
     fn push_stack_keyword(mut self, keyword: &str, semicolon: bool) -> Self {
-        let stack_keyword = StackKeyword { name: keyword.to_string(), args: Vec::new() };
+        let stack_keyword = StackKeyword {
+            name: keyword.to_string(),
+            parameter_exprs: todo!(),
+            param_type: todo!(),
+            return_type: todo!(),
+            return_values: todo!(),
+        };
         let expr = Expression::StackKeyword(stack_keyword);
         let expr_id = ExprId(self.arena.exprs.len());
         self.arena.exprs.push(expr);

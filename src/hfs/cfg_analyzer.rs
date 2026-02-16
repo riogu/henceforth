@@ -4,8 +4,8 @@ use std::{
 };
 
 use crate::hfs::{
-    self, BasicBlock, BlockId, CfgFunction, CfgOperation, CfgPrintable, CfgTopLevelId, InstId, Instruction, IrFuncId,
-    IrVarDeclaration, IrVarId, Literal, PRIMITIVE_TYPE_COUNT, SourceInfo, TermInstId, TerminatorInst, Token, TokenKind, ast::*,
+    self, ast::*, BasicBlock, BlockId, CfgFunction, CfgOperation, CfgPrintable, CfgTopLevelId, InstId, Instruction, IrFuncId,
+    IrVarDeclaration, IrVarId, Literal, SourceInfo, TermInstId, TerminatorInst, Token, TokenKind, PRIMITIVE_TYPE_COUNT,
 };
 
 // here is where youll create the CFG pass and the new IR generation
@@ -106,6 +106,14 @@ impl IrArena {
         self.cfg_context.curr_function = id;
         id
     }
+
+    fn alloc_stack_keyword_as_func(&mut self, func: CfgFunction, old_id: ExprId) -> IrFuncId {
+        let id = IrFuncId(self.functions.len());
+        self.functions.push(func);
+        self.cfg_context.curr_function = id;
+        id
+    }
+
     fn alloc_inst_for(&mut self, inst: Instruction, block_id: BlockId) -> InstId {
         let id = InstId(self.instructions.len());
         self.instructions.push(inst);
@@ -145,6 +153,14 @@ impl IrArena {
             terminator: None,
         });
         id
+    }
+
+    fn get_func_by_name(&self, name: String) -> Option<IrFuncId> {
+        let func = self.functions.iter().position(|f| f.name == name);
+        match func {
+            Some(id) => Some(IrFuncId(id)),
+            None => None,
+        }
     }
 }
 
@@ -270,6 +286,61 @@ impl CfgAnalyzer {
             },
             id,
         )
+    }
+
+    fn lower_stack_keyword_declaration(&mut self, id: ExprId) -> IrFuncId {
+        let (kw_name, kw_param_type, kw_return_type, kw_parameter_exprs) = match self.ast_arena.get_expr(id) {
+            Expression::StackKeyword(kw) =>
+                (kw.name.clone(), kw.param_type.clone(), kw.return_type.clone(), kw.parameter_exprs.clone()),
+            _ => panic!("stack keyword id expected"),
+        };
+        let source_info = self.ast_arena.get_expr_token(id).source_info.clone();
+
+        // check if declaration already exists (since stack keyword declarations are generated on call)
+        if let Some(id) = self.arena.get_func_by_name(kw_name.clone()) {
+            return id;
+        }
+
+        let entry_block = self.arena.alloc_block("start");
+        self.arena.cfg_context.curr_insert_block = entry_block;
+
+        let mut parameter_exprs = Vec::<InstId>::new();
+        for param_expr_id in kw_parameter_exprs.iter() {
+            let param_inst = self.lower_expr(*param_expr_id);
+            parameter_exprs.push(param_inst);
+            self.arena.push_to_hfs_stack(param_inst);
+        }
+        self.arena.seal_block(entry_block); // we can seal it once we have the parameters
+
+        let curr_block_context = BlockContext {
+            continue_to_block: None,
+            break_to_block: None,
+            end_block: None,
+            prev_stack_change: vec![],
+            stack_changes: vec![],
+        };
+        if self.arena.get_block(self.arena.cfg_context.curr_insert_block).terminator.is_none() {
+            let instructions = self.arena.pop_entire_hfs_stack();
+            let return_tuple = self.arena.alloc_inst_for(
+                Instruction::Tuple { source_info: source_info.clone(), instructions },
+                self.arena.cfg_context.curr_insert_block,
+            );
+            let term = self.arena.alloc_terminator_for(
+                TerminatorInst::Return(source_info.clone(), return_tuple),
+                self.arena.cfg_context.curr_insert_block,
+            );
+        }
+
+        let cfg_function = CfgFunction {
+            source_info,
+            name: kw_name,
+            param_type: kw_param_type,
+            return_type: kw_return_type,
+            parameter_insts: parameter_exprs,
+            entry_block,
+        };
+
+        self.arena.alloc_stack_keyword_as_func(cfg_function, id)
     }
 
     fn lower_function_declaration(&mut self, id: FuncId) -> IrFuncId {
@@ -701,14 +772,46 @@ impl CfgAnalyzer {
                     Instruction::Parameter { source_info, index, type_id },
                     self.arena.cfg_context.curr_insert_block,
                 ),
-            Expression::StackKeyword(stack_keyword) =>
-            // NOTE: in my opinion, StackKeywords shouldnt exist in MIR. we should create MIR that
-            // is the result of each StackKeyword in cfg_analyzer instead. if you do this,
-            // eliminate this instruction
-                todo!(),
             Expression::ReturnValue(type_id) => self
                 .arena
                 .alloc_inst_for(Instruction::ReturnValue { source_info, type_id }, self.arena.cfg_context.curr_insert_block),
+            Expression::StackKeyword(StackKeyword { name, parameter_exprs, param_type, return_type, return_values }) => {
+                let func_id = self.lower_stack_keyword_declaration(id);
+                let decl = self.ast_arena.get_stack_keyword_from_name(name.as_str());
+                let mut inst_args = Vec::<InstId>::new();
+                let arg_count = match decl.expected_args_size {
+                    Some(count) => count,
+                    None => self.arena.hfs_stack.len(),
+                };
+
+                for arg in 0..arg_count {
+                    inst_args.push(self.arena.hfs_stack.pop().expect("expected value in stack for function call"));
+                }
+
+                let mut new_return_vals = Vec::new();
+                for val in return_values {
+                    let source_info = self.ast_arena.get_expr_token(val).source_info.clone();
+                    let Expression::ReturnValue(type_id) = self.ast_arena.get_expr(val) else {
+                        panic!("[internal error] expected Expression::ReturnValue in return_values")
+                    };
+                    let retval = self.arena.alloc_inst_for(
+                        Instruction::ReturnValue { source_info, type_id: *type_id },
+                        self.arena.cfg_context.curr_insert_block,
+                    );
+                    self.arena.push_to_hfs_stack(retval); // keep the stack state correct
+                    new_return_vals.push(retval);
+                }
+                self.arena.alloc_inst_for(
+                    Instruction::FunctionCall {
+                        source_info,
+                        args: inst_args,
+                        func_id,
+                        is_move: true,
+                        return_values: new_return_vals,
+                    },
+                    self.arena.cfg_context.curr_insert_block,
+                )
+            },
         }
     }
     fn lower_operation(&mut self, op: Operation, source_info: SourceInfo) -> InstId {

@@ -200,10 +200,10 @@ impl fmt::Display for TokenKind {
             TokenKind::String => write!(f, "string"),
             TokenKind::Bool => write!(f, "bool"),
             TokenKind::Float => write!(f, "f32"),
-            TokenKind::Identifier(_) => todo!(),
-            TokenKind::CopyCall => todo!(),
-            TokenKind::MoveCall => todo!(),
-            TokenKind::StackKeyword(_) => todo!(),
+            TokenKind::Identifier(name) => write!(f, "{}", name),
+            TokenKind::CopyCall => write!(f, ":>"),
+            TokenKind::MoveCall => write!(f, "&>"),
+            TokenKind::StackKeyword(name) => write!(f, "{}", name),
         }
     }
 }

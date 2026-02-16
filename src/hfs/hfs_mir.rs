@@ -1,9 +1,9 @@
 use std::{
     collections::HashMap,
-    fmt::{Display, format},
+    fmt::{format, Display},
 };
 
-use crate::hfs::{IrArena, Literal, SourceInfo, ast::*};
+use crate::hfs::{ast::*, IrArena, Literal, SourceInfo};
 /*
 =================================================================================================
 Control Flow Graph IR Pass (HFS MIR - Medium-level IR)

@@ -268,6 +268,7 @@ impl Parser {
             TokenKind::MoveAssign => Ok(self.assignment(true)?),
             TokenKind::CopyCall => Ok(self.function_call(false)?),
             TokenKind::MoveCall => Ok(self.function_call(true)?),
+            TokenKind::StackKeyword(_) => Ok(self.stack_keyword_outside_stack_block()?),
 
             _ =>
                 return ParserError::new(
@@ -475,7 +476,17 @@ impl Parser {
         Ok(self.arena.alloc_unresolved_stmt(UnresolvedStatement::FunctionCall { identifier, is_move }, assign_tkn))
     }
 
-    // <stack-keyword> ::= @pop | @pop_all
+    // <stack-keyword> ::= @pop | @pop_all | @dup | @swap | @over | @rot | @rrot | @nip | @tuck
+    fn stack_keyword_outside_stack_block(&mut self) -> Result<UnresolvedStmtId, Box<dyn CompileError>> {
+        let (name, token) = self.expect_stack_keyword()?;
+
+        // allocate as an expression inside a fake stack block
+        // converts `@pop` into `@(@pop)`
+        let keyword = self.arena.alloc_unresolved_expr(UnresolvedExpression::StackKeyword(name), token.clone());
+        Ok(self.arena.alloc_unresolved_stmt(UnresolvedStatement::StackBlock(vec![keyword]), token))
+    }
+
+    // <stack-keyword> ::= @pop | @pop_all | @dup | @swap | @over | @rot | @rrot | @nip | @tuck
     fn stack_keyword_expr(&mut self) -> Result<UnresolvedExprId, Box<dyn CompileError>> {
         let (name, token) = self.expect_stack_keyword()?;
         Ok(self.arena.alloc_unresolved_expr(UnresolvedExpression::StackKeyword(name), token))

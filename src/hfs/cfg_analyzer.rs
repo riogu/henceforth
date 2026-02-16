@@ -4,8 +4,8 @@ use std::{
 };
 
 use crate::hfs::{
-    self, ast::*, BasicBlock, BlockId, CfgFunction, CfgOperation, CfgPrintable, CfgTopLevelId, InstId, Instruction, IrFuncId,
-    IrVarDeclaration, IrVarId, Literal, SourceInfo, TermInstId, TerminatorInst, Token, TokenKind, PRIMITIVE_TYPE_COUNT,
+    self, BasicBlock, BlockId, CfgFunction, CfgOperation, CfgPrintable, CfgTopLevelId, InstId, Instruction, IrFuncId,
+    IrVarDeclaration, IrVarId, Literal, PRIMITIVE_TYPE_COUNT, SourceInfo, TermInstId, TerminatorInst, Token, TokenKind, ast::*,
 };
 
 // here is where youll create the CFG pass and the new IR generation
@@ -132,6 +132,7 @@ impl IrArena {
         }
         let id = TermInstId(self.terminators.len());
         self.terminators.push(terminator);
+        self.get_block_mut(block_id).terminator = Some(id);
         id
     }
     pub fn alloc_block(&mut self, name: &str) -> BlockId {
@@ -153,7 +154,9 @@ impl IrArena {
         self.hfs_stack.clear();
         temp
     }
-
+    pub fn inst_name(&self, id: InstId) -> String {
+        format!("%{}", id.0)
+    }
     pub fn get_var(&self, id: IrVarId) -> &IrVarDeclaration {
         &self.vars[id.0]
     }
@@ -590,7 +593,6 @@ impl CfgAnalyzer {
                     TerminatorInst::Return(source_info, return_tuple),
                     self.arena.cfg_context.curr_insert_block,
                 );
-                self.arena.get_block_mut(self.arena.cfg_context.curr_insert_block).terminator = Some(term);
             },
             Statement::Break => {
                 // a break always ends the current block and jumps somewhere else

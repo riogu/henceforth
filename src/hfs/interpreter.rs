@@ -92,6 +92,7 @@ impl Interpreter {
             // get the CfgFunction version of main (not the old AST function)
             let main = interpreter.arena.func_id_map[&main];
             interpreter.call_declared_function(main, Vec::new());
+            print!("{}\n", interpreter.arena.get_func(main).get_repr(&interpreter.arena));
         } else {
             panic!("this file has no 'main()' entrypoint, so it cannot be interpreted")
         }
@@ -142,7 +143,6 @@ impl Interpreter {
     pub fn interpret_block(&mut self, block_id: BlockId) {
         self.curr_block_id = block_id;
         let block = self.arena.get_block(block_id);
-        let name = block.name.clone();
         let term = block.terminator;
         for inst_id in block.instructions.clone() {
             self.interpret_instruction(inst_id);
@@ -151,7 +151,11 @@ impl Interpreter {
             self.interpret_terminator(terminator);
         } else {
             // TODO: joao please add a nicer print here with info about the broken block
-            panic!("[internal error] found block with no terminator: '{}'", name)
+            panic!(
+                "[internal error] found block with no terminator in: '{}'",
+                self.arena.get_func(self.curr_call_frame().func_id).get_repr(&self.arena)
+            )
+            // panic!("[internal error] found block with no terminator: '{}'", self.arena.get_block(block_id).get_repr(&self.arena))
         }
     }
     pub fn interpret_instruction(&mut self, inst_id: InstId) -> RuntimeValue {
@@ -169,7 +173,8 @@ impl Interpreter {
                 // the function
                 panic!(
                     "[internal error] found unbound 'Instruction::Parameter'. a parameter should be bound to a value before \
-                     being interpreted"
+                     being interpreted\n {}",
+                    self.arena.get_func(self.curr_call_frame().func_id).get_repr(&self.arena)
                 )
             },
             Instruction::ReturnValue { source_info, type_id } => {

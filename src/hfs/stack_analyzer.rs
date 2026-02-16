@@ -520,11 +520,11 @@ impl StackAnalyzer {
                     return_value_ids.iter().map(|id| self.arena.get_type_id_of_expr(*id)).collect();
 
                 // create tuples for param and return type
-                let param_type = self.arena.alloc_type(Type::Tuple(simulated_stack), Token {
+                let param_type = self.arena.alloc_type(Type::Tuple { type_ids: simulated_stack, ptr_count: 0 }, Token {
                     kind: TokenKind::LeftParen,
                     source_info: SourceInfo { line_number: 0, line_offset: 0, token_width: 0 },
                 });
-                let return_type = self.arena.alloc_type(Type::Tuple(return_value_types), Token {
+                let return_type = self.arena.alloc_type(Type::Tuple { type_ids: return_value_types, ptr_count: 0 }, Token {
                     kind: TokenKind::LeftParen,
                     source_info: SourceInfo { line_number: 0, line_offset: 0, token_width: 0 },
                 });

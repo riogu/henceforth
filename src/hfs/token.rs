@@ -206,6 +206,8 @@ impl fmt::Display for TokenKind {
             TokenKind::CopyCall => write!(f, ":>"),
             TokenKind::MoveCall => write!(f, "&>"),
             TokenKind::StackKeyword(name) => write!(f, "{}", name),
+            TokenKind::AddressOf => todo!(),
+            TokenKind::Dereference => todo!(),
         }
     }
 }

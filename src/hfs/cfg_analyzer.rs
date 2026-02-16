@@ -4,8 +4,8 @@ use std::{
 };
 
 use crate::hfs::{
-    self, ast::*, BasicBlock, BlockId, CfgFunction, CfgOperation, CfgPrintable, CfgTopLevelId, InstId, Instruction, IrFuncId,
-    IrVarDeclaration, IrVarId, Literal, SourceInfo, TermInstId, TerminatorInst, Token, TokenKind, PRIMITIVE_TYPE_COUNT,
+    self, BasicBlock, BlockId, CfgFunction, CfgOperation, CfgPrintable, CfgTopLevelId, InstId, Instruction, IrFuncId,
+    IrVarDeclaration, IrVarId, Literal, PRIMITIVE_TYPE_COUNT, SourceInfo, TermInstId, TerminatorInst, Token, TokenKind, ast::*,
 };
 
 // here is where youll create the CFG pass and the new IR generation
@@ -402,6 +402,8 @@ impl CfgAnalyzer {
     }
     fn lower_stmt(&mut self, id: StmtId, curr_block_context: BlockContext) {
         let source_info = self.ast_arena.get_stmt_token(id).source_info.clone();
+        // let stmt = self.ast_arena.get_stmt(id).clone();
+        // eprintln!("lowering stmt: {:?}", std::mem::discriminant(&stmt));
         match self.ast_arena.get_stmt(id).clone() {
             Statement::Else(stmt_id) => self.lower_stmt(stmt_id, curr_block_context),
             if_stmt @ Statement::ElseIf { cond_stack_block, body, else_stmt }

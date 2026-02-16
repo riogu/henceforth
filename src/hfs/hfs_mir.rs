@@ -1,9 +1,9 @@
 use std::{
     collections::HashMap,
-    fmt::{format, Display},
+    fmt::{Display, format},
 };
 
-use crate::hfs::{ast::*, IrArena, Literal, SourceInfo};
+use crate::hfs::{IrArena, Literal, SourceInfo, ast::*};
 /*
 =================================================================================================
 Control Flow Graph IR Pass (HFS MIR - Medium-level IR)
@@ -335,6 +335,16 @@ impl CfgPrintable for BasicBlock {
 }
 impl IrArena {
     pub fn dump(&self, top_level: &Vec<CfgTopLevelId>) {
+        eprintln!("total blocks: {}", self.blocks.len());
+        for (i, block) in self.blocks.iter().enumerate() {
+            eprintln!(
+                "  block {} ({}): {} instructions, terminator: {}",
+                i,
+                block.name,
+                block.instructions.len(),
+                block.terminator.is_some()
+            );
+        }
         for node in top_level {
             match node {
                 CfgTopLevelId::GlobalVarDecl(id) => println!("{}", self.get_var(*id).get_repr(self)),

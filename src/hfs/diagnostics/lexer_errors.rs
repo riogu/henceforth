@@ -1,9 +1,11 @@
-use crate::hfs::error::number_length;
 use std::{error::Error, fmt::Display, fs, path::PathBuf};
 
 use colored::{ColoredString, Colorize};
 
-use crate::hfs::{error::CompileError, SourceInfo, Token, VALID_STACK_KEYWORDS};
+use crate::hfs::{
+    SourceInfo, Token, VALID_STACK_KEYWORDS,
+    error::{CompileError, number_length},
+};
 
 #[derive(Debug)]
 pub enum LexerErrorKind {

@@ -1,4 +1,4 @@
-use crate::hfs::{ast::*, token::*, ScopeKind};
+use crate::hfs::{ScopeKind, ast::*, token::*};
 
 // ============================================================================
 // First-pass AST (no stack resolution)
@@ -22,15 +22,21 @@ pub enum UnresolvedOperation {
     GreaterEqual,
     // Unary
     Not,
+    AddressOf,
+    Dereference,
 }
 
 impl UnresolvedOperation {
     pub fn is_binary(&self) -> bool {
-        !matches!(self, UnresolvedOperation::Not)
+        !(matches!(self, UnresolvedOperation::Not)
+            || matches!(self, UnresolvedOperation::AddressOf)
+            || matches!(self, UnresolvedOperation::Dereference))
     }
 
     pub fn is_unary(&self) -> bool {
         matches!(self, UnresolvedOperation::Not)
+            || matches!(self, UnresolvedOperation::AddressOf)
+            || matches!(self, UnresolvedOperation::Dereference)
     }
 }
 
@@ -70,6 +76,7 @@ pub enum UnresolvedStatement {
         identifier: UnresolvedExprId, // just the name
         is_move: bool,                // true for &=, false for :=
                                       // value comes from stack
+        deref_count: i32
     },
     FunctionCall {
         identifier: UnresolvedExprId,
@@ -143,10 +150,10 @@ impl PartialEq for UnresolvedAstArena {
 impl UnresolvedAstArena {
     pub fn new() -> Self {
         let mut arena = Self::default();
-        arena.alloc_type_uncached(Type::Int, Token { kind: TokenKind::Int, source_info: SourceInfo::new(0, 0, 0) });
-        arena.alloc_type_uncached(Type::Float, Token { kind: TokenKind::Float, source_info: SourceInfo::new(0, 0, 0) });
-        arena.alloc_type_uncached(Type::Bool, Token { kind: TokenKind::Bool, source_info: SourceInfo::new(0, 0, 0) });
-        arena.alloc_type_uncached(Type::String, Token { kind: TokenKind::String, source_info: SourceInfo::new(0, 0, 0) });
+        arena.alloc_type_uncached(Type::new_int(0), Token { kind: TokenKind::Int, source_info: SourceInfo::new(0, 0, 0) });
+        arena.alloc_type_uncached(Type::new_float(0), Token { kind: TokenKind::Float, source_info: SourceInfo::new(0, 0, 0) });
+        arena.alloc_type_uncached(Type::new_bool(0), Token { kind: TokenKind::Bool, source_info: SourceInfo::new(0, 0, 0) });
+        arena.alloc_type_uncached(Type::new_string(0), Token { kind: TokenKind::String, source_info: SourceInfo::new(0, 0, 0) });
         arena
     }
 
@@ -237,12 +244,12 @@ impl UnresolvedAstArena {
         self.type_tokens[id.0].clone()
     }
 
-    pub fn to_type(&mut self, token: Token) -> TypeId {
+    pub fn to_type(&mut self, token: Token, ptr_count: i32) -> TypeId {
         match token.kind {
-            TokenKind::Int => self.alloc_type(Type::Int, token),
-            TokenKind::String => self.alloc_type(Type::String, token),
-            TokenKind::Bool => self.alloc_type(Type::Bool, token),
-            TokenKind::Float => self.alloc_type(Type::Float, token),
+            TokenKind::Int => self.alloc_type(Type::new_int(ptr_count), token),
+            TokenKind::String => self.alloc_type(Type::new_string(ptr_count), token),
+            TokenKind::Bool => self.alloc_type(Type::new_bool(ptr_count), token),
+            TokenKind::Float => self.alloc_type(Type::new_float(ptr_count), token),
             TokenKind::Identifier(_) => {
                 panic!("[internal hfs error]: this is not how you convert identifiers to types")
             },

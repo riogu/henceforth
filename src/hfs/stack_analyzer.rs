@@ -40,7 +40,7 @@ impl AstArena {
     }
 
     pub fn validate_return_stack(&mut self, return_type: TypeId) {
-        let Type::Tuple(return_types) = self.get_type(return_type) else {
+        let Type::Tuple { type_ids: return_types, .. } = self.get_type(return_type) else {
             panic!("[internal error] functions only return tuples at the moment.")
         };
         let return_types = return_types.clone();
@@ -59,10 +59,10 @@ impl AstArena {
         }
     }
     pub fn validate_func_call(&self, param_type: TypeId, arg_type: TypeId) {
-        let Type::Tuple(_) = self.get_type(arg_type) else {
+        let Type::Tuple { .. } = self.get_type(arg_type) else {
             panic!("expected tuple on stack before function call")
         };
-        let Type::Tuple(_) = self.get_type(param_type) else {
+        let Type::Tuple { .. } = self.get_type(param_type) else {
             panic!("[internal error] function parameter type must be a tuple")
         };
 
@@ -76,12 +76,21 @@ impl AstArena {
         let expected_type = self.get_type(expected_type_id);
 
         match (actual_type, expected_type) {
-            (Type::Tuple(actual_types), Type::Tuple(expected_types)) => {
+            (
+                Type::Tuple { type_ids: actual_types, ptr_count: actual_ptr_count },
+                Type::Tuple { type_ids: expected_types, ptr_count: expected_ptr_count },
+            ) => {
                 if actual_types.len() != expected_types.len() {
                     return Err(format!(
                         "tuple length mismatch: expected {} elements, found {}",
                         expected_types.len(),
                         actual_types.len()
+                    ));
+                }
+                if actual_ptr_count != expected_ptr_count {
+                    return Err(format!(
+                        "tuples had different pointer count, '{}' vs '{}'",
+                        actual_ptr_count, expected_ptr_count
                     ));
                 }
                 // Recursively validate each element
@@ -156,7 +165,7 @@ impl StackAnalyzer {
             let unresolved_func = &self.unresolved_arena.get_unresolved_func(id);
             // deconstruct parameter tuple into Vec<Expression::Parameter>
             let mut params = Vec::<ExprId>::new();
-            if let Type::Tuple(param_types) = self.unresolved_arena.get_type(unresolved_func.param_type) {
+            if let Type::Tuple { type_ids: param_types, .. } = self.unresolved_arena.get_type(unresolved_func.param_type) {
                 for (index, param_type) in param_types.iter().enumerate() {
                     // function parameter type is always a tuple
                     let token = self.unresolved_arena.get_type_token(*param_type);
@@ -214,7 +223,7 @@ impl StackAnalyzer {
                 let cond_stack_block = self.resolve_stmt(cond);
                 // condition isnt included in the stack depth count
                 let cond = self.arena.pop_or_error("expected boolean on stack for if statement");
-                if !matches!(self.arena.get_type_of_expr(cond), Type::Bool) {
+                if !matches!(self.arena.get_type_of_expr(cond), Type::Bool { .. }) {
                     panic!("expected expression of type 'bool' in if statement condition")
                 }
 
@@ -275,7 +284,7 @@ impl StackAnalyzer {
                 // each while loop (our stack state is left right after the condition is popped)
                 let stack_depth_before = self.arena.hfs_stack.len();
 
-                if !matches!(self.arena.get_type_of_expr(cond), Type::Bool) {
+                if !matches!(self.arena.get_type_of_expr(cond), Type::Bool { .. }) {
                     panic!("expected expression of type 'bool' in while loop condition")
                 }
 
@@ -349,7 +358,8 @@ impl StackAnalyzer {
                 self.arena.alloc_stmt(Statement::Continue, token)
             },
             UnresolvedStatement::Empty => self.arena.alloc_stmt(Statement::Empty, token),
-            UnresolvedStatement::Assignment { identifier, is_move } => {
+            UnresolvedStatement::Assignment { identifier, is_move, deref_count } => {
+                // FIXME: do stuff with deref_count
                 let value = if is_move {
                     self.arena.pop_or_error("expected value in stack for move assignment statement.")
                 } else {
@@ -363,7 +373,7 @@ impl StackAnalyzer {
                 let func_id = self.resolve_func_call_identifier(identifier);
                 let func_decl = self.arena.get_func(func_id).clone(); // make borrow checker happy
 
-                let Type::Tuple(param_types) = self.arena.get_type(func_decl.param_type) else {
+                let Type::Tuple { type_ids: param_types, .. } = self.arena.get_type(func_decl.param_type) else {
                     panic!("[internal error] functions only recieve tuples at the moment.")
                 };
                 let mut arg_count = 0;
@@ -373,7 +383,7 @@ impl StackAnalyzer {
                     arg_types.push(self.arena.get_type_id_of_expr(arg_expr));
                     arg_count += 1;
                 }
-                let arg_type_id = self.arena.alloc_type(Type::Tuple(arg_types), Token {
+                let arg_type_id = self.arena.alloc_type(Type::Tuple { type_ids: arg_types, ptr_count: 0 }, Token {
                     kind: TokenKind::LeftParen,
                     source_info: SourceInfo::new(0, 0, 0),
                 });
@@ -381,7 +391,7 @@ impl StackAnalyzer {
                 self.arena.validate_func_call(func_decl.param_type, arg_type_id);
 
                 // now make sure the stack is updated based on the return type of the function
-                let Type::Tuple(return_types) = self.arena.get_type(func_decl.return_type) else {
+                let Type::Tuple { type_ids: return_types, .. } = self.arena.get_type(func_decl.return_type) else {
                     panic!("[internal error] functions only return tuples at the moment.")
                 };
                 let mut return_values = Vec::new();
@@ -637,10 +647,10 @@ mod tests {
     use pretty_assertions::assert_eq;
 
     use crate::hfs::{
+        AstArena, Type,
         builder::builder::{Builder, BuilderOperation, ControlFlowOps, FunctionOps, LoopOps, PassMode, StackOps, VariableOps},
         stack_analyzer_builder::StackAnalyzerBuilder,
-        utils::{run_until, Phase},
-        AstArena, Type,
+        utils::{Phase, run_until},
     };
 
     fn analyze_file(name: &str) -> AstArena {
@@ -666,8 +676,8 @@ mod tests {
         let expected = StackAnalyzerBuilder::new()
             .func_with(
                 "func_with_lots_of_arguments",
-                Some(vec![Type::Int, Type::Float, Type::String, Type::Bool]),
-                Some(vec![Type::Int, Type::Float, Type::Bool, Type::String]),
+                Some(vec![Type::new_int(0), Type::new_float(0), Type::new_string(0), Type::new_bool(0)]),
+                Some(vec![Type::new_int(0), Type::new_float(0), Type::new_bool(0), Type::new_string(0)]),
             )
             .body()
             .push_stack_keyword("@pop", true)
@@ -693,7 +703,7 @@ mod tests {
     fn test_function_with_no_arguments() {
         let ast = analyze_file("test/function_with_no_arguments.hfs");
         let expected = StackAnalyzerBuilder::new()
-            .func_with("no_args", None, Some(vec![Type::Int]))
+            .func_with("no_args", None, Some(vec![Type::new_int(0)]))
             .body()
             .stack_block()
             .push_literal(4)
@@ -711,7 +721,7 @@ mod tests {
     fn test_function_with_no_return_type() {
         let ast = analyze_file("test/function_with_no_return_type.hfs");
         let expected = StackAnalyzerBuilder::new()
-            .func_with("no_return_type", Some(vec![Type::Int]), None)
+            .func_with("no_return_type", Some(vec![Type::new_int(0)]), None)
             .body()
             .push_stack_keyword("@pop", true)
             .end_body()
@@ -729,10 +739,10 @@ mod tests {
         let expected = StackAnalyzerBuilder::new()
             .func_with("main", None, None)
             .body()
-            .variable("a", Type::Int)
-            .variable("b", Type::Float)
-            .variable("c", Type::String)
-            .variable("d", Type::Bool)
+            .variable("a", Type::new_int(0))
+            .variable("b", Type::new_float(0))
+            .variable("c", Type::new_string(0))
+            .variable("d", Type::new_bool(0))
             .end_body()
             .build();
 
@@ -745,8 +755,8 @@ mod tests {
         let expected = StackAnalyzerBuilder::new()
             .func_with("main", None, None)
             .body()
-            .variable("copy", Type::Int)
-            .variable("move", Type::Int)
+            .variable("copy", Type::new_int(0))
+            .variable("move", Type::new_int(0))
             .stack_block()
             .push_literal(5)
             .end_stack_block(false)
@@ -801,8 +811,8 @@ mod tests {
         let expected = StackAnalyzerBuilder::new()
             .func_with("main", None, None)
             .body()
-            .variable("a", Type::Int)
-            .variable("b", Type::Int)
+            .variable("a", Type::new_int(0))
+            .variable("b", Type::new_int(0))
             .stack_block()
             .push_literal(100)
             .end_stack_block(false)
@@ -876,7 +886,7 @@ mod tests {
     fn test_if_elif_else() {
         let ast = analyze_file("test/if_elif_else.hfs");
         let expected = StackAnalyzerBuilder::new()
-            .func_with("fizz_buzz", Some(vec![Type::Int]), Some(vec![Type::String]))
+            .func_with("fizz_buzz", Some(vec![Type::new_int(0)]), Some(vec![Type::new_string(0)]))
             .body()
             .if_statement()
             .stack_block()
@@ -938,7 +948,7 @@ mod tests {
     fn test_copy_and_move_func_calls() {
         let ast = analyze_file("test/copy_and_move_func_calls.hfs");
         let expected = StackAnalyzerBuilder::new()
-            .func_with("max", Some(vec![Type::Int, Type::Int]), Some(vec![Type::Int]))
+            .func_with("max", Some(vec![Type::new_int(0), Type::new_int(0)]), Some(vec![Type::new_int(0)]))
             .body()
             .if_statement()
             .stack_block()
@@ -956,7 +966,7 @@ mod tests {
             .push_stack_keyword("@pop", true)
             .end_body()
             .end_body()
-            .func_with("max3", Some(vec![Type::Int, Type::Int, Type::Int]), Some(vec![Type::Int]))
+            .func_with("max3", Some(vec![Type::new_int(0), Type::new_int(0), Type::new_int(0)]), Some(vec![Type::new_int(0)]))
             .body()
             .push_stack_keyword("@rrot", true)
             .call_function("max", PassMode::Move)

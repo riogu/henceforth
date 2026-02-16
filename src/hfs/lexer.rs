@@ -1,10 +1,10 @@
 use std::{fs, path::PathBuf};
 
 use crate::hfs::{
+    VALID_STACK_KEYWORDS,
     error::CompileError,
     lexer_errors::{LexerError, LexerErrorKind},
     token::{Literal, SourceInfo, Token, TokenKind},
-    VALID_STACK_KEYWORDS,
 };
 
 #[derive(Debug)]
@@ -65,7 +65,7 @@ impl Lexer {
                         }
                     },
                     '+' => TokenKind::Plus,
-                    // unused token
+                    '^' => TokenKind::Dereference,
                     '.' =>
                         if let Some(_) = chars_iter.next_if_eq(&'.') {
                             if let Some(_) = chars_iter.next_if_eq(&'.') {
@@ -145,11 +145,7 @@ impl Lexer {
                                 if let Some(_) = chars_iter.next_if_eq(&'>') {
                                     TokenKind::MoveCall
                                 } else {
-                                    return LexerError::new(
-                                        LexerErrorKind::UnexpectedChar,
-                                        file.path.clone(),
-                                        SourceInfo::new(line_number + 1, line_offset + 1, 1),
-                                    );
+                                    TokenKind::AddressOf
                                 }
                             }
                         } // &&
@@ -256,7 +252,7 @@ mod tests {
         ast::Type,
         builder::builder::{Builder, BuilderOperation, ControlFlowOps, FunctionOps, LoopOps, PassMode, StackOps, VariableOps},
         lexer_builder::TokenSequence,
-        utils::{run_until, Phase},
+        utils::{Phase, run_until},
     };
 
     pub fn tokenize_file_into_kinds(name: &str) -> Vec<TokenKind> {
@@ -285,8 +281,8 @@ mod tests {
         let expected = TokenSequence::new()
             .func_with(
                 "func_with_lots_of_arguments",
-                Some(vec![Type::Int, Type::Float, Type::String, Type::Bool]),
-                Some(vec![Type::Int, Type::Float, Type::Bool, Type::String]),
+                Some(vec![Type::new_int(0), Type::new_float(0), Type::new_string(0), Type::new_bool(0)]),
+                Some(vec![Type::new_int(0), Type::new_float(0), Type::new_bool(0), Type::new_string(0)]),
             )
             .body()
             .push_stack_keyword("@pop", true)
@@ -312,7 +308,7 @@ mod tests {
     fn test_function_with_no_arguments() {
         let tokens = tokenize_file_into_kinds("test/function_with_no_arguments.hfs");
         let expected = TokenSequence::new()
-            .func_with("no_args", None, Some(vec![Type::Int]))
+            .func_with("no_args", None, Some(vec![Type::new_int(0)]))
             .body()
             .stack_block()
             .push_literal(4)
@@ -330,7 +326,7 @@ mod tests {
     fn test_function_with_no_return_type() {
         let tokens = tokenize_file_into_kinds("test/function_with_no_return_type.hfs");
         let expected = TokenSequence::new()
-            .func_with("no_return_type", Some(vec![Type::Int]), None)
+            .func_with("no_return_type", Some(vec![Type::new_int(0)]), None)
             .body()
             .push_stack_keyword("@pop", true)
             .end_body()
@@ -347,10 +343,10 @@ mod tests {
         let expected = TokenSequence::new()
             .func_with("main", None, None)
             .body()
-            .variable("a", Type::Int)
-            .variable("b", Type::Float)
-            .variable("c", Type::String)
-            .variable("d", Type::Bool)
+            .variable("a", Type::new_int(0))
+            .variable("b", Type::new_float(0))
+            .variable("c", Type::new_string(0))
+            .variable("d", Type::new_bool(0))
             .end_body()
             .build();
 
@@ -363,8 +359,8 @@ mod tests {
         let expected = TokenSequence::new()
             .func_with("main", None, None)
             .body()
-            .variable("copy", Type::Int)
-            .variable("move", Type::Int)
+            .variable("copy", Type::new_int(0))
+            .variable("move", Type::new_int(0))
             .stack_block()
             .push_literal(5)
             .end_stack_block(false)
@@ -419,8 +415,8 @@ mod tests {
         let expected = TokenSequence::new()
             .func_with("main", None, None)
             .body()
-            .variable("a", Type::Int)
-            .variable("b", Type::Int)
+            .variable("a", Type::new_int(0))
+            .variable("b", Type::new_int(0))
             .stack_block()
             .push_literal(100)
             .end_stack_block(false)
@@ -494,7 +490,7 @@ mod tests {
     fn test_if_elif_else() {
         let tokens = tokenize_file_into_kinds("test/if_elif_else.hfs");
         let expected = TokenSequence::new()
-            .func_with("fizz_buzz", Some(vec![Type::Int]), Some(vec![Type::String]))
+            .func_with("fizz_buzz", Some(vec![Type::new_int(0)]), Some(vec![Type::new_string(0)]))
             .body()
             .if_statement()
             .stack_block()
@@ -556,7 +552,7 @@ mod tests {
     fn test_copy_and_move_func_calls() {
         let tokens = tokenize_file_into_kinds("test/copy_and_move_func_calls.hfs");
         let expected = TokenSequence::new()
-            .func_with("max", Some(vec![Type::Int, Type::Int]), Some(vec![Type::Int]))
+            .func_with("max", Some(vec![Type::new_int(0), Type::new_int(0)]), Some(vec![Type::new_int(0)]))
             .body()
             .if_statement()
             .stack_block()
@@ -574,7 +570,7 @@ mod tests {
             .push_stack_keyword("@pop", true)
             .end_body()
             .end_body()
-            .func_with("max3", Some(vec![Type::Int, Type::Int, Type::Int]), Some(vec![Type::Int]))
+            .func_with("max3", Some(vec![Type::new_int(0), Type::new_int(0), Type::new_int(0)]), Some(vec![Type::new_int(0)]))
             .body()
             .push_stack_keyword("@rrot", true)
             .call_function("max", PassMode::Move)

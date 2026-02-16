@@ -126,8 +126,13 @@ fn main: () -> (i32) {
     
     @(sum);  // push sum for return
 }
-
-
+    let a: i32;
+    @(0) &= a;      // Initialize a = 0
+    let temp1: i32*;
+    let temp1: (i32* i32)*;
+    @(a&) &= temp1;
+    @(69420) &= temp1^;
+    @(temp1^);
 
 // Calculate the nth Fibonacci number
 fn fibonacci: (i32) -> (i32) {

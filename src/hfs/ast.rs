@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt::Display};
+use std::{collections::HashMap, default, fmt::Display};
 
 use crate::hfs::{token::*, RuntimeValue, ScopeKind};
 
@@ -40,6 +40,8 @@ pub enum Operation {
     Or(ExprId, ExprId),
     And(ExprId, ExprId),
     Not(ExprId),
+    AddressOf(ExprId),   // &
+    Dereference(ExprId), // ^
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -56,7 +58,6 @@ pub enum Expression {
     },
     // type of the temporary returned from a function
     ReturnValue(TypeId),
-
     StackKeyword(StackKeyword),
 }
 
@@ -148,21 +149,44 @@ pub enum Statement {
 // Types
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Type {
-    Int,
-    String,
-    Bool,
-    Float,
-    Tuple(Vec<TypeId>),
+    Int { ptr_count: i32 },
+    String { ptr_count: i32 },
+    Bool { ptr_count: i32 },
+    Float { ptr_count: i32 },
+    Tuple { type_ids: Vec<TypeId>, ptr_count: i32 },
 }
-
 impl Type {
+    pub fn get_ptr_count(&self) -> i32 {
+        match *self {
+            Type::Int { ptr_count } => ptr_count,
+            Type::String { ptr_count } => ptr_count,
+            Type::Bool { ptr_count } => ptr_count,
+            Type::Float { ptr_count } => ptr_count,
+            Type::Tuple { ptr_count, .. } => ptr_count,
+        }
+    }
+    pub fn new_int(ptr_count: i32) -> Self {
+        Type::Int { ptr_count }
+    }
+    pub fn new_string(ptr_count: i32) -> Self {
+        Type::String { ptr_count }
+    }
+    pub fn new_bool(ptr_count: i32) -> Self {
+        Type::Bool { ptr_count }
+    }
+    pub fn new_float(ptr_count: i32) -> Self {
+        Type::Float { ptr_count }
+    }
+    pub fn new_tuple(types: Vec<TypeId>, ptr_count: i32) -> Self {
+        Type::Tuple { type_ids: types, ptr_count }
+    }
     pub fn to_token(&self) -> TokenKind {
         match self {
-            Type::Int => TokenKind::Int,
-            Type::String => TokenKind::String,
-            Type::Bool => TokenKind::Bool,
-            Type::Float => TokenKind::Float,
-            Type::Tuple(_) => TokenKind::LeftParen,
+            Type::Int { ptr_count: _ } => TokenKind::Int,
+            Type::String { ptr_count: _ } => TokenKind::String,
+            Type::Bool { ptr_count: _ } => TokenKind::Bool,
+            Type::Float { ptr_count: _ } => TokenKind::Float,
+            Type::Tuple { .. } => TokenKind::LeftParen,
         }
     }
 }
@@ -213,10 +237,10 @@ impl PartialEq for AstArena {
 impl AstArena {
     pub fn new() -> Self {
         let mut arena = Self::default();
-        arena.alloc_type_uncached(Type::Int, Token { kind: TokenKind::Int, source_info: SourceInfo::new(0, 0, 0) });
-        arena.alloc_type_uncached(Type::Float, Token { kind: TokenKind::Float, source_info: SourceInfo::new(0, 0, 0) });
-        arena.alloc_type_uncached(Type::Bool, Token { kind: TokenKind::Bool, source_info: SourceInfo::new(0, 0, 0) });
-        arena.alloc_type_uncached(Type::String, Token { kind: TokenKind::String, source_info: SourceInfo::new(0, 0, 0) });
+        arena.alloc_type_uncached(Type::new_int(0), Token { kind: TokenKind::Int, source_info: SourceInfo::new(0, 0, 0) });
+        arena.alloc_type_uncached(Type::new_float(0), Token { kind: TokenKind::Float, source_info: SourceInfo::new(0, 0, 0) });
+        arena.alloc_type_uncached(Type::new_bool(0), Token { kind: TokenKind::Bool, source_info: SourceInfo::new(0, 0, 0) });
+        arena.alloc_type_uncached(Type::new_string(0), Token { kind: TokenKind::String, source_info: SourceInfo::new(0, 0, 0) });
         arena
     }
 
@@ -362,10 +386,10 @@ impl AstArena {
 
     pub fn to_type(&mut self, token: Token) -> TypeId {
         match token.kind {
-            TokenKind::Int => self.alloc_type(Type::Int, token),
-            TokenKind::String => self.alloc_type(Type::String, token),
-            TokenKind::Bool => self.alloc_type(Type::Bool, token),
-            TokenKind::Float => self.alloc_type(Type::Float, token),
+            TokenKind::Int => self.alloc_type(Type::new_int(0), token),
+            TokenKind::String => self.alloc_type(Type::new_string(0), token),
+            TokenKind::Bool => self.alloc_type(Type::new_bool(0), token),
+            TokenKind::Float => self.alloc_type(Type::new_float(0), token),
             TokenKind::Identifier(_) => {
                 panic!("[internal hfs error]: this is not how you convert identifiers to types")
             },

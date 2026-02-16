@@ -68,10 +68,10 @@ pub struct IrArena {
 impl IrArena {
     pub fn new() -> Self {
         let mut arena = Self::default();
-        arena.alloc_type_uncached(Type::Int, SourceInfo::new(0, 0, 0));
-        arena.alloc_type_uncached(Type::Float, SourceInfo::new(0, 0, 0));
-        arena.alloc_type_uncached(Type::Bool, SourceInfo::new(0, 0, 0));
-        arena.alloc_type_uncached(Type::String, SourceInfo::new(0, 0, 0));
+        arena.alloc_type_uncached(Type::new_int(0), SourceInfo::new(0, 0, 0));
+        arena.alloc_type_uncached(Type::new_float(0), SourceInfo::new(0, 0, 0));
+        arena.alloc_type_uncached(Type::new_bool(0), SourceInfo::new(0, 0, 0));
+        arena.alloc_type_uncached(Type::new_string(0), SourceInfo::new(0, 0, 0));
         arena
     }
     fn push_to_hfs_stack(&mut self, inst: InstId) {
@@ -218,12 +218,21 @@ impl IrArena {
         let expected_type = self.get_type(type2);
 
         match (actual_type, expected_type) {
-            (Type::Tuple(actual_types), Type::Tuple(expected_types)) => {
+            (
+                Type::Tuple { type_ids: actual_types, ptr_count: actual_ptr_count },
+                Type::Tuple { type_ids: expected_types, ptr_count: expected_ptr_count },
+            ) => {
                 if actual_types.len() != expected_types.len() {
                     return Err(format!(
                         "tuple length mismatch: expected {} elements, found {}",
                         expected_types.len(),
                         actual_types.len()
+                    ));
+                }
+                if actual_ptr_count != expected_ptr_count {
+                    return Err(format!(
+                        "tuples had different pointer count, '{}' vs '{}'",
+                        actual_ptr_count, expected_ptr_count
                     ));
                 }
                 // Recursively validate each element
@@ -440,7 +449,7 @@ impl CfgAnalyzer {
 
                 // condition isnt included in the stack depth count
                 let cond = self.arena.pop_hfs_stack().expect("expected condition at the end of stack block condition in if_stmt");
-                if !matches!(self.arena.get_type_of_inst(cond), Type::Bool) {
+                if !matches!(self.arena.get_type_of_inst(cond), Type::Bool { .. }) {
                     panic!("expected expression of type 'bool' in if statement condition")
                 }
                 let if_depth_before = self.arena.hfs_stack.len();
@@ -576,7 +585,7 @@ impl CfgAnalyzer {
                 // set up the context for lowering the while body
                 self.arena.cfg_context.curr_insert_block = while_cond_block;
                 let cond = self.lower_expr(cond);
-                if !matches!(self.arena.get_type_of_inst(cond), Type::Bool) {
+                if !matches!(self.arena.get_type_of_inst(cond), Type::Bool { .. }) {
                     panic!("expected expression of type 'bool' in while loop condition")
                 }
                 self.arena.alloc_terminator_for(
@@ -830,6 +839,8 @@ impl CfgAnalyzer {
             Operation::Or(expr_id, expr_id1) => CfgOperation::Or(self.lower_expr(expr_id), self.lower_expr(expr_id1)),
             Operation::And(expr_id, expr_id1) => CfgOperation::And(self.lower_expr(expr_id), self.lower_expr(expr_id1)),
             Operation::Not(expr_id) => CfgOperation::Not(self.lower_expr(expr_id)),
+            Operation::AddressOf(expr_id) => todo!(),
+            Operation::Dereference(expr_id) => todo!(),
         };
         self.arena.alloc_inst_for(Instruction::Operation(source_info, cfg_op), self.arena.cfg_context.curr_insert_block)
     }

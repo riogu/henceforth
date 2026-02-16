@@ -1,12 +1,12 @@
 use std::{iter::Peekable, path::PathBuf, vec::IntoIter};
 
 use crate::hfs::{
+    ScopeKind,
     ast::*,
     error::{CompileError, DiagnosticInfo},
     parser_errors::{Expectable, ParserError, ParserErrorKind},
     token::*,
     unresolved_ast::*,
-    ScopeKind,
 };
 
 pub struct Parser {
@@ -72,6 +72,17 @@ impl Parser {
         }
     }
 
+    fn consume_token_chain(&mut self, kind: TokenKind) -> i32 {
+        let mut tkn_count = 0;
+        while let Some(token) = self.tokens.peek()
+            && token.kind == kind
+        {
+            self.tokens.next();
+            tkn_count += 1;
+        }
+        tkn_count
+    }
+
     fn expect_type(&mut self) -> Result<TypeId, Box<dyn CompileError>> {
         let token = match self.tokens.peek() {
             Some(token) => token.clone(),
@@ -85,11 +96,22 @@ impl Parser {
         match &token.kind {
             kind if kind.is_type() => {
                 self.tokens.next();
-                Ok(self.arena.to_type(token))
+                let ptr_count = self.consume_token_chain(TokenKind::Star);
+                Ok(self.arena.to_type(token, ptr_count))
             },
             TokenKind::LeftParen => {
-                let hfs_type = Type::Tuple(self.type_list()?);
-                Ok(self.arena.alloc_type(hfs_type, token))
+                let hfs_type = Type::Tuple { type_ids: self.type_list()?, ptr_count: 0 };
+                let ptr_count = self.consume_token_chain(TokenKind::Star);
+                Ok(self.arena.alloc_type(
+                    Type::Tuple {
+                        type_ids: match hfs_type {
+                            Type::Tuple { type_ids, .. } => type_ids,
+                            _ => unreachable!(),
+                        },
+                        ptr_count,
+                    },
+                    token,
+                ))
             },
             kind => ParserError::new(
                 ParserErrorKind::ExpectedButFound(vec![Expectable::Type], Some(token.kind)),
@@ -103,28 +125,13 @@ impl Parser {
         self.expect(TokenKind::LeftParen);
         let mut types = Vec::<TypeId>::new();
         loop {
-            let token = match self.tokens.next() {
-                Some(token) => token,
-                None =>
-                    return ParserError::new(
-                        ParserErrorKind::ExpectedButFound(vec![Expectable::Type, Expectable::Token(TokenKind::RightParen)], None),
-                        self.diagnostic_info.path.clone(),
-                        vec![self.diagnostic_info.eof_pos.clone()],
-                    ),
-            };
-            match token {
-                token if token.kind == TokenKind::RightParen => break,
-                token if token.is_type() => types.push(self.arena.to_type(token)),
-                token =>
-                    return ParserError::new(
-                        ParserErrorKind::ExpectedButFound(
-                            vec![Expectable::Type, Expectable::Token(TokenKind::RightParen)],
-                            Some(token.kind),
-                        ),
-                        self.diagnostic_info.path.clone(),
-                        vec![token.source_info],
-                    ),
-            };
+            if let Some(token) = self.tokens.peek()
+                && token.kind == TokenKind::RightParen
+            {
+                self.tokens.next();
+                break;
+            }
+            types.push(self.expect_type()?);
         }
         Ok(types)
     }
@@ -430,6 +437,10 @@ impl Parser {
             },
             TokenKind::Not =>
                 Ok(self.arena.alloc_unresolved_expr(UnresolvedExpression::Operation(UnresolvedOperation::Not), token)),
+            TokenKind::Dereference =>
+                Ok(self.arena.alloc_unresolved_expr(UnresolvedExpression::Operation(UnresolvedOperation::Dereference), token)),
+            TokenKind::AddressOf =>
+                Ok(self.arena.alloc_unresolved_expr(UnresolvedExpression::Operation(UnresolvedOperation::AddressOf), token)),
             _ =>
                 return ParserError::new(
                     ParserErrorKind::ExpectedButFound(vec![Expectable::StackOperation], Some(kind)),
@@ -458,10 +469,11 @@ impl Parser {
         let assign_tkn = self.tokens.next().unwrap();
 
         let (name, token) = self.expect_identifier()?;
+        let deref_count = self.consume_token_chain(TokenKind::Dereference);
         let identifier = self.arena.alloc_unresolved_expr(UnresolvedExpression::Identifier(name), token);
 
         self.expect(TokenKind::Semicolon)?;
-        Ok(self.arena.alloc_unresolved_stmt(UnresolvedStatement::Assignment { identifier, is_move }, assign_tkn))
+        Ok(self.arena.alloc_unresolved_stmt(UnresolvedStatement::Assignment { identifier, is_move, deref_count }, assign_tkn))
     }
 
     // <function_call> ::= "&>" <identifier> ";"
@@ -500,10 +512,10 @@ mod tests {
     use pretty_assertions::assert_eq;
 
     use crate::hfs::{
+        File, Lexer, Parser, Type, UnresolvedAstArena,
         builder::builder::{Builder, BuilderOperation, ControlFlowOps, FunctionOps, LoopOps, PassMode, StackOps, VariableOps},
         parser_builder::ParserBuilder,
-        utils::{run_until, Phase},
-        File, Lexer, Parser, Type, UnresolvedAstArena,
+        utils::{Phase, run_until},
     };
 
     fn parse_file(name: &str) -> UnresolvedAstArena {
@@ -529,8 +541,8 @@ mod tests {
         let expected = ParserBuilder::new()
             .func_with(
                 "func_with_lots_of_arguments",
-                Some(vec![Type::Int, Type::Float, Type::String, Type::Bool]),
-                Some(vec![Type::Int, Type::Float, Type::Bool, Type::String]),
+                Some(vec![Type::new_int(0), Type::new_float(0), Type::new_string(0), Type::new_bool(0)]),
+                Some(vec![Type::new_int(0), Type::new_float(0), Type::new_bool(0), Type::new_string(0)]),
             )
             .body()
             .push_stack_keyword("@pop", true)
@@ -556,7 +568,7 @@ mod tests {
     fn test_function_with_no_arguments() {
         let ast = parse_file("test/function_with_no_arguments.hfs");
         let expected = ParserBuilder::new()
-            .func_with("no_args", None, Some(vec![Type::Int]))
+            .func_with("no_args", None, Some(vec![Type::new_int(0)]))
             .body()
             .stack_block()
             .push_literal(4)
@@ -574,7 +586,7 @@ mod tests {
     fn test_function_with_no_return_type() {
         let ast = parse_file("test/function_with_no_return_type.hfs");
         let expected = ParserBuilder::new()
-            .func_with("no_return_type", Some(vec![Type::Int]), None)
+            .func_with("no_return_type", Some(vec![Type::new_int(0)]), None)
             .body()
             .push_stack_keyword("@pop", true)
             .end_body()
@@ -592,10 +604,10 @@ mod tests {
         let expected = ParserBuilder::new()
             .func_with("main", None, None)
             .body()
-            .variable("a", Type::Int)
-            .variable("b", Type::Float)
-            .variable("c", Type::String)
-            .variable("d", Type::Bool)
+            .variable("a", Type::new_int(0))
+            .variable("b", Type::new_float(0))
+            .variable("c", Type::new_string(0))
+            .variable("d", Type::new_bool(0))
             .end_body()
             .build();
 
@@ -608,8 +620,8 @@ mod tests {
         let expected = ParserBuilder::new()
             .func_with("main", None, None)
             .body()
-            .variable("copy", Type::Int)
-            .variable("move", Type::Int)
+            .variable("copy", Type::new_int(0))
+            .variable("move", Type::new_int(0))
             .stack_block()
             .push_literal(5)
             .end_stack_block(false)
@@ -664,8 +676,8 @@ mod tests {
         let expected = ParserBuilder::new()
             .func_with("main", None, None)
             .body()
-            .variable("a", Type::Int)
-            .variable("b", Type::Int)
+            .variable("a", Type::new_int(0))
+            .variable("b", Type::new_int(0))
             .stack_block()
             .push_literal(100)
             .end_stack_block(false)
@@ -739,7 +751,7 @@ mod tests {
     fn test_if_elif_else() {
         let ast = parse_file("test/if_elif_else.hfs");
         let expected = ParserBuilder::new()
-            .func_with("fizz_buzz", Some(vec![Type::Int]), Some(vec![Type::String]))
+            .func_with("fizz_buzz", Some(vec![Type::new_int(0)]), Some(vec![Type::new_string(0)]))
             .body()
             .if_statement()
             .stack_block()
@@ -801,7 +813,7 @@ mod tests {
     fn test_copy_and_move_func_calls() {
         let ast = parse_file("test/copy_and_move_func_calls.hfs");
         let expected = ParserBuilder::new()
-            .func_with("max", Some(vec![Type::Int, Type::Int]), Some(vec![Type::Int]))
+            .func_with("max", Some(vec![Type::new_int(0), Type::new_int(0)]), Some(vec![Type::new_int(0)]))
             .body()
             .if_statement()
             .stack_block()
@@ -819,7 +831,7 @@ mod tests {
             .push_stack_keyword("@pop", true)
             .end_body()
             .end_body()
-            .func_with("max3", Some(vec![Type::Int, Type::Int, Type::Int]), Some(vec![Type::Int]))
+            .func_with("max3", Some(vec![Type::new_int(0), Type::new_int(0), Type::new_int(0)]), Some(vec![Type::new_int(0)]))
             .body()
             .push_stack_keyword("@rrot", true)
             .call_function("max", PassMode::Move)

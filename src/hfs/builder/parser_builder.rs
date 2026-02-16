@@ -1,8 +1,7 @@
 use crate::hfs::{
-    self,
-    builder::builder::{Builder, BuilderOperation, ControlFlowOps, FunctionOps, LoopOps, PassMode, StackOps, VariableOps},
-    Literal, ScopeKind, SourceInfo, Token, Type, TypeId, UnresolvedAstArena, UnresolvedExprId, UnresolvedExpression,
+    self, Literal, ScopeKind, SourceInfo, Token, Type, TypeId, UnresolvedAstArena, UnresolvedExprId, UnresolvedExpression,
     UnresolvedFunctionDeclaration, UnresolvedStatement, UnresolvedStmtId, UnresolvedTopLevelId, UnresolvedVarDeclaration,
+    builder::builder::{Builder, BuilderOperation, ControlFlowOps, FunctionOps, LoopOps, PassMode, StackOps, VariableOps},
 };
 
 pub struct ParserBuilder {
@@ -37,11 +36,11 @@ impl ParserBuilder {
 
     fn types_to_tuple_id(&mut self, types: Vec<Type>) -> TypeId {
         let type_ids = types.into_iter().map(|ty| self.type_to_id(ty)).collect();
-        self.arena.alloc_type(Type::Tuple(type_ids), Self::dummy_token())
+        self.arena.alloc_type(Type::Tuple { type_ids, ptr_count: 0 }, Self::dummy_token())
     }
 
     fn type_to_id(&mut self, typename: Type) -> TypeId {
-        self.arena.to_type(Token::new(typename.to_token(), SourceInfo::new(0, 0, 0)))
+        self.arena.to_type(Token::new(typename.to_token(), SourceInfo::new(0, 0, 0)), typename.get_ptr_count())
     }
 }
 
@@ -84,7 +83,7 @@ impl Builder<UnresolvedStmtOrExpr> for ParserBuilder {
 
 impl VariableOps for ParserBuilder {
     fn variable(mut self, name: &str, typename: Type) -> Self {
-        let type_id = self.arena.to_type(Token::new(typename.to_token(), SourceInfo::new(0, 0, 0)));
+        let type_id = self.arena.to_type(Token::new(typename.to_token(), SourceInfo::new(0, 0, 0)), typename.get_ptr_count());
         let var_decl = UnresolvedVarDeclaration { name: name.to_string(), hfs_type: type_id };
         let var_id = self.arena.alloc_unresolved_var(var_decl, Self::dummy_token());
 
@@ -100,7 +99,7 @@ impl VariableOps for ParserBuilder {
             self.arena.alloc_unresolved_expr(UnresolvedExpression::Identifier(name.to_string()), Self::dummy_token());
 
         let is_move = matches!(mode, PassMode::Move);
-        let stmt = UnresolvedStatement::Assignment { identifier, is_move };
+        let stmt = UnresolvedStatement::Assignment { identifier, is_move, deref_count: todo!("add stuff here joao") };
         let stmt_id = self.arena.alloc_unresolved_stmt(stmt, Self::dummy_token());
 
         if let Some(BuilderContext::BlockScope { items, .. }) = self.context_stack.last_mut() {

@@ -23,11 +23,11 @@ pub enum RuntimeValue {
 impl RuntimeValue {
     pub fn default(hfs_type: &Type) -> RuntimeValue {
         match hfs_type {
-            Type::Int => RuntimeValue::Integer(0),
-            Type::String => RuntimeValue::String("".to_string()),
-            Type::Bool => RuntimeValue::Bool(false),
-            Type::Float => RuntimeValue::Float(0.0),
-            Type::Tuple(type_ids) => RuntimeValue::Tuple(Vec::new()),
+            Type::Int { .. } => RuntimeValue::Integer(0),
+            Type::String { .. } => RuntimeValue::String("".to_string()),
+            Type::Bool { .. } => RuntimeValue::Bool(false),
+            Type::Float { .. } => RuntimeValue::Float(0.0),
+            Type::Tuple { .. } => RuntimeValue::Tuple(Vec::new()),
         }
     }
 }

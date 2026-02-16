@@ -20,7 +20,6 @@ impl AstArena {
     // Only expressions have types!
     pub fn get_type_of_operation(&mut self, op: &Operation) -> TypeId {
         match op {
-            // Arithmetic operations: return the operand type
             Operation::Add(lhs, rhs)
             | Operation::Sub(lhs, rhs)
             | Operation::Mul(lhs, rhs)
@@ -42,6 +41,8 @@ impl AstArena {
             | Operation::LessEqual(_, _)
             | Operation::Greater(_, _)
             | Operation::GreaterEqual(_, _) => self.bool_type(),
+            Operation::AddressOf(expr_id) => todo!(),
+            Operation::Dereference(expr_id) => todo!(),
         }
     }
 
@@ -73,7 +74,7 @@ impl AstArena {
                     element_types.push(elem_type);
                 }
 
-                let tuple_type = Type::Tuple(element_types);
+                let tuple_type = Type::Tuple { type_ids: element_types, ptr_count: 0 };
                 self.alloc_type(tuple_type, token)
             },
             Expression::Parameter { index, type_id } => type_id,
@@ -154,7 +155,7 @@ impl IrArena {
                     element_types.push(elem_type);
                 }
 
-                let tuple_type = Type::Tuple(element_types);
+                let tuple_type = Type::Tuple { type_ids: element_types, ptr_count: 0 };
                 self.alloc_type(tuple_type, source_info.clone())
             },
             Instruction::Parameter { source_info, index, type_id } => type_id,

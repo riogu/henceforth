@@ -88,9 +88,11 @@ pub enum TokenKind {
     GreaterEqual, // >=
 
     // Operators - Logical
-    And, // && or 'and'
-    Or,  // || or 'or'
-    Not, // ! or 'not'
+    And,         // && or 'and'
+    Or,          // || or 'or'
+    Not,         // ! or 'not'
+    AddressOf,   // &
+    Dereference, // ^
     // Assignment
     CopyAssign, // &=
     MoveAssign, // :=
@@ -104,7 +106,7 @@ pub enum TokenKind {
     RightBrace,   // }
     LeftBracket,  // [
     RightBracket, // ]
-    At,
+    At,           // @
 
     // Punctuation
     Semicolon, // ;
@@ -141,11 +143,11 @@ impl From<BuilderOperation> for TokenKind {
 impl From<Type> for TokenKind {
     fn from(value: Type) -> Self {
         match value {
-            Type::Int => TokenKind::Int,
-            Type::String => TokenKind::String,
-            Type::Bool => TokenKind::Bool,
-            Type::Float => TokenKind::Float,
-            Type::Tuple(_) => TokenKind::LeftParen,
+            Type::Int { .. } => TokenKind::Int,
+            Type::String { .. } => TokenKind::String,
+            Type::Bool { .. } => TokenKind::Bool,
+            Type::Float { .. } => TokenKind::Float,
+            Type::Tuple { .. } => TokenKind::LeftParen,
         }
     }
 }
@@ -296,10 +298,10 @@ impl Token {
 impl TokenKind {
     pub fn to_type(&self) -> Type {
         match self {
-            TokenKind::Int => Type::Int,
-            TokenKind::String => Type::String,
-            TokenKind::Bool => Type::Bool,
-            TokenKind::Float => Type::Float,
+            TokenKind::Int => Type::new_int(0),
+            TokenKind::String => Type::new_string(0),
+            TokenKind::Bool => Type::new_bool(0),
+            TokenKind::Float => Type::new_float(0),
             TokenKind::Identifier(_) => {
                 panic!("[internal hfs error]: this is not how you convert identifiers to types")
             },
@@ -404,6 +406,8 @@ impl TokenKind {
             | TokenKind::Not
             | TokenKind::At
             | TokenKind::Semicolon
+            | TokenKind::AddressOf
+            | TokenKind::Dereference
             | TokenKind::Comma => 1,
             TokenKind::Newline => 0,
         }

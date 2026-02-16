@@ -164,11 +164,11 @@ pub trait CfgPrintable {
 impl CfgPrintable for Type {
     fn get_repr(&self, arena: &IrArena) -> String {
         match self {
-            Type::Int => String::from("i32"),
-            Type::String => String::from("str"),
-            Type::Bool => String::from("bool"),
-            Type::Float => String::from("f32"),
-            Type::Tuple(type_ids) => {
+            Type::Int { .. } => String::from("i32"),
+            Type::String { .. } => String::from("str"),
+            Type::Bool { .. } => String::from("bool"),
+            Type::Float { .. } => String::from("f32"),
+            Type::Tuple { type_ids, .. } => {
                 // ID -> Type -> string representation
                 let type_reprs: Vec<String> =
                     type_ids.iter().map(|id| arena.get_type(*id)).map(|typ| typ.get_repr(arena)).collect();

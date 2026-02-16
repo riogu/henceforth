@@ -22,7 +22,7 @@ impl StackAnalyzerBuilder {
 
     fn types_to_tuple_id(&mut self, types: Vec<Type>) -> TypeId {
         let type_ids = types.into_iter().map(|ty| self.type_to_id(ty)).collect();
-        self.arena.alloc_type(Type::Tuple(type_ids), Self::dummy_token())
+        self.arena.alloc_type(Type::Tuple { type_ids, ptr_count: 0 }, Self::dummy_token())
     }
 
     fn type_to_id(&mut self, typename: Type) -> TypeId {
@@ -378,7 +378,7 @@ impl FunctionOps for StackAnalyzerBuilder {
 
         let arg_count = if func_id.0 < self.arena.functions.len() {
             let func = &self.arena.functions[func_id.0];
-            if let Type::Tuple(param_types) = self.arena.get_type(func.param_type) {
+            if let Type::Tuple { type_ids: param_types, .. } = self.arena.get_type(func.param_type) {
                 param_types.len()
             } else {
                 0

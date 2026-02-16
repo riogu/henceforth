@@ -77,7 +77,6 @@ impl Interpreter {
 
     pub fn interpret(arena: IrArena, top_level_insts: Vec<CfgTopLevelId>, scope_stack: ScopeStack) {
         let mut interpreter = Interpreter::new(arena);
-
         for inst_id in top_level_insts {
             match inst_id {
                 CfgTopLevelId::GlobalVarDecl(ir_var_id) => {
@@ -92,7 +91,6 @@ impl Interpreter {
             // get the CfgFunction version of main (not the old AST function)
             let main = interpreter.arena.func_id_map[&main];
             interpreter.call_declared_function(main, Vec::new());
-            print!("{}\n", interpreter.arena.get_func(main).get_repr(&interpreter.arena));
         } else {
             panic!("this file has no 'main()' entrypoint, so it cannot be interpreted")
         }

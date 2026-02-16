@@ -333,3 +333,13 @@ impl CfgPrintable for BasicBlock {
         parts.join("\n")
     }
 }
+impl IrArena {
+    pub fn dump(&self, top_level: &Vec<CfgTopLevelId>) {
+        for node in top_level {
+            match node {
+                CfgTopLevelId::GlobalVarDecl(id) => println!("{}", self.get_var(*id).get_repr(self)),
+                CfgTopLevelId::FunctionDecl(id) => println!("{}", self.get_func(*id).get_repr(self)),
+            }
+        }
+    }
+}

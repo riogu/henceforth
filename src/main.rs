@@ -31,7 +31,7 @@ mod hfs {
 }
 use std::{error::Error, path::PathBuf, process::exit};
 
-use clap::{arg, Parser};
+use clap::{Parser, arg};
 
 use crate::hfs::error::{CompileError, DiagnosticInfo};
 
@@ -56,7 +56,7 @@ fn run() -> Result<(), Box<dyn CompileError>> {
         hfs::StackAnalyzer::resolve(unresolved_top_level_nodes, unresolved_ast_arena, file_name);
 
     let (top_level_insts, ir_arena) = hfs::CfgAnalyzer::lower_to_mir(top_level_nodes, ast_arena);
-    // interpreter doesnt even need the top level nodes lol
+    ir_arena.dump(&top_level_insts);
     hfs::Interpreter::interpret(ir_arena, top_level_insts, scope_stack);
 
     Ok(())

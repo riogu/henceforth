@@ -565,11 +565,10 @@ impl CfgAnalyzer {
                }
             */
                 for expr_id in expr_ids {
-                    let inst = self.lower_expr(expr_id);
-                    self.arena.push_to_hfs_stack(inst);
                     // we add stack operations as standalone instructions in the current block (just like normal SSA)
                     // the stack semantics are validated but they act "like local variables"
-                    self.arena.get_block_mut(self.arena.cfg_context.curr_insert_block).instructions.push(inst);
+                    let inst = self.lower_expr(expr_id);
+                    self.arena.push_to_hfs_stack(inst);
                 },
             Statement::BlockScope(top_level_ids, scope_kind) =>
                 for top_level_id in top_level_ids.clone() {

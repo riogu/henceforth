@@ -71,6 +71,10 @@ pub enum Instruction {
         address: InstId,
         value: InstId,
     },
+    Alloca {
+        source_info: SourceInfo,
+        type_id: TypeId,
+    },
     Parameter {
         source_info: SourceInfo,
         index: usize,
@@ -307,6 +311,7 @@ impl CfgPrintable for Instruction {
                 let args_repr: Vec<String> = args.iter().map(|id| arena.inst_name(*id)).collect();
                 format!("keyword {}, {}", name, args_repr.join(", "))
             },
+            Instruction::Alloca { source_info, type_id } => todo!(),
         }
     }
 }

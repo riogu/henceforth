@@ -698,14 +698,13 @@ impl CfgAnalyzer {
                 );
             },
             Statement::Empty => { /* do nothing */ },
-            Statement::Assignment { identifier, is_move } => {
+            Statement::Assignment { identifier, is_move, deref_count } => {
                 // @(213) &= var; // move assignment
                 // @(213) := var; // copy assignment
                 // i sure hope we can't have side effects from stuff you push to the stack else
                 // this will be a huge source of bugs in the future...
                 // we need to add fancier stack simulation to completely get rid of duplication
                 // associated to @() stack blocks
-
                 let inst_value = if is_move {
                     self.arena.pop_hfs_stack().expect("expected value in stack for move assignment")
                 } else {
@@ -718,7 +717,25 @@ impl CfgAnalyzer {
                     },
                     Identifier::Function(func_id) => unreachable!("can't happen"),
                 };
-                self.arena.write_variable(var_id, self.arena.cfg_context.curr_insert_block, inst_value);
+
+                if deref_count == 0 {
+                    // Normal assignment (Braun et al.)
+                    self.arena.write_variable(var_id, self.arena.cfg_context.curr_insert_block, inst_value);
+                } else {
+                    // Pointer dereference assignment (emit memory ops)
+                    let mut addr = self.arena.read_variable(var_id, self.arena.cfg_context.curr_insert_block);
+                    // Chase the pointer chain: *ptr is 1 deref, **ptr is 2, etc.
+                    for _ in 0..deref_count - 1 {
+                        addr = self.arena.alloc_inst_for(
+                            Instruction::Load { source_info: source_info.clone(), address: addr },
+                            self.arena.cfg_context.curr_insert_block,
+                        );
+                    }
+                    self.arena.alloc_inst_for(
+                        Instruction::Store { source_info: source_info.clone(), address: addr, value: inst_value },
+                        self.arena.cfg_context.curr_insert_block,
+                    );
+                }
             },
             Statement::FunctionCall { arg_count, func_id, is_move, return_values } => {
                 // @(213) &> func; // move call

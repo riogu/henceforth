@@ -229,6 +229,7 @@ impl Interpreter {
                 todo!("[internal error] we aren't currently using Instruction::LoadElement for anything yet"),
             Instruction::Load { source_info, address } => todo!(),
             Instruction::Store { source_info, address, value } => todo!(),
+            Instruction::Alloca { source_info, type_id } => todo!(),
         }
     }
     pub fn interpret_operation(&mut self, op: CfgOperation) -> RuntimeValue {

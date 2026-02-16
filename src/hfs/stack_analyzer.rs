@@ -365,8 +365,10 @@ impl StackAnalyzer {
                 } else {
                     self.arena.last_or_error("expected value in stack for copy assignment statement.")
                 };
-                let identifier = self.resolve_var_assignment_identifier(identifier, *self.arena.get_expr_provenance(value));
-                self.arena.alloc_stmt(Statement::Assignment { identifier, is_move }, token)
+                let identifier =
+                    self.resolve_var_assignment_identifier(identifier, *self.arena.get_expr_provenance(value), deref_count);
+
+                self.arena.alloc_stmt(Statement::Assignment { identifier, is_move, deref_count }, token)
             },
             UnresolvedStatement::FunctionCall { identifier, is_move } => {
                 // just checks if we actually had a function and finds the identifier
@@ -410,7 +412,12 @@ impl StackAnalyzer {
         }
     }
 
-    fn resolve_var_assignment_identifier(&mut self, id: UnresolvedExprId, provenance: ExprProvenance) -> Identifier {
+    fn resolve_var_assignment_identifier(
+        &mut self,
+        id: UnresolvedExprId,
+        provenance: ExprProvenance,
+        deref_count: i32,
+    ) -> Identifier {
         // neither this or func_call identifier allocate an expression
         let token = self.unresolved_arena.get_unresolved_expr_token(id);
         match self.unresolved_arena.get_unresolved_expr(id) {
@@ -420,6 +427,18 @@ impl StackAnalyzer {
                     Identifier::GlobalVar(var_id) | Identifier::Variable(var_id) => {
                         self.arena.curr_var_provenances[var_id.0] = provenance;
                         // note that solving an identifier updates the provenance
+                        if deref_count > 0 {
+                            let ptr_count = self.arena.get_type(self.arena.get_var(var_id).hfs_type).get_ptr_count();
+                            if deref_count > ptr_count {
+                                panic!(
+                                    // FIXME: use joao's errors instead of a panic
+                                    "cannot dereference '{}' {} time(s) — type only has {} level(s) of indirection",
+                                    self.arena.get_var(var_id).name,
+                                    deref_count,
+                                    ptr_count
+                                );
+                            }
+                        }
                         identifier
                     },
                     Identifier::Function(_) => panic!("cannot assign value to a function"),
@@ -635,6 +654,8 @@ impl StackAnalyzer {
                 let provenance = *self.arena.get_expr_provenance(expr);
                 self.arena.alloc_and_push_to_hfs_stack(Expression::Operation(Operation::Not(expr)), provenance, token)
             },
+            UnresolvedOperation::Dereference => todo!(),
+            UnresolvedOperation::AddressOf => todo!(),
             _ => panic!("missing semantic analysis for unary operation '{:?}'", op),
         }
     }

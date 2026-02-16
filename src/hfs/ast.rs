@@ -136,6 +136,7 @@ pub enum Statement {
     Assignment {
         identifier: Identifier,
         is_move: bool,
+        deref_count: i32,
     },
     FunctionCall {
         arg_count: usize,

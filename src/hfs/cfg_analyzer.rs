@@ -60,6 +60,9 @@ pub struct IrArena {
     sealed_blocks: HashSet<BlockId>,
     // Placeholder phis waiting for block to be sealed
     incomplete_phis: HashMap<BlockId, HashMap<IrVarId, InstId>>,
+    // FIXME: i think i have to clean up incomplete_phis at the end with a second pass that runs
+    // once we know all predecessors of every block, otherwise we might not be done with the
+    // algorithm (from what i understood)
 }
 
 impl IrArena {

@@ -142,6 +142,7 @@ impl Interpreter {
     pub fn interpret_block(&mut self, block_id: BlockId) {
         self.curr_block_id = block_id;
         let block = self.arena.get_block(block_id);
+        let name = block.name.clone();
         let term = block.terminator;
         for inst_id in block.instructions.clone() {
             self.interpret_instruction(inst_id);
@@ -150,7 +151,7 @@ impl Interpreter {
             self.interpret_terminator(terminator);
         } else {
             // TODO: joao please add a nicer print here with info about the broken block
-            panic!("[internal error] found block with no terminator")
+            panic!("[internal error] found block with no terminator: '{}'", name)
         }
     }
     pub fn interpret_instruction(&mut self, inst_id: InstId) -> RuntimeValue {
@@ -223,6 +224,8 @@ impl Interpreter {
             },
             Instruction::LoadElement { source_info, index, tuple } =>
                 todo!("[internal error] we aren't currently using Instruction::LoadElement for anything yet"),
+            Instruction::Load { source_info, address } => todo!(),
+            Instruction::Store { source_info, address, value } => todo!(),
         }
     }
     pub fn interpret_operation(&mut self, op: CfgOperation) -> RuntimeValue {

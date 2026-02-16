@@ -164,6 +164,8 @@ impl IrArena {
             Instruction::StackKeyword { .. } => todo!(),
             Instruction::LoadElement { source_info, index, tuple } => todo!(),
             Instruction::ReturnValue { source_info, type_id } => type_id,
+            Instruction::Load { source_info, address } => todo!(),
+            Instruction::Store { source_info, address, value } => todo!(),
         }
     }
     pub fn get_type_of_var(&self, var_id: IrVarId) -> &Type {

@@ -180,7 +180,7 @@ impl CfgPrintable for Type {
 }
 
 impl CfgFunction {
-    fn collect_blocks<'a>(&'a self, arena: &'a IrArena) -> Vec<&BasicBlock> {
+    fn collect_blocks<'a>(&'a self, arena: &'a IrArena) -> Vec<&'a BasicBlock> {
         let mut visited = std::collections::HashSet::new();
         let mut worklist = vec![self.entry_block];
         let mut blocks = Vec::new();

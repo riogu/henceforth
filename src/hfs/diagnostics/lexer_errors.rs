@@ -1,3 +1,4 @@
+use crate::hfs::error::number_length;
 use std::{error::Error, fmt::Display, fs, path::PathBuf};
 
 use colored::{ColoredString, Colorize};

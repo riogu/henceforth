@@ -10,6 +10,7 @@ use crate::hfs::{
 #[derive(Debug)]
 pub enum StackAnalyzerErrorKind {
     StackUnderflow,
+    ExpectedItemOnStack,
 }
 
 #[derive(Debug)]
@@ -46,6 +47,7 @@ impl CompileError for StackAnalyzerError {
         match self.kind {
             StackAnalyzerErrorKind::StackUnderflow =>
                 (String::from("stack underflow"), String::from("stack underflow occurred here")),
+            StackAnalyzerErrorKind::ExpectedItemOnStack => (String::from("expected item on stack"), String::new()),
         }
     }
 

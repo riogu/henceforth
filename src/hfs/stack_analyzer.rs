@@ -25,7 +25,6 @@ impl AstArena {
     }
     // Stack methods (manage the hfs stack for operations)
     pub fn pop_or_error(&mut self, tokens: Vec<Token>) -> Result<ExprId, Box<dyn CompileError>> {
-        // should start using our own error structs instead
         match self.hfs_stack.pop() {
             Some(id) => Ok(id),
             None => StackAnalyzerError::new(
@@ -35,21 +34,30 @@ impl AstArena {
             ),
         }
     }
-    pub fn last_or_error(&self, msg: &str) -> ExprId {
+    pub fn last_or_error(&self, tokens: Vec<Token>) -> Result<ExprId, Box<dyn CompileError>> {
         // should start using our own error structs instead
-        *self.hfs_stack.last().unwrap_or_else(|| panic!("{}", msg))
+        match self.hfs_stack.last() {
+            Some(id) => Ok(*id),
+            None => StackAnalyzerError::new(
+                StackAnalyzerErrorKind::ExpectedItemOnStack,
+                self.diagnostic_info.path.clone(),
+                tokens.iter().map(|tkn| tkn.clone().source_info).collect(),
+            ),
+        }
     }
-    pub fn pop2_or_error(&mut self, msg: &str) -> (ExprId, ExprId) {
+    pub fn pop2_or_error(&mut self, tokens: Vec<Token>) -> Result<(ExprId, ExprId), Box<dyn CompileError>> {
         // should start using our own error structs instead
-        let rhs = self.hfs_stack.pop().unwrap_or_else(|| panic!("{}", msg));
-        let lhs = self.hfs_stack.pop().unwrap_or_else(|| panic!("{}", msg));
-        (lhs, rhs)
+        let rhs = self.pop_or_error(tokens.clone())?;
+        let lhs = self.pop_or_error(tokens)?;
+        Ok((lhs, rhs))
     }
 
-    pub fn popn_or_error(&mut self, n: usize, msg: &str) -> Vec<ExprId> {
-        let mut popped: Vec<ExprId> = (0..n).map(|_| self.hfs_stack.pop().unwrap_or_else(|| panic!("{}", msg))).collect();
-        popped.reverse();
-        popped
+    pub fn popn_or_error(&mut self, n: usize, tokens: Vec<Token>) -> Result<Vec<ExprId>, Box<dyn CompileError>> {
+        let mut popped: Result<Vec<ExprId>, Box<dyn CompileError>> = (0..n).map(|_| self.pop_or_error(tokens.clone())).collect();
+        popped.map(|mut v| {
+            v.reverse();
+            v
+        })
     }
 
     pub fn validate_return_stack(&mut self, return_type: TypeId) {
@@ -379,7 +387,10 @@ impl StackAnalyzer {
                         self.unresolved_arena.get_unresolved_expr_token(identifier),
                     ])?
                 } else {
-                    self.arena.last_or_error("expected value in stack for copy assignment statement.")
+                    self.arena.last_or_error(vec![
+                        self.unresolved_arena.get_unresolved_stmt_token(id),
+                        self.unresolved_arena.get_unresolved_expr_token(identifier),
+                    ])?
                 };
                 let identifier =
                     self.resolve_var_assignment_identifier(identifier, *self.arena.get_expr_provenance(value), deref_count);
@@ -530,9 +541,7 @@ impl StackAnalyzer {
                 let effect = kw_declaration.type_effect;
 
                 let args = match kw_declaration.expected_args_size {
-                    Some(n) => self
-                        .arena
-                        .popn_or_error(n, format!("expected {} arguments for stack keyword {}", n, kw_declaration.name).as_str()),
+                    Some(n) => self.arena.popn_or_error(n, vec![self.unresolved_arena.get_unresolved_expr_token(id)])?,
                     None => self.arena.pop_entire_hfs_stack(), // for @pop_all
                 };
 
@@ -587,9 +596,7 @@ impl StackAnalyzer {
     fn resolve_operation(&mut self, op: &UnresolvedOperation, token: Token) -> Result<ExprId, Box<dyn CompileError>> {
         match op {
             op if op.is_binary() => {
-                let (lhs_expr, rhs_expr) = self
-                    .arena
-                    .pop2_or_error(format!("expected at least 2 values in stack for binary operation '{:?}'", op).as_str());
+                let (lhs_expr, rhs_expr) = self.arena.pop2_or_error(vec![token.clone()])?;
                 let provenance = if matches!(self.arena.get_expr_provenance(lhs_expr), ExprProvenance::CompiletimeValue)
                     && matches!(self.arena.get_expr_provenance(lhs_expr), ExprProvenance::CompiletimeValue)
                 {

@@ -372,7 +372,7 @@ impl TokenKind {
         match self {
             TokenKind::Literal(literal) => literal.get_width(),
             TokenKind::Identifier(str) => str.len(),
-            TokenKind::StackKeyword(str) => str.len() + 1,
+            TokenKind::StackKeyword(str) => str.len(),
             TokenKind::Float | TokenKind::Int | TokenKind::DotDotDot | TokenKind::Let => 3,
             TokenKind::LessEqual
             | TokenKind::GreaterEqual

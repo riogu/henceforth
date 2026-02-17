@@ -1,6 +1,6 @@
-use std::{collections::HashMap, default, fmt::Display};
+use std::{collections::HashMap, default, fmt::Display, rc::Rc};
 
-use crate::hfs::{token::*, RuntimeValue, ScopeKind};
+use crate::hfs::{error::DiagnosticInfo, token::*, RuntimeValue, ScopeKind};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct VarId(pub usize);
@@ -221,6 +221,8 @@ pub struct AstArena {
     // variables should continuously change their provenance for analysis
     pub curr_var_provenances: Vec<ExprProvenance>,       // indexed by VarId
     pub curr_func_call_provenances: Vec<ExprProvenance>, // indexed by FuncId
+
+    pub diagnostic_info: Rc<DiagnosticInfo>,
 }
 
 impl PartialEq for AstArena {
@@ -236,8 +238,9 @@ impl PartialEq for AstArena {
 // had to move this here because i wanted to the arena's private members to be available to the parser
 // for better code structure (without making arena members public)
 impl AstArena {
-    pub fn new() -> Self {
+    pub fn new(diagnostic_info: Rc<DiagnosticInfo>) -> Self {
         let mut arena = Self::default();
+        arena.diagnostic_info = diagnostic_info;
         arena.alloc_type_uncached(Type::new_int(0), Token { kind: TokenKind::Int, source_info: SourceInfo::new(0, 0, 0) });
         arena.alloc_type_uncached(Type::new_float(0), Token { kind: TokenKind::Float, source_info: SourceInfo::new(0, 0, 0) });
         arena.alloc_type_uncached(Type::new_bool(0), Token { kind: TokenKind::Bool, source_info: SourceInfo::new(0, 0, 0) });

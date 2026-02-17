@@ -29,11 +29,14 @@ mod hfs {
     pub use types::*;
     pub use unresolved_ast::*;
 }
-use std::{error::Error, path::PathBuf, process::exit};
+use std::{error::Error, path::PathBuf, process::exit, rc::Rc};
 
 use clap::{arg, Parser};
 
-use crate::hfs::error::{CompileError, DiagnosticInfo};
+use crate::hfs::{
+    error::{CompileError, DiagnosticInfo},
+    get_eof_source_info,
+};
 
 #[derive(Parser, Debug, Clone)]
 #[command(author, version, about)]
@@ -49,11 +52,12 @@ fn run() -> Result<(), Box<dyn CompileError>> {
     let file_name = file.path.to_str().unwrap().to_string();
 
     let tokens = hfs::Lexer::tokenize(&file)?;
+    let diagnostic_info = Rc::new(DiagnosticInfo::new(file.path, get_eof_source_info(&tokens)));
 
-    let (unresolved_top_level_nodes, unresolved_ast_arena) = hfs::Parser::parse_tokens(tokens, file.path)?;
+    let (unresolved_top_level_nodes, unresolved_ast_arena) = hfs::Parser::parse_tokens(tokens.clone(), diagnostic_info.clone())?;
 
     let (top_level_nodes, ast_arena, scope_stack) =
-        hfs::StackAnalyzer::resolve(unresolved_top_level_nodes, unresolved_ast_arena, file_name);
+        hfs::StackAnalyzer::resolve(unresolved_top_level_nodes, unresolved_ast_arena, diagnostic_info.clone())?;
 
     let (top_level_insts, ir_arena) = hfs::CfgAnalyzer::lower_to_mir(top_level_nodes, ast_arena);
     ir_arena.dump(&top_level_insts);

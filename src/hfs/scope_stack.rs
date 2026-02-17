@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, path::PathBuf};
 
 use crate::hfs::ast::*;
 
@@ -28,10 +28,10 @@ pub struct ScopeStack {
 }
 
 impl ScopeStack {
-    pub fn new(file_name: String) -> Self {
+    pub fn new(path: &PathBuf) -> Self {
         Self {
             scope_stack: vec![Scope {
-                name: file_name + "%",
+                name: path.to_string_lossy().to_string() + "%",
                 kind: ScopeKind::Global,
                 inner_count: 0,
                 curr_func_return_type: TypeId(0),

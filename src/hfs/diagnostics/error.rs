@@ -18,19 +18,14 @@ pub trait CompileError: Display + Debug {
     fn source_code(&self) -> Result<ColoredString, Box<dyn Error>>;
 }
 
+#[derive(Debug, Default, Clone)]
 pub struct DiagnosticInfo {
     pub path: PathBuf,
     pub eof_pos: SourceInfo,
 }
 
 impl DiagnosticInfo {
-    pub fn new(path: PathBuf, tokens: &Vec<Token>) -> Self {
-        let eof_pos = if tokens.len() > 0 {
-            let last = tokens.last().expect("[internal error] no tokens after len > 0 check");
-            SourceInfo::new(last.source_info.line_number, last.source_info.line_offset + last.source_info.token_width, 1)
-        } else {
-            SourceInfo::new(1, 1, 1)
-        };
+    pub fn new(path: PathBuf, eof_pos: SourceInfo) -> Self {
         Self { path, eof_pos }
     }
 }

@@ -47,12 +47,24 @@ pub enum ParserErrorKind {
 pub struct ParserError {
     kind: ParserErrorKind,
     path: PathBuf,
-    source_info: Vec<SourceInfo>,
+    source_info: SourceInfo,
 }
 
 impl ParserError {
-    pub fn new<T>(kind: ParserErrorKind, path: PathBuf, source_info: Vec<SourceInfo>) -> Result<T, Box<dyn CompileError>> {
-        Err(Box::new(Self { kind, path, source_info }))
+    pub fn new<T>(kind: ParserErrorKind, path: PathBuf, source_infos: Vec<SourceInfo>) -> Result<T, Box<dyn CompileError>> {
+        Err(Box::new(Self { kind, path, source_info: Self::merge_source_info(source_infos) }))
+    }
+
+    pub fn merge_source_info(mut source_infos: Vec<SourceInfo>) -> SourceInfo {
+        source_infos.sort();
+        let first = source_infos.first().unwrap();
+        let last = source_infos.last().unwrap();
+
+        SourceInfo {
+            line_number: first.line_number,
+            line_offset: first.line_offset,
+            token_width: last.line_offset + last.token_width - first.line_offset,
+        }
     }
 }
 
@@ -85,11 +97,11 @@ impl CompileError for ParserError {
     fn location(&self) -> ColoredString {
         format!(
             "{}{} {}:{}:{}",
-            " ".repeat(number_length(self.source_info[0].line_number)),
+            " ".repeat(number_length(self.source_info.line_number)),
             "-->".blue(),
             self.path.to_str().unwrap(),
-            self.source_info[0].line_number,
-            self.source_info[0].line_offset
+            self.source_info.line_number,
+            self.source_info.line_offset
         )
         .into()
     }
@@ -99,20 +111,20 @@ impl CompileError for ParserError {
 
         let line = source
             .lines()
-            .nth(self.source_info[0].line_number - 1)
-            .ok_or_else(|| format!("Line {} not found in file", self.source_info[0].line_number))?
+            .nth(self.source_info.line_number - 1)
+            .ok_or_else(|| format!("Line {} not found in file", self.source_info.line_number))?
             .replace("\t", "    ");
 
-        let mut error_pointer = " ".repeat(self.source_info[0].line_offset - 1);
-        error_pointer.push_str(format!("{} {}", "^".repeat(self.source_info[0].token_width), self.message().1).as_str());
+        let mut error_pointer = " ".repeat(self.source_info.line_offset - 1);
+        error_pointer.push_str(format!("{} {}", "^".repeat(self.source_info.token_width), self.message().1).as_str());
         return Ok(ColoredString::from(format!(
             "{} {}\n{} {} {}\n{} {} {}",
-            " ".repeat(number_length(self.source_info[0].line_number)),
+            " ".repeat(number_length(self.source_info.line_number)),
             "|".blue().bold(),
-            self.source_info[0].line_number.to_string().blue().bold(),
+            self.source_info.line_number.to_string().blue().bold(),
             "|".blue().bold(),
             line,
-            " ".repeat(number_length(self.source_info[0].line_number)),
+            " ".repeat(number_length(self.source_info.line_number)),
             "|".blue().bold(),
             error_pointer.red().bold()
         )));

@@ -1,9 +1,10 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, path::PathBuf, rc::Rc};
 
 use crate::hfs::{
+    builder::builder::{Builder, BuilderOperation, ControlFlowOps, FunctionOps, LoopOps, PassMode, StackOps, VariableOps},
+    error::DiagnosticInfo,
     AstArena, ExprId, ExprProvenance, Expression, FuncId, FunctionDeclaration, Identifier, Literal, Operation, ScopeKind,
     SourceInfo, StackKeyword, Statement, StmtId, Token, TokenKind, TopLevelId, Type, TypeId, VarDeclaration, VarId,
-    builder::builder::{Builder, BuilderOperation, ControlFlowOps, FunctionOps, LoopOps, PassMode, StackOps, VariableOps},
 };
 
 pub struct StackAnalyzerBuilder {
@@ -85,7 +86,11 @@ impl Builder<StmtOrExpr> for StackAnalyzerBuilder {
 
     fn new() -> Self {
         StackAnalyzerBuilder {
-            arena: AstArena::new(),
+            arena: AstArena::new(Rc::new(DiagnosticInfo::new(PathBuf::new(), SourceInfo {
+                line_number: 0,
+                line_offset: 0,
+                token_width: 0,
+            }))),
             current_function: None,
             stack_block_exprs: Vec::new(),
             context_stack: Vec::new(),

@@ -212,7 +212,7 @@ impl fmt::Display for TokenKind {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Hash, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Hash, Eq, Default, Ord, PartialOrd)]
 pub struct SourceInfo {
     pub line_number: usize,
     pub line_offset: usize,
@@ -413,5 +413,14 @@ impl TokenKind {
             | TokenKind::Comma => 1,
             TokenKind::Newline => 0,
         }
+    }
+}
+
+pub fn get_eof_source_info(tokens: &Vec<Token>) -> SourceInfo {
+    if tokens.len() > 0 {
+        let last = tokens.last().expect("[internal error] no tokens after len > 0 check");
+        SourceInfo::new(last.source_info.line_number, last.source_info.line_offset + last.source_info.token_width, 1)
+    } else {
+        SourceInfo::new(1, 1, 1)
     }
 }

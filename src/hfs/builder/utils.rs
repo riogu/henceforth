@@ -1,7 +1,8 @@
 use std::{any::Any, path::PathBuf, rc::Rc};
 
 use crate::hfs::{
-    error::CompileError, AstArena, CfgAnalyzer, File, IrArena, Lexer, Parser, StackAnalyzer, Token, UnresolvedAstArena,
+    error::{CompileError, DiagnosticInfo},
+    get_eof_source_info, AstArena, CfgAnalyzer, File, IrArena, Lexer, Parser, StackAnalyzer, Token, UnresolvedAstArena,
 };
 
 pub trait Byproduct {
@@ -50,19 +51,20 @@ pub fn run_until(filename: &str, phase: Phase) -> Result<Rc<dyn Byproduct>, Box<
     let file_name = file.path.to_str().unwrap().to_string();
 
     let tokens = Lexer::tokenize(&file)?;
+    let diagnostic_info = Rc::new(DiagnosticInfo::new(file.path, get_eof_source_info(&tokens)));
 
     if phase == Phase::Lexer {
         return Ok(Rc::new(tokens));
     }
 
-    let (unresolved_top_level_nodes, unresolved_ast_arena) = Parser::parse_tokens(tokens, file.path)?;
+    let (unresolved_top_level_nodes, unresolved_ast_arena) = Parser::parse_tokens(tokens, diagnostic_info.clone())?;
 
     if phase == Phase::Parser {
         return Ok(Rc::new(unresolved_ast_arena));
     }
 
     let (top_level_nodes, ast_arena, scope_stack) =
-        StackAnalyzer::resolve(unresolved_top_level_nodes, unresolved_ast_arena, file_name);
+        StackAnalyzer::resolve(unresolved_top_level_nodes, unresolved_ast_arena, diagnostic_info.clone())?;
 
     if phase == Phase::StackAnalyzer {
         return Ok(Rc::new(ast_arena));

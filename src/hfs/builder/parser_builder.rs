@@ -1,7 +1,11 @@
+use std::{path::PathBuf, rc::Rc};
+
 use crate::hfs::{
-    self, Literal, ScopeKind, SourceInfo, Token, Type, TypeId, UnresolvedAstArena, UnresolvedExprId, UnresolvedExpression,
-    UnresolvedFunctionDeclaration, UnresolvedStatement, UnresolvedStmtId, UnresolvedTopLevelId, UnresolvedVarDeclaration,
+    self,
     builder::builder::{Builder, BuilderOperation, ControlFlowOps, FunctionOps, LoopOps, PassMode, StackOps, VariableOps},
+    error::DiagnosticInfo,
+    Literal, ScopeKind, SourceInfo, Token, Type, TypeId, UnresolvedAstArena, UnresolvedExprId, UnresolvedExpression,
+    UnresolvedFunctionDeclaration, UnresolvedStatement, UnresolvedStmtId, UnresolvedTopLevelId, UnresolvedVarDeclaration,
 };
 
 pub struct ParserBuilder {
@@ -48,7 +52,11 @@ impl Builder<UnresolvedStmtOrExpr> for ParserBuilder {
     type Built = UnresolvedAstArena;
     fn new() -> Self {
         ParserBuilder {
-            arena: UnresolvedAstArena::new(),
+            arena: UnresolvedAstArena::new(Rc::new(DiagnosticInfo::new(PathBuf::new(), SourceInfo {
+                line_number: 0,
+                line_offset: 0,
+                token_width: 0,
+            }))),
             current_function: None,
             stack_block_exprs: Vec::new(),
             context_stack: Vec::new(),

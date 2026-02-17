@@ -1,4 +1,6 @@
-use crate::hfs::{ScopeKind, ast::*, token::*};
+use std::rc::Rc;
+
+use crate::hfs::{ast::*, error::DiagnosticInfo, token::*, ScopeKind};
 
 // ============================================================================
 // First-pass AST (no stack resolution)
@@ -75,8 +77,8 @@ pub enum UnresolvedStatement {
     Assignment {
         identifier: UnresolvedExprId, // just the name
         is_move: bool,                // true for &=, false for :=
-                                      // value comes from stack
-        deref_count: i32
+        // value comes from stack
+        deref_count: i32,
     },
     FunctionCall {
         identifier: UnresolvedExprId,
@@ -135,6 +137,8 @@ pub struct UnresolvedAstArena {
     pub(crate) unresolved_var_tokens: Vec<Token>,
     pub(crate) unresolved_function_tokens: Vec<Token>,
     pub(crate) type_tokens: Vec<Token>,
+
+    pub diagnostic_info: Rc<DiagnosticInfo>,
 }
 
 impl PartialEq for UnresolvedAstArena {
@@ -148,8 +152,9 @@ impl PartialEq for UnresolvedAstArena {
 }
 
 impl UnresolvedAstArena {
-    pub fn new() -> Self {
+    pub fn new(diagnostic_info: Rc<DiagnosticInfo>) -> Self {
         let mut arena = Self::default();
+        arena.diagnostic_info = diagnostic_info;
         arena.alloc_type_uncached(Type::new_int(0), Token { kind: TokenKind::Int, source_info: SourceInfo::new(0, 0, 0) });
         arena.alloc_type_uncached(Type::new_float(0), Token { kind: TokenKind::Float, source_info: SourceInfo::new(0, 0, 0) });
         arena.alloc_type_uncached(Type::new_bool(0), Token { kind: TokenKind::Bool, source_info: SourceInfo::new(0, 0, 0) });

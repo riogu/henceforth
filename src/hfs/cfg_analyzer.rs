@@ -359,6 +359,7 @@ impl CfgAnalyzer {
         let entry_block = self.arena.alloc_block("start"); // create before analyzing the parameters
         self.arena.cfg_context.curr_insert_block = entry_block;
 
+        // eprintln!("func body stmt: {:?}", self.ast_arena.get_stmt(func_decl.body));
         let mut parameter_exprs = Vec::<InstId>::new();
         for param_expr_id in func_decl.parameter_exprs {
             let param_inst = self.lower_expr(param_expr_id);
@@ -549,7 +550,7 @@ impl CfgAnalyzer {
                                 self.arena.cfg_context.curr_insert_block = if_end_block;
                             }
                         },
-                        _ => panic!("can't have other statements in else statement"),
+                        otherstmt => panic!("can't have other statements in else statement, found '{:?}'", otherstmt),
                     }
                 } else {
                     if self.arena.hfs_stack.len() != if_depth_before {
@@ -652,7 +653,8 @@ impl CfgAnalyzer {
                     let inst = self.lower_expr(expr_id);
                     self.arena.push_to_hfs_stack(inst);
                 },
-            Statement::BlockScope(top_level_ids, scope_kind) =>
+            Statement::BlockScope(top_level_ids, scope_kind) => {
+                // eprintln!("BlockScope top_level_ids: {:?}", top_level_ids);
                 for top_level_id in top_level_ids.clone() {
                     match top_level_id {
                         TopLevelId::VariableDecl(var_id) => {
@@ -661,7 +663,8 @@ impl CfgAnalyzer {
                         TopLevelId::FunctionDecl(func_id) => panic!("[internal error] local functions are not allowed"),
                         TopLevelId::Statement(stmt_id) => self.lower_stmt(stmt_id, curr_block_context.clone()),
                     };
-                },
+                }
+            },
             Statement::Return => {
                 // note that we have already checked that the state of the stack is correct in
                 // terms of size and types before each return statement.
@@ -705,6 +708,8 @@ impl CfgAnalyzer {
                 // this will be a huge source of bugs in the future...
                 // we need to add fancier stack simulation to completely get rid of duplication
                 // associated to @() stack blocks
+                // eprintln!("fooboaoroaoro\n");
+
                 let inst_value = if is_move {
                     self.arena.pop_hfs_stack().expect("expected value in stack for move assignment")
                 } else {

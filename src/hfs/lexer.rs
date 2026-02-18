@@ -103,6 +103,7 @@ impl Lexer {
                     '*' => TokenKind::Star,
                     '/' =>
                         if let Some(_) = chars_iter.next_if_eq(&'/') {
+                            while let Some(_) = chars_iter.next_if(|char| *char != '\n') {}
                             continue;
                         } else {
                             TokenKind::Slash

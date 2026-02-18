@@ -1,6 +1,6 @@
 use std::{collections::HashMap, default, fmt::Display, rc::Rc};
 
-use crate::hfs::{error::DiagnosticInfo, token::*, RuntimeValue, ScopeKind};
+use crate::hfs::{RuntimeValue, ScopeKind, error::DiagnosticInfo, token::*};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct VarId(pub usize);
@@ -319,11 +319,11 @@ impl AstArena {
         // If not, allocate it
         self.alloc_type_uncached(hfs_type, token)
     }
-    // this is necessary to allow recursive functions
-    pub fn temporarily_get_next_stmt_id(&mut self) -> StmtId {
-        StmtId(self.stmts.len())
+    pub fn get_stack_change(&self, stack_start: Vec<ExprId>, mut hfs_stack: Vec<ExprId>) -> Vec<ExprId> {
+        let elements_to_delete = hfs_stack.iter().zip(&stack_start).take_while(|(a, b)| a == b).count();
+        hfs_stack.drain(0..elements_to_delete);
+        hfs_stack
     }
-
     //---------------------------------------------------------------------------------
     // provenance methods
     pub fn get_expr_provenance(&self, expr: ExprId) -> &ExprProvenance {
@@ -394,12 +394,6 @@ impl AstArena {
 
     pub fn get_type_token(&self, id: TypeId) -> &Token {
         &self.type_tokens[id.0]
-    }
-
-    pub fn get_stack_change(&self, stack_start: Vec<ExprId>, mut hfs_stack: Vec<ExprId>) -> Vec<ExprId> {
-        let elements_to_delete = hfs_stack.iter().zip(&stack_start).take_while(|(a, b)| a == b).count();
-        hfs_stack.drain(0..elements_to_delete);
-        hfs_stack
     }
 
     pub fn to_type(&mut self, token: Token) -> TypeId {

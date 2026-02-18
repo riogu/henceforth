@@ -112,7 +112,6 @@ impl AstArena {
         expected_type_id: TypeId,
         tokens: Vec<Token>,
     ) -> Result<(), Box<dyn CompileError>> {
-        dbg!(&tokens);
         let actual_type = self.get_type(actual_type_id);
         let expected_type = self.get_type(expected_type_id);
 
@@ -198,6 +197,7 @@ impl StackAnalyzer {
     }
 
     fn resolve_var_decl(&mut self, id: UnresolvedVarId) -> VarId {
+        // TODO: havent checked variable redeclarations
         let unresolved_var = self.unresolved_arena.get_unresolved_var(id);
         let token = self.unresolved_arena.get_unresolved_var_token(id);
 
@@ -234,22 +234,14 @@ impl StackAnalyzer {
             )
         };
 
-        let func = FunctionDeclaration {
-            name: name.clone(),
-            param_type,
-            return_type,
-            body: self.arena.temporarily_get_next_stmt_id(),
-            parameter_exprs,
-        }; // needed for recursive functions AND to match the correct token
-
-        //------------------------------------------------------------
-
+        // needed for recursive functions AND to match the correct token
+        let func = FunctionDeclaration { name: name.clone(), param_type, return_type, body: StmtId(69420), parameter_exprs };
         //------------------------------------------------------------
         // we push scopes so the body can solve identifiers
         let func_id = self.push_function_and_scope_and_alloc(&name, func, token.clone());
-        let body = self.resolve_stmt(unresolved_body)?;
+        self.arena.get_func_mut(func_id).body = self.resolve_stmt(unresolved_body)?;
         //------------------------------------------------------------
-        dbg!("we reached before validating return stack");
+
         self.arena.validate_return_stack(self.scope_resolution_stack.get_curr_func_return_type(), vec![token])?;
         self.scope_resolution_stack.pop();
         self.arena.pop_entire_hfs_stack(); // context should be reset after each function!
@@ -734,10 +726,10 @@ mod tests {
     use pretty_assertions::assert_eq;
 
     use crate::hfs::{
+        AstArena, Type,
         builder::builder::{Builder, BuilderOperation, ControlFlowOps, FunctionOps, LoopOps, PassMode, StackOps, VariableOps},
         stack_analyzer_builder::StackAnalyzerBuilder,
-        utils::{run_until, Phase},
-        AstArena, Type,
+        utils::{Phase, run_until},
     };
 
     fn analyze_file(name: &str) -> AstArena {

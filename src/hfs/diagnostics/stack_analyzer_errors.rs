@@ -56,9 +56,9 @@ impl CompileError for StackAnalyzerError {
             StackAnalyzerErrorKind::IncorrectNumberReturnValues(expected, actual) =>
                 (format!("expected {} values on stack for return, found {}", expected, actual), String::new()),
             StackAnalyzerErrorKind::TypeMismatchReturnValues(expected, actual) =>
-                (format!("expected {:?} on stack for return, found {:?}", expected, actual), String::new()),
+                (format!("expected {} on stack for return, found {}", expected, actual), String::new()),
             StackAnalyzerErrorKind::TypeMismatch(expected, actual) =>
-                (format!("expected {:?}, found {:?}", expected, actual), format!("found {:?}", actual)),
+                (format!("expected {}, found {}", expected, actual), format!("found {}", actual)),
             StackAnalyzerErrorKind::IncorrectTupleLength(expected, actual) =>
                 (format!("expected a tuple of size {}, found a tuple of size {}", expected, actual), String::new()),
             StackAnalyzerErrorKind::IncorrectPointerCount(expected, actual) =>

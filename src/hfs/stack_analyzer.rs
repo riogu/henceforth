@@ -265,9 +265,8 @@ impl StackAnalyzer {
                 let cond_stack_block = self.resolve_stmt(cond)?;
                 // condition isnt included in the stack depth count
                 let cond = self.arena.pop_or_error(vec![self.unresolved_arena.get_unresolved_stmt_token(body)])?;
-                if !matches!(self.arena.get_type_of_expr(cond)?, Type::Bool { .. }) {
-                    panic!("expected expression of type 'bool' in if statement condition")
-                }
+                let cond_type = self.arena.get_type_id_of_expr(cond)?;
+                self.arena.compare_types(cond_type, self.arena.bool_type(), vec![self.arena.get_expr_token(cond).clone()])?;
 
                 // Analyze if body
                 let if_depth_before = self.arena.hfs_stack.len();
@@ -278,19 +277,53 @@ impl StackAnalyzer {
                     Some(else_stmt_id) => {
                         match self.unresolved_arena.get_unresolved_stmt(else_stmt_id) {
                             UnresolvedStatement::Else(stmt_id) => {
+                                let stmt_id = *stmt_id;
                                 // Reset stack to pre-if state for else branch
                                 self.arena.hfs_stack = stack_before_branches;
-                                let else_body = self.resolve_stmt(*stmt_id)?;
+                                let else_body = self.resolve_stmt(stmt_id)?;
                                 let else_depth_after = self.arena.hfs_stack.len();
 
                                 // Both branches must have same stack effect
                                 if if_depth_after != else_depth_after {
-                                    panic!(
-                                        "if/else branches must have matching stack effects: if branch results in {} values, \
-                                         else branch results in {}",
-                                        if_depth_after - if_depth_before,
-                                        else_depth_after - if_depth_before
-                                    );
+                                    let else_body = self.unresolved_arena.get_unresolved_stmt(stmt_id.clone());
+                                    if let UnresolvedStatement::BlockScope(stmts, _) = else_body {
+                                        let mut else_body_source_infos = Vec::new();
+                                        for stmt in stmts {
+                                            match stmt {
+                                                UnresolvedTopLevelId::VariableDecl(unresolved_var_id) => else_body_source_infos
+                                                    .push(
+                                                        self.unresolved_arena
+                                                            .get_unresolved_var_token(*unresolved_var_id)
+                                                            .source_info,
+                                                    ),
+                                                UnresolvedTopLevelId::FunctionDecl(unresolved_func_id) => else_body_source_infos
+                                                    .push(
+                                                        self.unresolved_arena
+                                                            .get_unresolved_func_token(*unresolved_func_id)
+                                                            .source_info,
+                                                    ),
+                                                UnresolvedTopLevelId::Statement(unresolved_stmt_id) => else_body_source_infos
+                                                    .push(
+                                                        self.unresolved_arena
+                                                            .get_unresolved_stmt_token(*unresolved_stmt_id)
+                                                            .source_info,
+                                                    ),
+                                            }
+                                        }
+                                        return StackAnalyzerError::new(
+                                            StackAnalyzerErrorKind::MismatchingStackDepths(
+                                                if_depth_after - if_depth_before,
+                                                else_depth_after - if_depth_before,
+                                            ),
+                                            self.arena.diagnostic_info.path.clone(),
+                                            else_body_source_infos,
+                                        );
+                                    } else {
+                                        panic!(
+                                            "[internal error] else body is not a block scope (should already be resolved in \
+                                             parser)"
+                                        )
+                                    }
                                 }
                                 Some(self.arena.alloc_stmt(Statement::Else(else_body), token.clone()))
                             },
@@ -307,10 +340,25 @@ impl StackAnalyzer {
                     None => {
                         // If no else, the if body must have net-zero stack effect
                         if if_depth_before != if_depth_after {
-                            panic!(
-                                "if statement must have net-zero stack effect, but changed stack by {}",
-                                (if_depth_after as i32) - (if_depth_before as i32)
-                            );
+                            let if_body = self.arena.get_stmt(body.clone());
+                            if let Statement::BlockScope(stmts, _) = if_body {
+                                let mut if_body_source_infos = Vec::new();
+                                for stmt in stmts {
+                                    match stmt {
+                                        TopLevelId::VariableDecl(var_id) =>
+                                            if_body_source_infos.push(self.arena.get_var_token(*var_id).source_info.clone()),
+                                        TopLevelId::FunctionDecl(func_id) =>
+                                            if_body_source_infos.push(self.arena.get_function_token(*func_id).source_info.clone()),
+                                        TopLevelId::Statement(stmt_id) =>
+                                            if_body_source_infos.push(self.arena.get_stmt_token(*stmt_id).source_info.clone()),
+                                    }
+                                }
+                                return StackAnalyzerError::new(
+                                    StackAnalyzerErrorKind::ExpectedNetZeroStackEffectIfStmt(if_depth_after - if_depth_before),
+                                    self.arena.diagnostic_info.path.clone(),
+                                    if_body_source_infos,
+                                );
+                            }
                         }
                         None
                     },
@@ -326,9 +374,8 @@ impl StackAnalyzer {
                 // each while loop (our stack state is left right after the condition is popped)
                 let stack_depth_before = self.arena.hfs_stack.len();
 
-                if !matches!(self.arena.get_type_of_expr(cond)?, Type::Bool { .. }) {
-                    panic!("expected expression of type 'bool' in while loop condition")
-                }
+                let cond_type = self.arena.get_type_id_of_expr(cond)?;
+                self.arena.compare_types(cond_type, self.arena.bool_type(), vec![self.arena.get_expr_token(cond).clone()])?;
 
                 // Analyze the body
                 let body = self.resolve_stmt(body)?;
@@ -336,10 +383,24 @@ impl StackAnalyzer {
                 // Enforce stack balance
                 let stack_depth_after = self.arena.hfs_stack.len();
                 if stack_depth_before != stack_depth_after {
-                    panic!(
-                        "while loop body must maintain stack balance: expected {} values on stack after loop body, found {}",
-                        stack_depth_before, stack_depth_after
-                    );
+                    if let UnresolvedStatement::BlockScope(stmts, _) = self.unresolved_arena.get_unresolved_stmt(id) {
+                        let mut while_body_source_infos = Vec::new();
+                        for stmt in stmts {
+                            match stmt {
+                                UnresolvedTopLevelId::VariableDecl(var_id) => while_body_source_infos
+                                    .push(self.unresolved_arena.get_unresolved_var_token(*var_id).source_info.clone()),
+                                UnresolvedTopLevelId::FunctionDecl(func_id) => while_body_source_infos
+                                    .push(self.unresolved_arena.get_unresolved_func_token(*func_id).source_info.clone()),
+                                UnresolvedTopLevelId::Statement(stmt_id) => while_body_source_infos
+                                    .push(self.unresolved_arena.get_unresolved_stmt_token(*stmt_id).source_info.clone()),
+                            }
+                        }
+                        return StackAnalyzerError::new(
+                            StackAnalyzerErrorKind::ExpectedNetZeroStackEffectWhileLoop(stack_depth_after - stack_depth_before),
+                            self.arena.diagnostic_info.path.clone(),
+                            while_body_source_infos,
+                        );
+                    }
                 }
 
                 Ok(self.arena.alloc_stmt(Statement::While { cond, body }, token))
@@ -726,10 +787,10 @@ mod tests {
     use pretty_assertions::assert_eq;
 
     use crate::hfs::{
-        AstArena, Type,
         builder::builder::{Builder, BuilderOperation, ControlFlowOps, FunctionOps, LoopOps, PassMode, StackOps, VariableOps},
         stack_analyzer_builder::StackAnalyzerBuilder,
-        utils::{Phase, run_until},
+        utils::{run_until, Phase},
+        AstArena, Type,
     };
 
     fn analyze_file(name: &str) -> AstArena {

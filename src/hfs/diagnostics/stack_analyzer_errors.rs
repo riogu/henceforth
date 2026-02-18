@@ -16,6 +16,9 @@ pub enum StackAnalyzerErrorKind {
     TypeMismatch(Type, Type),
     IncorrectTupleLength(usize, usize),
     IncorrectPointerCount(usize, usize),
+    MismatchingStackDepths(usize, usize),
+    ExpectedNetZeroStackEffectIfStmt(usize),
+    ExpectedNetZeroStackEffectWhileLoop(usize),
 }
 
 #[derive(Debug)]
@@ -63,6 +66,16 @@ impl CompileError for StackAnalyzerError {
                 (format!("expected a tuple of size {}, found a tuple of size {}", expected, actual), String::new()),
             StackAnalyzerErrorKind::IncorrectPointerCount(expected, actual) =>
                 (format!("expected a pointer count of {}, found a pointer count of {}", expected, actual), String::new()),
+            StackAnalyzerErrorKind::MismatchingStackDepths(expected, actual) =>
+                (format!("expected a stack depth of {}, found a stack depth of {}", expected, actual), String::new()),
+            StackAnalyzerErrorKind::ExpectedNetZeroStackEffectIfStmt(found) => (
+                format!("expected a net-zero stack effect on all branches, found a stack depth difference of {}", found),
+                String::new(),
+            ),
+            StackAnalyzerErrorKind::ExpectedNetZeroStackEffectWhileLoop(found) => (
+                format!("expected while loop to maintain a net-zero stack effect, found a stack depth difference of {}", found),
+                String::new(),
+            ),
         }
     }
 

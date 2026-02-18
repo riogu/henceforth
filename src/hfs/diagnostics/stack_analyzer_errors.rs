@@ -4,13 +4,18 @@ use colored::{ColoredString, Colorize};
 
 use crate::hfs::{
     error::{number_length, CompileError},
-    SourceInfo,
+    SourceInfo, Type,
 };
 
 #[derive(Debug)]
 pub enum StackAnalyzerErrorKind {
     StackUnderflow,
     ExpectedItemOnStack,
+    IncorrectNumberReturnValues(usize, usize),
+    TypeMismatchReturnValues(Type, Type),
+    TypeMismatch(Type, Type),
+    IncorrectTupleLength(usize, usize),
+    IncorrectPointerCount(usize, usize),
 }
 
 #[derive(Debug)]
@@ -44,10 +49,20 @@ impl StackAnalyzerError {
 
 impl CompileError for StackAnalyzerError {
     fn message(&self) -> (String, String) {
-        match self.kind {
+        match &self.kind {
             StackAnalyzerErrorKind::StackUnderflow =>
                 (String::from("stack underflow"), String::from("stack underflow occurred here")),
             StackAnalyzerErrorKind::ExpectedItemOnStack => (String::from("expected item on stack"), String::new()),
+            StackAnalyzerErrorKind::IncorrectNumberReturnValues(expected, actual) =>
+                (format!("expected {} values on stack for return, found {}", expected, actual), String::new()),
+            StackAnalyzerErrorKind::TypeMismatchReturnValues(expected, actual) =>
+                (format!("expected {:?} on stack for return, found {:?}", expected, actual), String::new()),
+            StackAnalyzerErrorKind::TypeMismatch(expected, actual) =>
+                (format!("expected {:?}, found {:?}", expected, actual), format!("found {:?}", actual)),
+            StackAnalyzerErrorKind::IncorrectTupleLength(expected, actual) =>
+                (format!("expected a tuple of size {}, found a tuple of size {}", expected, actual), String::new()),
+            StackAnalyzerErrorKind::IncorrectPointerCount(expected, actual) =>
+                (format!("expected a pointer count of {}, found a pointer count of {}", expected, actual), String::new()),
         }
     }
 

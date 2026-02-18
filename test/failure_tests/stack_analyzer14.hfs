@@ -1,0 +1,5 @@
+fn foo: () -> (i32) {
+	@(true) return;
+}
+
+fn main: () -> () {}

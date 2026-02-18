@@ -78,7 +78,7 @@ pub enum UnresolvedStatement {
         identifier: UnresolvedExprId, // just the name
         is_move: bool,                // true for &=, false for :=
         // value comes from stack
-        deref_count: i32,
+        deref_count: usize,
     },
     FunctionCall {
         identifier: UnresolvedExprId,
@@ -249,7 +249,7 @@ impl UnresolvedAstArena {
         self.type_tokens[id.0].clone()
     }
 
-    pub fn to_type(&mut self, token: Token, ptr_count: i32) -> TypeId {
+    pub fn to_type(&mut self, token: Token, ptr_count: usize) -> TypeId {
         match token.kind {
             TokenKind::Int => self.alloc_type(Type::new_int(ptr_count), token),
             TokenKind::String => self.alloc_type(Type::new_string(ptr_count), token),

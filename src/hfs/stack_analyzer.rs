@@ -35,7 +35,6 @@ impl AstArena {
         }
     }
     pub fn last_or_error(&self, tokens: Vec<Token>) -> Result<ExprId, Box<dyn CompileError>> {
-        // should start using our own error structs instead
         match self.hfs_stack.last() {
             Some(id) => Ok(*id),
             None => StackAnalyzerError::new(
@@ -46,7 +45,6 @@ impl AstArena {
         }
     }
     pub fn pop2_or_error(&mut self, tokens: Vec<Token>) -> Result<(ExprId, ExprId), Box<dyn CompileError>> {
-        // should start using our own error structs instead
         let rhs = self.pop_or_error(tokens.clone())?;
         let lhs = self.pop_or_error(tokens)?;
         Ok((lhs, rhs))
@@ -60,7 +58,7 @@ impl AstArena {
         })
     }
 
-    pub fn validate_return_stack(&mut self, return_type: TypeId) {
+    pub fn validate_return_stack(&mut self, return_type: TypeId, tokens: Vec<Token>) -> Result<(), Box<dyn CompileError>> {
         let Type::Tuple { type_ids: return_types, .. } = self.get_type(return_type) else {
             panic!("[internal error] functions only return tuples at the moment.")
         };
@@ -68,31 +66,53 @@ impl AstArena {
         let expected_count = return_types.len();
         let actual_count = self.hfs_stack.len();
         if expected_count != actual_count {
-            panic!("expected {} values on stack for return, found {}", expected_count, actual_count)
+            return StackAnalyzerError::new(
+                StackAnalyzerErrorKind::IncorrectNumberReturnValues(expected_count, actual_count),
+                self.diagnostic_info.path.clone(),
+                tokens.iter().map(|tkn| tkn.clone().source_info).collect(),
+            );
         }
         let stack_copy = &self.hfs_stack.clone();
 
         for (expr_id, expected_type_id) in stack_copy.iter().zip(return_types.iter()) {
-            let actual_type_id = self.get_type_id_of_expr(*expr_id);
-            if let Err(err) = self.compare_types(actual_type_id, *expected_type_id) {
-                panic!("return value {}", err);
+            let actual_type_id = self.get_type_id_of_expr(*expr_id)?;
+            if let Err(err) = self.compare_types(actual_type_id, *expected_type_id, tokens.clone()) {
+                return StackAnalyzerError::new(
+                    StackAnalyzerErrorKind::TypeMismatchReturnValues(
+                        self.get_type(*expected_type_id).clone(),
+                        self.get_type(actual_type_id).clone(),
+                    ),
+                    self.diagnostic_info.path.clone(),
+                    tokens.iter().map(|tkn| tkn.clone().source_info).collect(),
+                );
             }
         }
+        Ok(())
     }
-    pub fn validate_func_call(&self, param_type: TypeId, arg_type: TypeId) {
+
+    pub fn validate_func_call(
+        &self,
+        param_type: TypeId,
+        arg_type: TypeId,
+        arg_tokens: Vec<Token>,
+    ) -> Result<(), Box<dyn CompileError>> {
         let Type::Tuple { .. } = self.get_type(arg_type) else {
-            panic!("expected tuple on stack before function call")
+            panic!("[internal error] expected tuple on stack before function call")
         };
         let Type::Tuple { .. } = self.get_type(param_type) else {
             panic!("[internal error] function parameter type must be a tuple")
         };
 
-        if let Err(err) = self.compare_types(arg_type, param_type) {
-            panic!("function call argument {}", err);
-        }
+        self.compare_types(arg_type, param_type, arg_tokens)
     }
 
-    pub fn compare_types(&self, actual_type_id: TypeId, expected_type_id: TypeId) -> Result<(), String> {
+    pub fn compare_types(
+        &self,
+        actual_type_id: TypeId,
+        expected_type_id: TypeId,
+        tokens: Vec<Token>,
+    ) -> Result<(), Box<dyn CompileError>> {
+        dbg!(&tokens);
         let actual_type = self.get_type(actual_type_id);
         let expected_type = self.get_type(expected_type_id);
 
@@ -102,27 +122,35 @@ impl AstArena {
                 Type::Tuple { type_ids: expected_types, ptr_count: expected_ptr_count },
             ) => {
                 if actual_types.len() != expected_types.len() {
-                    return Err(format!(
-                        "tuple length mismatch: expected {} elements, found {}",
-                        expected_types.len(),
-                        actual_types.len()
-                    ));
+                    return StackAnalyzerError::new(
+                        StackAnalyzerErrorKind::IncorrectTupleLength(expected_types.len(), actual_types.len()),
+                        self.diagnostic_info.path.clone(),
+                        tokens.iter().map(|token| token.source_info.clone()).collect(),
+                    );
                 }
                 if actual_ptr_count != expected_ptr_count {
-                    return Err(format!(
-                        "tuples had different pointer count, '{}' vs '{}'",
-                        actual_ptr_count, expected_ptr_count
-                    ));
+                    return StackAnalyzerError::new(
+                        StackAnalyzerErrorKind::IncorrectPointerCount(*actual_ptr_count, *expected_ptr_count),
+                        self.diagnostic_info.path.clone(),
+                        tokens.iter().map(|token| token.source_info.clone()).collect(),
+                    );
                 }
                 // Recursively validate each element
                 for (i, (&actual_elem_id, &expected_elem_id)) in actual_types.iter().zip(expected_types.iter()).enumerate() {
-                    self.compare_types(actual_elem_id, expected_elem_id)
-                        .map_err(|err| format!("in tuple element {}: {}", i, err))?;
+                    let elem_token = match tokens.get(i) {
+                        Some(token) => token.clone(),
+                        None => panic!("[internal error] wrong number of tokens passed"),
+                    };
+                    self.compare_types(actual_elem_id, expected_elem_id, vec![elem_token]);
                 }
                 Ok(())
             },
             (actual, expected) if actual == expected => Ok(()),
-            (actual, expected) => Err(format!("type mismatch: expected '{:?}', found '{:?}'", expected, actual)),
+            (actual, expected) => StackAnalyzerError::new(
+                StackAnalyzerErrorKind::TypeMismatch(expected.clone(), actual.clone()),
+                self.diagnostic_info.path.clone(),
+                tokens.iter().map(|token| token.source_info.clone()).collect(),
+            ),
         }
     }
 }
@@ -218,10 +246,11 @@ impl StackAnalyzer {
 
         //------------------------------------------------------------
         // we push scopes so the body can solve identifiers
-        let func_id = self.push_function_and_scope_and_alloc(&name, func, token);
+        let func_id = self.push_function_and_scope_and_alloc(&name, func, token.clone());
         let body = self.resolve_stmt(unresolved_body)?;
         //------------------------------------------------------------
-        self.arena.validate_return_stack(self.scope_resolution_stack.get_curr_func_return_type());
+        dbg!("we reached before validating return stack");
+        self.arena.validate_return_stack(self.scope_resolution_stack.get_curr_func_return_type(), vec![token])?;
         self.scope_resolution_stack.pop();
         self.arena.pop_entire_hfs_stack(); // context should be reset after each function!
         Ok(func_id)
@@ -244,7 +273,7 @@ impl StackAnalyzer {
                 let cond_stack_block = self.resolve_stmt(cond)?;
                 // condition isnt included in the stack depth count
                 let cond = self.arena.pop_or_error(vec![self.unresolved_arena.get_unresolved_stmt_token(body)])?;
-                if !matches!(self.arena.get_type_of_expr(cond), Type::Bool { .. }) {
+                if !matches!(self.arena.get_type_of_expr(cond)?, Type::Bool { .. }) {
                     panic!("expected expression of type 'bool' in if statement condition")
                 }
 
@@ -305,7 +334,7 @@ impl StackAnalyzer {
                 // each while loop (our stack state is left right after the condition is popped)
                 let stack_depth_before = self.arena.hfs_stack.len();
 
-                if !matches!(self.arena.get_type_of_expr(cond), Type::Bool { .. }) {
+                if !matches!(self.arena.get_type_of_expr(cond)?, Type::Bool { .. }) {
                     panic!("expected expression of type 'bool' in while loop condition")
                 }
 
@@ -363,7 +392,9 @@ impl StackAnalyzer {
                 Ok(self.arena.alloc_stmt(Statement::BlockScope(top_level_ids, scope_kind), token))
             },
             UnresolvedStatement::Return => {
-                self.arena.validate_return_stack(self.scope_resolution_stack.get_curr_func_return_type());
+                // this is the case where we validate manually written 'return' statements
+                // rather than the implicit return at the end of functions
+                self.arena.validate_return_stack(self.scope_resolution_stack.get_curr_func_return_type(), vec![token.clone()])?;
                 Ok(self.arena.alloc_stmt(Statement::Return, token))
             },
             UnresolvedStatement::Break => {
@@ -406,13 +437,15 @@ impl StackAnalyzer {
                     panic!("[internal error] functions only recieve tuples at the moment.")
                 };
                 let mut arg_count = 0;
-                let mut arg_types = Vec::<TypeId>::new();
+                let mut arg_types = Vec::new();
+                let mut arg_expr_tokens = Vec::new();
                 for _ in 0..param_types.len() {
                     let arg_expr = self.arena.pop_or_error(vec![
                         self.unresolved_arena.get_unresolved_stmt_token(id),
                         self.unresolved_arena.get_unresolved_expr_token(identifier),
                     ])?;
-                    arg_types.push(self.arena.get_type_id_of_expr(arg_expr));
+                    arg_expr_tokens.push(self.arena.get_expr_token(arg_expr).clone());
+                    arg_types.push(self.arena.get_type_id_of_expr(arg_expr)?);
                     arg_count += 1;
                 }
                 let arg_type_id = self.arena.alloc_type(Type::Tuple { type_ids: arg_types, ptr_count: 0 }, Token {
@@ -420,7 +453,7 @@ impl StackAnalyzer {
                     source_info: SourceInfo::new(0, 0, 0),
                 });
                 // first make sure calling this function is valid given the stack state
-                self.arena.validate_func_call(func_decl.param_type, arg_type_id);
+                self.arena.validate_func_call(func_decl.param_type, arg_type_id, arg_expr_tokens);
 
                 // now make sure the stack is updated based on the return type of the function
                 let Type::Tuple { type_ids: return_types, .. } = self.arena.get_type(func_decl.return_type) else {
@@ -446,7 +479,7 @@ impl StackAnalyzer {
         &mut self,
         id: UnresolvedExprId,
         provenance: ExprProvenance,
-        deref_count: i32,
+        deref_count: usize,
     ) -> Identifier {
         // neither this or func_call identifier allocate an expression
         let token = self.unresolved_arena.get_unresolved_expr_token(id);
@@ -502,7 +535,11 @@ impl StackAnalyzer {
     fn resolve_expr(&mut self, id: UnresolvedExprId) -> Result<ExprId, Box<dyn CompileError>> {
         let token = self.unresolved_arena.get_unresolved_expr_token(id);
         match self.unresolved_arena.get_unresolved_expr(id).clone() {
-            UnresolvedExpression::Operation(unresolved_operation) => Ok(self.resolve_operation(&unresolved_operation, token)?),
+            UnresolvedExpression::Operation(unresolved_operation) => {
+                let expr_id = self.resolve_operation(&unresolved_operation, token)?;
+                self.arena.get_type_of_expr(expr_id)?;
+                Ok(expr_id)
+            },
             UnresolvedExpression::Identifier(identifier) => {
                 // there should only be identifiers here that were inside the stack scope
                 // @(1 2 var foo) // like this example
@@ -545,8 +582,11 @@ impl StackAnalyzer {
                     None => self.arena.pop_entire_hfs_stack(), // for @pop_all
                 };
 
-                // // simulate stack
-                let simulated_stack: Vec<TypeId> = args.iter().map(|id| self.arena.get_type_id_of_expr(*id)).collect();
+                // simulate stack
+                let mut simulated_stack: Vec<TypeId> = Vec::new();
+                for arg in &args {
+                    simulated_stack.push(self.arena.get_type_id_of_expr(*arg)?);
+                }
 
                 let return_values = effect(simulated_stack.clone());
                 let mut return_value_ids = Vec::new();
@@ -563,8 +603,10 @@ impl StackAnalyzer {
                     }
                 });
 
-                let return_value_types: Vec<TypeId> =
-                    return_value_ids.iter().map(|id| self.arena.get_type_id_of_expr(*id)).collect();
+                let mut return_value_types: Vec<TypeId> = Vec::new();
+                for id in &return_value_ids {
+                    return_value_types.push(self.arena.get_type_id_of_expr(*id)?);
+                }
 
                 // create tuples for param and return type
                 let param_type = self.arena.alloc_type(Type::Tuple { type_ids: simulated_stack, ptr_count: 0 }, Token {

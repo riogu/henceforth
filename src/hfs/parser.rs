@@ -71,7 +71,7 @@ impl Parser {
         }
     }
 
-    fn consume_token_chain(&mut self, kind: TokenKind) -> i32 {
+    fn consume_token_chain(&mut self, kind: TokenKind) -> usize {
         let mut tkn_count = 0;
         while let Some(token) = self.tokens.peek()
             && token.kind == kind

@@ -1,4 +1,4 @@
-use crate::hfs::{CfgOperation, InstId, Instruction, IrArena, IrFuncId, IrVarId, ast::*, token::*};
+use crate::hfs::{ast::*, error::CompileError, token::*, CfgOperation, InstId, Instruction, IrArena, IrFuncId, IrVarId};
 
 pub const PRIMITIVE_TYPE_COUNT: usize = 4;
 
@@ -18,19 +18,17 @@ impl AstArena {
     }
 
     // Only expressions have types!
-    pub fn get_type_of_operation(&mut self, op: &Operation) -> TypeId {
+    pub fn get_type_of_operation(&mut self, op: &Operation) -> Result<TypeId, Box<dyn CompileError>> {
         match op {
             Operation::Add(lhs, rhs)
             | Operation::Sub(lhs, rhs)
             | Operation::Mul(lhs, rhs)
             | Operation::Div(lhs, rhs)
             | Operation::Mod(lhs, rhs) => {
-                let lhs_type = self.get_type_id_of_expr(*lhs);
-                let rhs_type = self.get_type_id_of_expr(*rhs);
-                if let Err(err) = self.compare_types(lhs_type, rhs_type) {
-                    panic!("{}", err)
-                }
-                lhs_type
+                let lhs_type = self.get_type_id_of_expr(*lhs)?;
+                let rhs_type = self.get_type_id_of_expr(*rhs)?;
+                self.compare_types(lhs_type, rhs_type, vec![self.get_expr_token(*lhs).clone()])?;
+                Ok(lhs_type)
             },
             Operation::Or(_, _)
             | Operation::And(_, _)
@@ -40,46 +38,46 @@ impl AstArena {
             | Operation::Less(_, _)
             | Operation::LessEqual(_, _)
             | Operation::Greater(_, _)
-            | Operation::GreaterEqual(_, _) => self.bool_type(),
-            Operation::AddressOf(expr_id) => todo!(),
-            Operation::Dereference(expr_id) => todo!(),
+            | Operation::GreaterEqual(_, _) => Ok(self.bool_type()),
+            Operation::AddressOf(expr_id) => Ok(todo!()),
+            Operation::Dereference(expr_id) => Ok(todo!()),
         }
     }
 
-    pub fn get_type_id_of_expr(&mut self, expr_id: ExprId) -> TypeId {
+    pub fn get_type_id_of_expr(&mut self, expr_id: ExprId) -> Result<TypeId, Box<dyn CompileError>> {
         match self.get_expr(expr_id).clone() {
-            Expression::Operation(operation) => self.get_type_of_operation(&operation),
+            Expression::Operation(operation) => Ok(self.get_type_of_operation(&operation)?),
             Expression::Identifier(identifier) => match identifier {
                 Identifier::GlobalVar(var_id) | Identifier::Variable(var_id) => {
                     let var = self.get_var(var_id);
-                    var.hfs_type
+                    Ok(var.hfs_type)
                 },
                 Identifier::Function(func_id) => {
                     let func = self.get_func(func_id);
-                    func.return_type
+                    Ok(func.return_type)
                 },
             },
             Expression::Literal(literal) => match literal {
-                Literal::Integer(_) => self.int_type(),
-                Literal::Float(_) => self.float_type(),
-                Literal::String(_) => self.string_type(),
-                Literal::Bool(_) => self.bool_type(),
+                Literal::Integer(_) => Ok(self.int_type()),
+                Literal::Float(_) => Ok(self.float_type()),
+                Literal::String(_) => Ok(self.string_type()),
+                Literal::Bool(_) => Ok(self.bool_type()),
             },
             Expression::Tuple { expressions } => {
                 let token = self.get_expr_token(expr_id).clone();
                 // Build tuple type from element types
                 let mut element_types = Vec::new();
                 for expr_id in expressions.clone() {
-                    let elem_type = self.get_type_id_of_expr(expr_id);
+                    let elem_type = self.get_type_id_of_expr(expr_id)?;
                     element_types.push(elem_type);
                 }
 
                 let tuple_type = Type::Tuple { type_ids: element_types, ptr_count: 0 };
-                self.alloc_type(tuple_type, token)
+                Ok(self.alloc_type(tuple_type, token))
             },
-            Expression::Parameter { index, type_id } => type_id,
-            Expression::StackKeyword { .. } => todo!(),
-            Expression::ReturnValue(type_id) => type_id,
+            Expression::Parameter { index, type_id } => Ok(type_id),
+            Expression::StackKeyword { .. } => Ok(todo!()),
+            Expression::ReturnValue(type_id) => Ok(type_id),
         }
     }
     pub fn get_type_of_var(&self, var_id: VarId) -> &Type {
@@ -89,9 +87,9 @@ impl AstArena {
         self.get_type(self.get_func(func_id).return_type)
     }
 
-    pub fn get_type_of_expr(&mut self, expr_id: ExprId) -> &Type {
-        let type_id = self.get_type_id_of_expr(expr_id);
-        self.get_type(type_id)
+    pub fn get_type_of_expr(&mut self, expr_id: ExprId) -> Result<&Type, Box<dyn CompileError>> {
+        let type_id = self.get_type_id_of_expr(expr_id)?;
+        Ok(self.get_type(type_id))
     }
 }
 

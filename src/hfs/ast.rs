@@ -136,7 +136,7 @@ pub enum Statement {
     Assignment {
         identifier: Identifier,
         is_move: bool,
-        deref_count: i32,
+        deref_count: usize,
     },
     FunctionCall {
         arg_count: usize,
@@ -150,14 +150,27 @@ pub enum Statement {
 // Types
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Type {
-    Int { ptr_count: i32 },
-    String { ptr_count: i32 },
-    Bool { ptr_count: i32 },
-    Float { ptr_count: i32 },
-    Tuple { type_ids: Vec<TypeId>, ptr_count: i32 },
+    Int { ptr_count: usize },
+    String { ptr_count: usize },
+    Bool { ptr_count: usize },
+    Float { ptr_count: usize },
+    Tuple { type_ids: Vec<TypeId>, ptr_count: usize },
 }
+
 impl Type {
-    pub fn get_ptr_count(&self) -> i32 {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Type::Int { ptr_count } => write!(f, "i32"),
+            Type::String { ptr_count } => write!(f, "str"),
+            Type::Bool { ptr_count } => write!(f, "bool"),
+            Type::Float { ptr_count } => write!(f, "f32"),
+            Type::Tuple { type_ids, ptr_count } => todo!("this might not be printable with the current structure"),
+        }
+    }
+}
+
+impl Type {
+    pub fn get_ptr_count(&self) -> usize {
         match *self {
             Type::Int { ptr_count } => ptr_count,
             Type::String { ptr_count } => ptr_count,
@@ -166,19 +179,19 @@ impl Type {
             Type::Tuple { ptr_count, .. } => ptr_count,
         }
     }
-    pub fn new_int(ptr_count: i32) -> Self {
+    pub fn new_int(ptr_count: usize) -> Self {
         Type::Int { ptr_count }
     }
-    pub fn new_string(ptr_count: i32) -> Self {
+    pub fn new_string(ptr_count: usize) -> Self {
         Type::String { ptr_count }
     }
-    pub fn new_bool(ptr_count: i32) -> Self {
+    pub fn new_bool(ptr_count: usize) -> Self {
         Type::Bool { ptr_count }
     }
-    pub fn new_float(ptr_count: i32) -> Self {
+    pub fn new_float(ptr_count: usize) -> Self {
         Type::Float { ptr_count }
     }
-    pub fn new_tuple(types: Vec<TypeId>, ptr_count: i32) -> Self {
+    pub fn new_tuple(types: Vec<TypeId>, ptr_count: usize) -> Self {
         Type::Tuple { type_ids: types, ptr_count }
     }
     pub fn to_token(&self) -> TokenKind {
@@ -191,6 +204,7 @@ impl Type {
         }
     }
 }
+
 // ============================================================================
 // Arena storage with token tracking
 // ============================================================================

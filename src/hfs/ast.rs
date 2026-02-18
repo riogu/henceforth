@@ -1,6 +1,6 @@
 use std::{collections::HashMap, default, fmt::Display, rc::Rc};
 
-use crate::hfs::{RuntimeValue, ScopeKind, error::DiagnosticInfo, token::*};
+use crate::hfs::{error::DiagnosticInfo, token::*, RuntimeValue, ScopeKind};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct VarId(pub usize);
@@ -357,7 +357,7 @@ impl AstArena {
         if let Some(keyword) = STACK_KEYWORDS.iter().find(|keyword| keyword.name == name) {
             keyword
         } else {
-            panic!("invalid stack keyword");
+            panic!("[internal error] invalid stack keyword (lexer resolves this)");
         }
     }
 

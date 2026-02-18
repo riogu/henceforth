@@ -8,6 +8,23 @@ use crate::hfs::{
 };
 
 #[derive(Debug)]
+pub enum JumpKeyword {
+    Break,
+    Continue,
+    Return,
+}
+
+impl Display for JumpKeyword {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            JumpKeyword::Break => write!(f, "break"),
+            JumpKeyword::Continue => write!(f, "continue"),
+            JumpKeyword::Return => write!(f, "return"),
+        }
+    }
+}
+
+#[derive(Debug)]
 pub enum StackAnalyzerErrorKind {
     StackUnderflow,
     ExpectedItemOnStack,
@@ -19,6 +36,11 @@ pub enum StackAnalyzerErrorKind {
     MismatchingStackDepths(usize, usize),
     ExpectedNetZeroStackEffectIfStmt(usize),
     ExpectedNetZeroStackEffectWhileLoop(usize),
+    FoundXOutsideWhileLoop(JumpKeyword),
+    AssignValueToFunction,
+    TooManyDereferences(usize, usize),
+    CallVariableAsFunction,
+    UseOfUndeclaredIdentifier(String),
 }
 
 #[derive(Debug)]
@@ -76,6 +98,14 @@ impl CompileError for StackAnalyzerError {
                 format!("expected while loop to maintain a net-zero stack effect, found a stack depth difference of {}", found),
                 String::new(),
             ),
+            StackAnalyzerErrorKind::FoundXOutsideWhileLoop(jump_keyword) =>
+                (format!("found {} outside while loop", jump_keyword), format!("found {}", jump_keyword)),
+            StackAnalyzerErrorKind::AssignValueToFunction => (format!("cannot assign value to a function"), String::new()),
+            StackAnalyzerErrorKind::TooManyDereferences(actual, max) =>
+                (format!("cannot dereference {} times", actual), format!("type only has {} levels of indirection", max)),
+            StackAnalyzerErrorKind::CallVariableAsFunction => (format!("cannot call variable as a function"), String::new()),
+            StackAnalyzerErrorKind::UseOfUndeclaredIdentifier(name) =>
+                (format!("use of undeclared identifier '{}'", name), format!("undeclared identifier")),
         }
     }
 

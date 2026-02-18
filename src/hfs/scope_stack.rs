@@ -1,6 +1,11 @@
-use std::{collections::HashMap, path::PathBuf};
+use std::{collections::HashMap, path::PathBuf, rc::Rc};
 
-use crate::hfs::ast::*;
+use crate::hfs::{
+    ast::*,
+    error::{CompileError, DiagnosticInfo},
+    stack_analyzer_errors::{StackAnalyzerError, StackAnalyzerErrorKind},
+    Token,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 // Scopes, used for solving symbols
@@ -25,13 +30,14 @@ pub struct ScopeStack {
     pub mangled_global_vars: HashMap<String, VarId>,
     pub mangled_locals: HashMap<String, VarId>,
     pub mangled_functions: HashMap<String, FuncId>,
+    diagnostic_info: Rc<DiagnosticInfo>,
 }
 
 impl ScopeStack {
-    pub fn new(path: &PathBuf) -> Self {
+    pub fn new(diagnostic_info: Rc<DiagnosticInfo>) -> Self {
         Self {
             scope_stack: vec![Scope {
-                name: path.to_string_lossy().to_string() + "%",
+                name: diagnostic_info.path.to_string_lossy().to_string() + "%",
                 kind: ScopeKind::Global,
                 inner_count: 0,
                 curr_func_return_type: TypeId(0),
@@ -39,6 +45,7 @@ impl ScopeStack {
             mangled_global_vars: HashMap::new(),
             mangled_locals: HashMap::new(),
             mangled_functions: HashMap::new(),
+            diagnostic_info,
         }
     }
     pub fn push_function_and_scope(&mut self, name: &str, func_id: FuncId, curr_func_return_type: TypeId) {
@@ -129,14 +136,19 @@ impl ScopeStack {
         self.mangled_functions.get(&global_mangled_name).copied()
     }
 
-    pub fn find_identifier(&self, name: &str) -> Identifier {
+    pub fn find_identifier(&self, name: &str, token: Token) -> Result<Identifier, Box<dyn CompileError>> {
         match self.find_variable(&name) {
             (None, _) => match self.find_function(&name) {
-                Some(id) => Identifier::Function(id),
-                None => panic!("use of undeclared identifier '{}'", name),
+                Some(id) => Ok(Identifier::Function(id)),
+                None =>
+                    return StackAnalyzerError::new(
+                        StackAnalyzerErrorKind::UseOfUndeclaredIdentifier(name.to_string()),
+                        self.diagnostic_info.path.clone(),
+                        vec![token.source_info],
+                    ),
             },
-            (Some(id), false) => Identifier::Variable(id),
-            (Some(id), true) => Identifier::GlobalVar(id),
+            (Some(id), false) => Ok(Identifier::Variable(id)),
+            (Some(id), true) => Ok(Identifier::GlobalVar(id)),
         }
     }
 }

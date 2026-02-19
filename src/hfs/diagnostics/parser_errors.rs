@@ -24,7 +24,7 @@ pub enum Expectable {
 impl Display for Expectable {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Expectable::Token(token_kind) => write!(f, "{}", token_kind),
+            Expectable::Token(token_kind) => write!(f, "'{}'", token_kind),
             Expectable::Identifier => write!(f, "identifier"),
             Expectable::StackKeyword => write!(f, "stack keyword"),
             Expectable::Type => write!(f, "type"),
@@ -77,7 +77,7 @@ impl CompileError for ParserError {
                         "{}",
                         expected.iter().map(|expected| format!("{}", expected)).collect::<Vec<String>>().join(" or ")
                     );
-                    (format!("expected {}, found {}", expected_repr, found), String::new())
+                    (format!("expected {}, found '{}'", expected_repr, found), String::new())
                 },
                 None => {
                     let expected_repr = format!(

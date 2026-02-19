@@ -1,6 +1,6 @@
 use std::{collections::HashMap, default, fmt::Display, rc::Rc};
 
-use crate::hfs::{RuntimeValue, ScopeKind, error::DiagnosticInfo, token::*};
+use crate::hfs::{error::DiagnosticInfo, token::*, RuntimeValue, ScopeKind, UnresolvedAstArena};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct VarId(pub usize);
@@ -165,6 +165,21 @@ impl Display for Type {
             Type::Bool { ptr_count } => write!(f, "bool"),
             Type::Float { ptr_count } => write!(f, "f32"),
             Type::Tuple { type_ids, ptr_count } => todo!("this might not be printable with the current structure"),
+        }
+    }
+}
+
+impl Type {
+    pub fn get_repr_unresolved(&self, arena: &UnresolvedAstArena) -> String {
+        match self {
+            Type::Int { ptr_count } => format!("i32"),
+            Type::String { ptr_count } => format!("str"),
+            Type::Bool { ptr_count } => format!("bool"),
+            Type::Float { ptr_count } => format!("f32"),
+            Type::Tuple { type_ids, ptr_count } => format!(
+                "Tuple<{}>",
+                type_ids.iter().map(|id| arena.get_type(*id).get_repr_unresolved(arena)).collect::<Vec<String>>().join(", ")
+            ),
         }
     }
 }

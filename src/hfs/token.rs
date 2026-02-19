@@ -152,7 +152,7 @@ impl From<Type> for TokenKind {
     }
 }
 
-use std::fmt;
+use std::fmt::{self, Display};
 
 use crate::hfs::{ast::Type, builder::builder::BuilderOperation};
 

@@ -139,14 +139,14 @@ impl ScopeStack {
         self.mangled_functions.get(&global_mangled_name).copied()
     }
 
-    pub fn find_identifier(&self, name: &str, token: Token) -> Result<Identifier, Box<dyn CompileError>> {
+    pub fn find_identifier(&self, name: &str, token: Token, arena: &AstArena) -> Result<Identifier, Box<dyn CompileError>> {
         match self.find_variable(&name) {
             (None, _) => match self.find_function(&name) {
                 Some(id) => Ok(Identifier::Function(id)),
                 None =>
                     return stack_analyzer_error!(
                         StackAnalyzerErrorKind::UseOfUndeclaredIdentifier(name.to_string()),
-                        self.diagnostic_info.path.clone(),
+                        arena,
                         vec![token.source_info]
                     ),
             },

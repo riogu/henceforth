@@ -68,7 +68,7 @@ impl AstArena {
         if expected_count != actual_count {
             return stack_analyzer_error!(
                 StackAnalyzerErrorKind::IncorrectNumberReturnValues(expected_count, actual_count),
-                self.diagnostic_info.path.clone(),
+                &*self,
                 tokens.iter().map(|tkn| tkn.clone().source_info).collect()
             );
         }
@@ -82,7 +82,7 @@ impl AstArena {
                         self.get_type(*expected_type_id).clone(),
                         self.get_type(actual_type_id).clone(),
                     ),
-                    self.diagnostic_info.path.clone(),
+                    &*self,
                     tokens.iter().map(|tkn| tkn.clone().source_info).collect()
                 );
             }
@@ -123,14 +123,14 @@ impl AstArena {
                 if actual_types.len() != expected_types.len() {
                     return stack_analyzer_error!(
                         StackAnalyzerErrorKind::IncorrectTupleLength(expected_types.len(), actual_types.len()),
-                        self.diagnostic_info.path.clone(),
+                        self,
                         tokens.iter().map(|token| token.source_info.clone()).collect()
                     );
                 }
                 if actual_ptr_count != expected_ptr_count {
                     return stack_analyzer_error!(
                         StackAnalyzerErrorKind::IncorrectPointerCount(*actual_ptr_count, *expected_ptr_count),
-                        self.diagnostic_info.path.clone(),
+                        self,
                         tokens.iter().map(|token| token.source_info.clone()).collect()
                     );
                 }
@@ -147,7 +147,7 @@ impl AstArena {
             (actual, expected) if actual == expected => Ok(()),
             (actual, expected) => stack_analyzer_error!(
                 StackAnalyzerErrorKind::TypeMismatch(expected.clone(), actual.clone()),
-                self.diagnostic_info.path.clone(),
+                self,
                 tokens.iter().map(|token| token.source_info.clone()).collect()
             ),
         }
@@ -315,7 +315,7 @@ impl StackAnalyzer {
                                                 if_depth_after - if_depth_before,
                                                 else_depth_after - if_depth_before,
                                             ),
-                                            self.arena.diagnostic_info.path.clone(),
+                                            &self.arena,
                                             else_body_source_infos
                                         );
                                     } else {
@@ -355,7 +355,7 @@ impl StackAnalyzer {
                                 }
                                 return stack_analyzer_error!(
                                     StackAnalyzerErrorKind::ExpectedNetZeroStackEffectIfStmt(if_depth_after - if_depth_before),
-                                    self.arena.diagnostic_info.path.clone(),
+                                    &self.arena,
                                     if_body_source_infos
                                 );
                             } else {
@@ -402,7 +402,7 @@ impl StackAnalyzer {
                         }
                         return stack_analyzer_error!(
                             StackAnalyzerErrorKind::ExpectedNetZeroStackEffectWhileLoop(stack_depth_after - stack_depth_before),
-                            self.arena.diagnostic_info.path.clone(),
+                            &self.arena,
                             while_body_source_infos
                         );
                     } else {
@@ -465,7 +465,7 @@ impl StackAnalyzer {
                 if !self.scope_resolution_stack.is_in_while_loop_context() {
                     return stack_analyzer_error!(
                         StackAnalyzerErrorKind::FoundXOutsideWhileLoop(JumpKeyword::Break),
-                        self.arena.diagnostic_info.path.clone(),
+                        &self.arena,
                         vec![self.unresolved_arena.get_unresolved_stmt_token(id).source_info]
                     );
                 }
@@ -475,7 +475,7 @@ impl StackAnalyzer {
                 if !self.scope_resolution_stack.is_in_while_loop_context() {
                     return stack_analyzer_error!(
                         StackAnalyzerErrorKind::FoundXOutsideWhileLoop(JumpKeyword::Continue),
-                        self.arena.diagnostic_info.path.clone(),
+                        &self.arena,
                         vec![self.unresolved_arena.get_unresolved_stmt_token(id).source_info]
                     );
                 }
@@ -564,7 +564,7 @@ impl StackAnalyzer {
         let token = self.unresolved_arena.get_unresolved_expr_token(id);
         match self.unresolved_arena.get_unresolved_expr(id) {
             UnresolvedExpression::Identifier(identifier) => {
-                let identifier = self.scope_resolution_stack.find_identifier(&identifier, token.clone())?;
+                let identifier = self.scope_resolution_stack.find_identifier(&identifier, token.clone(), &self.arena)?;
                 match identifier {
                     Identifier::GlobalVar(var_id) | Identifier::Variable(var_id) => {
                         self.arena.curr_var_provenances[var_id.0] = provenance;
@@ -574,7 +574,7 @@ impl StackAnalyzer {
                             if deref_count > ptr_count {
                                 return stack_analyzer_error!(
                                     StackAnalyzerErrorKind::TooManyDereferences(deref_count, ptr_count),
-                                    self.arena.diagnostic_info.path.clone(),
+                                    &self.arena,
                                     vec![token.source_info]
                                 );
                             }
@@ -582,11 +582,10 @@ impl StackAnalyzer {
                         Ok(identifier)
                     },
                     Identifier::Function(func) =>
-                        return stack_analyzer_error!(
-                            StackAnalyzerErrorKind::AssignValueToFunction,
-                            self.arena.diagnostic_info.path.clone(),
-                            vec![assign_tkn.source_info, token.source_info]
-                        ),
+                        return stack_analyzer_error!(StackAnalyzerErrorKind::AssignValueToFunction, &self.arena, vec![
+                            assign_tkn.source_info,
+                            token.source_info
+                        ]),
                 }
             },
             _ => Ok(panic!("[internal error] you're assigning to something that isn't an identifier")),
@@ -599,14 +598,13 @@ impl StackAnalyzer {
         let UnresolvedExpression::Identifier(identifier) = identifier else {
             panic!("[internal error] function call must have identifier")
         };
-        let identifier = self.scope_resolution_stack.find_identifier(&identifier, token)?;
+        let identifier = self.scope_resolution_stack.find_identifier(&identifier, token, &self.arena)?;
         match identifier {
             Identifier::GlobalVar(var_id) | Identifier::Variable(var_id) =>
-                return stack_analyzer_error!(
-                    StackAnalyzerErrorKind::CallVariableAsFunction,
-                    self.arena.diagnostic_info.path.clone(),
-                    vec![assign_tkn.source_info, self.unresolved_arena.get_unresolved_expr_token(id).source_info]
-                ),
+                return stack_analyzer_error!(StackAnalyzerErrorKind::CallVariableAsFunction, &self.arena, vec![
+                    assign_tkn.source_info,
+                    self.unresolved_arena.get_unresolved_expr_token(id).source_info
+                ]),
             Identifier::Function(func_id) => {
                 self.arena.curr_func_call_provenances[func_id.0] = ExprProvenance::RuntimeValue;
                 // doing it this way because we dont really care about evaluating functions at
@@ -627,7 +625,7 @@ impl StackAnalyzer {
             UnresolvedExpression::Identifier(identifier) => {
                 // there should only be identifiers here that were inside the stack scope
                 // @(1 2 var foo) // like this example
-                let identifier = self.scope_resolution_stack.find_identifier(&identifier, token.clone())?;
+                let identifier = self.scope_resolution_stack.find_identifier(&identifier, token.clone(), &self.arena)?;
                 Ok(self.arena.alloc_and_push_to_hfs_stack(
                     Expression::Identifier(identifier),
                     *self.arena.get_identifier_provenance(identifier),

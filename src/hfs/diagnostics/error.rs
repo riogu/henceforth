@@ -37,7 +37,13 @@ pub fn number_length(n: usize) -> usize {
 
 #[derive(Debug, Default, Clone)]
 pub struct DebugInfo {
-    pub compiler_file: String,
+    pub compiler_file: &'static str,
     pub compiler_line: u32,
     pub compiler_column: u32,
+    pub internal_dump: String,
+}
+
+pub trait Dumpable {
+    type Arena;
+    fn dump(&self, arena: &Self::Arena) -> ColoredString;
 }

@@ -1,4 +1,9 @@
-use std::{error::Error, fmt::Display, fs, path::PathBuf};
+use std::{
+    error::Error,
+    fmt::{self, Display},
+    fs,
+    path::PathBuf,
+};
 
 use colored::{ColoredString, Colorize};
 
@@ -24,7 +29,7 @@ pub struct LexerError {
 
 #[macro_export]
 macro_rules! lexer_error {
-    ($kind:expr, $path:expr, $source_info:expr) => {
+    ($kind:expr, $path:expr, $source_info:expr, $tokens:expr) => {
         Err(Box::new(LexerError {
             kind: $kind,
             path: $path,
@@ -33,9 +38,16 @@ macro_rules! lexer_error {
                 compiler_file: file!(),
                 compiler_line: line!(),
                 compiler_column: column!(),
+                internal_dump: LexerError::dump_tokens($tokens),
             },
         }))
     };
+}
+
+impl LexerError {
+    pub fn dump_tokens(tokens: Vec<Token>) -> String {
+        format!("[\n{}\n]", tokens.iter().map(|tkn| format!("\t{}", tkn)).collect::<Vec<String>>().join(",\n"))
+    }
 }
 
 impl CompileError for LexerError {
@@ -96,8 +108,11 @@ impl CompileError for LexerError {
     fn debug_info(&self) -> ColoredString {
         #[cfg(debug_assertions)]
         return ColoredString::from(format!(
-            "Debug info:\n\t[{} @ {}:{}]",
-            self.debug_info.compiler_file, self.debug_info.compiler_line, self.debug_info.compiler_column
+            "\n\nDebug info:\n\tprogram crashed at [{} @ {}:{}]\n\nInternal dump:\n{}",
+            self.debug_info.compiler_file,
+            self.debug_info.compiler_line,
+            self.debug_info.compiler_column,
+            self.debug_info.internal_dump
         ));
 
         #[cfg(not(debug_assertions))]
@@ -112,6 +127,16 @@ impl Display for LexerError {
             Err(e) => ColoredString::from(format!("<source unavailable: {}>", e)),
         };
 
-        write!(f, "{}\n{}\n{}\n\n{}", self.header(), self.location(), source_code, self.debug_info())
+        write!(f, "{}\n{}\n{}{}", self.header(), self.location(), source_code, self.debug_info())
+    }
+}
+
+impl Display for Token {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{:?} (pos: {}:{}, width: {})",
+            self.kind, self.source_info.line_number, self.source_info.line_offset, self.source_info.token_width
+        )
     }
 }

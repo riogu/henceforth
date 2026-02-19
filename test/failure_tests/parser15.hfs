@@ -1,3 +1,16 @@
+fn fizz_buzz: (i32) -> (str) {
+	if @(15 % 0 ==) {
+		@("fizzbuzz");
+	} else if @(3 % 0 ==) {
+		@("fizz");
+	} else if @(5 % 0 ==) {
+		@("buzz");
+	} else {
+		@pop;
+		@("no fizzbuzz");
+	}
+}
+
 fn main: () -> () {
 	@(if);
 }

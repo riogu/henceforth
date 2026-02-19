@@ -62,7 +62,8 @@ impl Lexer {
                             return lexer_error!(
                                 LexerErrorKind::InvalidStackKeyword,
                                 file.path.clone(),
-                                SourceInfo::new(line_number + 1, line_offset, lit.len())
+                                SourceInfo::new(line_number + 1, line_offset, lit.len()),
+                                tokens
                             );
                         }
                     },
@@ -76,14 +77,16 @@ impl Lexer {
                                 return lexer_error!(
                                     LexerErrorKind::UnexpectedChar,
                                     file.path.clone(),
-                                    SourceInfo::new(line_number + 1, line_offset + 1, 1)
+                                    SourceInfo::new(line_number + 1, line_offset + 1, 1),
+                                    tokens
                                 );
                             }
                         } else {
                             return lexer_error!(
                                 LexerErrorKind::UnexpectedChar,
                                 file.path.clone(),
-                                SourceInfo::new(line_number + 1, line_offset + 1, 1)
+                                SourceInfo::new(line_number + 1, line_offset + 1, 1),
+                                tokens
                             );
                         },
                     ':' =>
@@ -117,7 +120,8 @@ impl Lexer {
                             return lexer_error!(
                                 LexerErrorKind::UnexpectedChar,
                                 file.path.clone(),
-                                SourceInfo::new(line_number + 1, line_offset + 1, 1)
+                                SourceInfo::new(line_number + 1, line_offset + 1, 1),
+                                tokens
                             );
                         }, // ==
                     '!' =>
@@ -160,7 +164,8 @@ impl Lexer {
                             return lexer_error!(
                                 LexerErrorKind::UnexpectedChar,
                                 file.path.clone(),
-                                SourceInfo::new(line_number + 1, line_offset + 1, 1)
+                                SourceInfo::new(line_number + 1, line_offset + 1, 1),
+                                tokens
                             );
                         }, // ||
 
@@ -177,7 +182,8 @@ impl Lexer {
                                     return lexer_error!(
                                         LexerErrorKind::UnexpectedEof,
                                         file.path.clone(),
-                                        SourceInfo::new(line_number + 1, line_offset + 1, 1)
+                                        SourceInfo::new(line_number + 1, line_offset + 1, 1),
+                                        tokens
                                     );
                                 }
                             }
@@ -234,7 +240,8 @@ impl Lexer {
                         return lexer_error!(
                             LexerErrorKind::UnexpectedChar,
                             file.path.clone(),
-                            SourceInfo::new(line_number + 1, line_offset, 1)
+                            SourceInfo::new(line_number + 1, line_offset, 1),
+                            tokens
                         ),
                 };
                 let width = kind.get_width();

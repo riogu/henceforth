@@ -65,6 +65,7 @@ pub enum Instruction {
     Load {
         source_info: SourceInfo,
         address: InstId,
+        type_id: TypeId,
     },
     Store {
         source_info: SourceInfo,
@@ -304,7 +305,7 @@ impl CfgPrintable for Instruction {
             Instruction::LoadElement { source_info, index, tuple } =>
                 format!("load_element {}, {}", index, arena.inst_name(*tuple)),
             Instruction::ReturnValue { source_info, type_id } => format!("retval {}", arena.get_type(*type_id).get_repr(arena)),
-            Instruction::Load { source_info, address } => format!("load {}", arena.inst_name(*address)),
+            Instruction::Load { source_info, address, type_id } => format!("load {}", arena.inst_name(*address)),
             Instruction::Store { source_info, address, value } =>
                 format!("store {}, {}", arena.inst_name(*value), arena.inst_name(*address)),
             Instruction::StackKeyword { source_info, name, args } => {

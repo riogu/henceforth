@@ -227,7 +227,7 @@ impl Interpreter {
             },
             Instruction::LoadElement { source_info, index, tuple } =>
                 todo!("[internal error] we aren't currently using Instruction::LoadElement for anything yet"),
-            Instruction::Load { source_info, address } => todo!(),
+            Instruction::Load { source_info, address, type_id} => todo!(),
             Instruction::Store { source_info, address, value } => todo!(),
             Instruction::Alloca { source_info, type_id } => todo!(),
         }

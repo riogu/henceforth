@@ -417,8 +417,18 @@ impl StackAnalyzer {
                 }
                 // when were resolving a stack block, we can consume the previous stack state
                 // e.g: if we had:
-                // @(1 2 3);
-                // @(+);
+                // @(1 2 3 4);
+                // @(+ + + 2);
+                //
+                //
+                //
+                //
+                //
+                //
+                //
+                //
+                // @(+)
+                //
                 // we consumed the 2 and the 3,
                 // so to find what to push, we grab the initial stack state, and on a cloned version of the current stack,
                 // we pop until they differ, so if we had [1, 2, 3] and [1, Add(2, 3)]

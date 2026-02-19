@@ -1,4 +1,5 @@
 use std::{
+    any::Any,
     collections::{HashMap, HashSet},
     fmt::Debug,
 };
@@ -708,7 +709,6 @@ impl CfgAnalyzer {
                 // this will be a huge source of bugs in the future...
                 // we need to add fancier stack simulation to completely get rid of duplication
                 // associated to @() stack blocks
-                // eprintln!("fooboaoroaoro\n");
 
                 let inst_value = if is_move {
                     self.arena.pop_hfs_stack().expect("expected value in stack for move assignment")
@@ -728,11 +728,15 @@ impl CfgAnalyzer {
                     self.arena.write_variable(var_id, self.arena.cfg_context.curr_insert_block, inst_value);
                 } else {
                     // Pointer dereference assignment (emit memory ops)
+                    // NOTE: we dont have the pointer code finished at all in the language atm
                     let mut addr = self.arena.read_variable(var_id, self.arena.cfg_context.curr_insert_block);
                     // Chase the pointer chain: *ptr is 1 deref, **ptr is 2, etc.
                     for _ in 0..deref_count - 1 {
+                        let type_id = self.arena.get_var(var_id).hfs_type;
+                        // TODO: i dont think this type_id is correct ^^^^^ check later when we add
+                        // pointers for real to the language
                         addr = self.arena.alloc_inst_for(
-                            Instruction::Load { source_info: source_info.clone(), address: addr },
+                            Instruction::Load { source_info: source_info.clone(), address: addr, type_id },
                             self.arena.cfg_context.curr_insert_block,
                         );
                     }

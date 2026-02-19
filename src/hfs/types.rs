@@ -1,4 +1,4 @@
-use crate::hfs::{ast::*, error::CompileError, token::*, CfgOperation, InstId, Instruction, IrArena, IrFuncId, IrVarId};
+use crate::hfs::{CfgOperation, InstId, Instruction, IrArena, IrFuncId, IrVarId, ast::*, error::CompileError, token::*};
 
 pub const PRIMITIVE_TYPE_COUNT: usize = 4;
 
@@ -163,9 +163,12 @@ impl IrArena {
             Instruction::StackKeyword { .. } => todo!(),
             Instruction::LoadElement { source_info, index, tuple } => todo!(),
             Instruction::ReturnValue { source_info, type_id } => type_id,
-            Instruction::Load { source_info, address } => todo!(),
+            Instruction::Load { source_info, address, type_id } => type_id,
             Instruction::Store { source_info, address, value } => todo!(),
             Instruction::Alloca { source_info, type_id } => todo!(),
+            // FIXME: the alloca type is whatever type_id we get but with +1 pointer depth. the
+            // issue is we want pointers to be OPAQUE in the IR. which means for this it wont match
+            // whatever the frontend thinks types are. we will have to add this special type later.
         }
     }
     pub fn get_type_of_var(&self, var_id: IrVarId) -> &Type {

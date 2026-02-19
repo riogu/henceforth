@@ -5,7 +5,7 @@ use std::{
     path::PathBuf,
 };
 
-use colored::{ColoredString, Colorize};
+use colored::{ColoredString, Colorize, CustomColor};
 
 use crate::hfs::{
     error::{number_length, CompileError, DebugInfo, Dumpable},
@@ -193,10 +193,13 @@ impl Dumpable for UnresolvedFunctionDeclaration {
     type Arena = UnresolvedAstArena;
     fn dump(&self, arena: &UnresolvedAstArena) -> ColoredString {
         ColoredString::from(format!(
-            "{}\n\tParameter type: {}\n\tReturn type: {}\n\tBody: {}",
+            "{}\n\t{} {}\n\t{} {}\n\t{} {}",
             format!("Function {}:", self.name).bold().red(),
-            indent(&arena.get_type(self.param_type).dump(arena)),
-            indent(&arena.get_type(self.return_type).dump(arena)),
+            "Parameter type:".blue(),
+            indent(&arena.get_type(self.param_type).dump(arena)).yellow(),
+            "Return type:".blue(),
+            indent(&arena.get_type(self.return_type).dump(arena)).yellow(),
+            "Body:".blue(),
             indent(&arena.get_unresolved_stmt(self.body).dump(arena))
         ))
     }
@@ -207,9 +210,10 @@ impl Dumpable for UnresolvedVarDeclaration {
 
     fn dump(&self, arena: &Self::Arena) -> ColoredString {
         ColoredString::from(format!(
-            "{}\n\tType: {}",
+            "{}\n\t{} {}",
             format!("Variable {}:", self.name).bold().red(),
-            indent(&arena.get_type(self.hfs_type).dump(arena))
+            "Type:".blue(),
+            indent(&arena.get_type(self.hfs_type).dump(arena)).yellow()
         ))
     }
 }
@@ -218,7 +222,7 @@ impl Dumpable for UnresolvedOperation {
     type Arena = UnresolvedAstArena;
 
     fn dump(&self, arena: &Self::Arena) -> ColoredString {
-        match self {
+        let op = match self {
             UnresolvedOperation::Add => ColoredString::from(format!("Add")),
             UnresolvedOperation::Sub => ColoredString::from(format!("Sub")),
             UnresolvedOperation::Mul => ColoredString::from(format!("Mul")),
@@ -235,7 +239,8 @@ impl Dumpable for UnresolvedOperation {
             UnresolvedOperation::Not => ColoredString::from(format!("Not")),
             UnresolvedOperation::AddressOf => ColoredString::from(format!("AdressOf")),
             UnresolvedOperation::Dereference => ColoredString::from(format!("Dereference")),
-        }
+        };
+        op.yellow()
     }
 }
 
@@ -244,16 +249,28 @@ impl Dumpable for UnresolvedExpression {
 
     fn dump(&self, arena: &Self::Arena) -> ColoredString {
         match self {
-            UnresolvedExpression::Operation(unresolved_operation) =>
-                ColoredString::from(format!("Operation:\n\t{}", indent(&unresolved_operation.dump(arena)))),
-            UnresolvedExpression::Identifier(name) => ColoredString::from(format!("Identifier ({name})")),
-            UnresolvedExpression::Literal(literal) => ColoredString::from(format!("Literal: {}", literal)),
+            UnresolvedExpression::Operation(unresolved_operation) => ColoredString::from(format!(
+                "{}\n\t{}",
+                "Operation:".red().bold(),
+                indent(&unresolved_operation.dump(arena)).yellow()
+            )),
+            UnresolvedExpression::Identifier(name) =>
+                ColoredString::from(format!("{} {}", "Identifier".red().bold(), format!("({name})").green())),
+            UnresolvedExpression::Literal(literal) =>
+                ColoredString::from(format!("{} {}", "Literal: ".red().bold(), format!("{}", literal).green())),
             UnresolvedExpression::Tuple { expressions } => {
                 let items: Vec<ColoredString> =
                     expressions.iter().map(|expr| arena.get_unresolved_expr(*expr).dump(arena)).collect();
-                ColoredString::from(format!("Tuple:\n\t[\n{}\n\t]", indent_list(&items)))
+                ColoredString::from(format!(
+                    "{}\n\t{}\n{}\n\t{}",
+                    "Tuple:".red(),
+                    "[".custom_color(CustomColor::new(129, 137, 150)),
+                    indent_list(&items),
+                    "]".custom_color(CustomColor::new(129, 137, 150))
+                ))
             },
-            UnresolvedExpression::StackKeyword(name) => ColoredString::from(format!("Stack Keyword ({name})")),
+            UnresolvedExpression::StackKeyword(name) =>
+                ColoredString::from(format!("{} {}", "Stack Keyword".red().bold(), format!("({name})").green())),
         }
     }
 }
@@ -276,55 +293,89 @@ impl Dumpable for UnresolvedStatement {
     fn dump(&self, arena: &Self::Arena) -> ColoredString {
         match self {
             UnresolvedStatement::ElseIf { cond, body, else_stmt } => ColoredString::from(format!(
-                "\nElse-If Statement:\n\tCondition: {}\n\tBody: {}{}",
+                "\n{}\n\t{} {}\n\t{} {}{}",
+                "Else-If Statement:".red().bold(),
+                "Condition:".blue(),
                 indent(&arena.get_unresolved_stmt(*cond).dump(arena)),
+                "Body:".blue(),
                 indent(&arena.get_unresolved_stmt(*body).dump(arena)),
                 match else_stmt {
-                    Some(stmt) => format!("\n\tElse Statement: {}", indent(&arena.get_unresolved_stmt(*stmt).dump(arena))),
+                    Some(stmt) =>
+                        format!("\n\t{} {}", "Next Branch:".blue(), indent(&arena.get_unresolved_stmt(*stmt).dump(arena))),
                     None => format!(""),
                 }
             )),
             UnresolvedStatement::Else(unresolved_stmt_id) => ColoredString::from(format!(
-                "\nElse Statement:\n\tBody: {}",
+                "\n{}\n\t{} {}",
+                "Else Statement:".red().bold(),
+                "Body:".blue(),
                 indent(&arena.get_unresolved_stmt(*unresolved_stmt_id).dump(arena)),
             )),
             UnresolvedStatement::If { cond, body, else_stmt } => ColoredString::from(format!(
-                "\nIf Statement:\n\tCondition: {}\n\tBody: {}{}",
+                "\n{}\n\t{} {}\n\t{} {}{}",
+                "If Statement:".red().bold(),
+                "Condition:".blue(),
                 indent(&arena.get_unresolved_stmt(*cond).dump(arena)),
+                "Body:".blue(),
                 indent(&arena.get_unresolved_stmt(*body).dump(arena)),
                 match else_stmt {
-                    Some(stmt) => format!("\n\tElse Statement: {}", indent(&arena.get_unresolved_stmt(*stmt).dump(arena))),
+                    Some(stmt) =>
+                        format!("\n\t{} {}", "Next Branch:".blue(), indent(&arena.get_unresolved_stmt(*stmt).dump(arena))),
                     None => format!(""),
                 }
             )),
             UnresolvedStatement::While { cond, body } => ColoredString::from(format!(
-                "\nWhile Loop:\n\tCondition: {}\n\tBody: {}",
+                "\n{}\n\t{} {}\n\t{} {}",
+                "While Loop:".red().bold(),
+                "Condition:".blue(),
                 indent(&arena.get_unresolved_stmt(*cond).dump(arena)),
+                "Body:".blue(),
                 indent(&arena.get_unresolved_stmt(*body).dump(arena)),
             )),
             UnresolvedStatement::StackBlock(unresolved_expr_ids) => {
                 let items: Vec<ColoredString> =
                     unresolved_expr_ids.iter().map(|id| arena.get_unresolved_expr(*id).dump(arena)).collect();
-                ColoredString::from(format!("\nStack Block:\n\tExpressions:\n\t[\n\t{}\n\t]", indent_list(&items)))
+                ColoredString::from(format!(
+                    "\n{}\n\t{}\n\t{}\n\t{}\n\t{}",
+                    "Stack Block:".red().bold(),
+                    "Expressions:".blue(),
+                    "[".custom_color(CustomColor::new(129, 137, 150)),
+                    indent_list(&items),
+                    "]".custom_color(CustomColor::new(129, 137, 150)),
+                ))
             },
             UnresolvedStatement::BlockScope(unresolved_top_level_ids, scope_kind) => {
                 let items: Vec<ColoredString> = unresolved_top_level_ids.iter().map(|id| id.dump(arena)).collect();
-                ColoredString::from(format!("\nBlock Scope ({:?}):\n\t[\n\t{}\n\t]", scope_kind, indent_list(&items)))
+                ColoredString::from(format!(
+                    "\n{} {}:\n\t{}\n\t{}\n\t{}",
+                    "Block Scope".red().bold(),
+                    format!("({:?})", scope_kind).yellow(),
+                    "[".custom_color(CustomColor::new(129, 137, 150)),
+                    indent_list(&items),
+                    "]".custom_color(CustomColor::new(129, 137, 150)),
+                ))
             },
-            UnresolvedStatement::Return => ColoredString::from("Return"),
-            UnresolvedStatement::Break => ColoredString::from("Break"),
-            UnresolvedStatement::Continue => ColoredString::from("Continue"),
-            UnresolvedStatement::Empty => ColoredString::from("Empty"),
+            UnresolvedStatement::Return => "Return".red().bold(),
+            UnresolvedStatement::Break => "Break".red().bold(),
+            UnresolvedStatement::Continue => "Continue".red().bold(),
+            UnresolvedStatement::Empty => format!("Empty").red().bold(),
             UnresolvedStatement::Assignment { identifier, is_move, deref_count } => ColoredString::from(format!(
-                "\nAssignment:\n\tIdentifier: {}\n\tIs Move: {}\n\tDeref Count: {}",
+                "\n{}\n\t{} {}\n\t{} {}\n\t{} {}",
+                "Assignment:".red().bold(),
+                "Identifier:".blue(),
                 indent(&arena.get_unresolved_expr(*identifier).dump(arena)),
-                is_move,
-                deref_count
+                "Is Move:".blue(),
+                format!("{}", is_move).green(),
+                "Deref Count:".blue(),
+                format!("{}", deref_count).green(),
             )),
             UnresolvedStatement::FunctionCall { identifier, is_move } => ColoredString::from(format!(
-                "\nFunction Call:\n\tIdentifier: {}\n\tIs Move: {}",
+                "\n{}\n\t{} {}\n\t{} {}",
+                "Function Call:".red().bold(),
+                "Identifier:".blue(),
                 indent(&arena.get_unresolved_expr(*identifier).dump(arena)),
-                is_move,
+                "Is Move:".blue(),
+                format!("{}", is_move).green(),
             )),
         }
     }
@@ -334,6 +385,6 @@ impl Dumpable for Type {
     type Arena = UnresolvedAstArena;
 
     fn dump(&self, arena: &Self::Arena) -> ColoredString {
-        ColoredString::from(format!("{}", self.get_repr_unresolved(arena))).yellow()
+        ColoredString::from(format!("{}", self.get_repr_unresolved(arena)))
     }
 }

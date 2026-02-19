@@ -1,9 +1,9 @@
 use std::{
     collections::HashMap,
-    fmt::{Display, format},
+    fmt::{format, Display},
 };
 
-use crate::hfs::{IrArena, Literal, SourceInfo, ast::*};
+use crate::hfs::{ast::*, IrArena, Literal, SourceInfo};
 /*
 =================================================================================================
 Control Flow Graph IR Pass (HFS MIR - Medium-level IR)
@@ -311,7 +311,7 @@ impl CfgPrintable for Instruction {
                 let args_repr: Vec<String> = args.iter().map(|id| arena.inst_name(*id)).collect();
                 format!("keyword {}, {}", name, args_repr.join(", "))
             },
-            Instruction::Alloca { source_info, type_id } => todo!(),
+            Instruction::Alloca { source_info, type_id } => format!("alloca {}", arena.get_type(*type_id)),
         }
     }
 }

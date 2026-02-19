@@ -1,3 +1,11 @@
+fn max: (i32 i32) -> (i32) {
+	if @(@swap @dup @rot >) {
+		return;
+	} else {
+		@swap @pop;
+	}
+}
+
 fn foo: () -> (i32 f32) {}
 
 fn main: () -> () {}

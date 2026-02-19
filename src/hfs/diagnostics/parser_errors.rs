@@ -89,8 +89,7 @@ impl ParserError {
     pub fn dump_ast(arena: &UnresolvedAstArena) -> String {
         let functions =
             arena.unresolved_functions.iter().map(|func| func.dump(arena).to_string()).collect::<Vec<String>>().join("\n");
-        let variables = arena.unresolved_vars.iter().map(|var| var.dump(arena).to_string()).collect::<Vec<String>>().join("\n");
-        format!("{}\n\n{}", functions, variables)
+        format!("{}", functions)
     }
 }
 

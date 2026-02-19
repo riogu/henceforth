@@ -182,6 +182,18 @@ impl Type {
             ),
         }
     }
+    pub fn get_repr_resolved(&self, arena: &AstArena) -> String {
+        match self {
+            Type::Int { ptr_count } => format!("i32"),
+            Type::String { ptr_count } => format!("str"),
+            Type::Bool { ptr_count } => format!("bool"),
+            Type::Float { ptr_count } => format!("f32"),
+            Type::Tuple { type_ids, ptr_count } => format!(
+                "Tuple<{}>",
+                type_ids.iter().map(|id| arena.get_type(*id).get_repr_resolved(arena)).collect::<Vec<String>>().join(", ")
+            ),
+        }
+    }
 }
 
 impl Type {

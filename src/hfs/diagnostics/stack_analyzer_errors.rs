@@ -1,10 +1,10 @@
 use std::{fmt::Display, fs, path::PathBuf};
 
-use colored::{ColoredString, Colorize};
+use colored::{ColoredString, Colorize, CustomColor};
 
 use crate::hfs::{
-    error::{number_length, CompileError, DebugInfo},
-    AstArena, SourceInfo, Type,
+    error::{number_length, CompileError, DebugInfo, Dumpable},
+    AstArena, Expression, FunctionDeclaration, Identifier, Operation, SourceInfo, Statement, TopLevelId, Type, VarDeclaration,
 };
 
 #[derive(Debug)]
@@ -81,7 +81,8 @@ impl StackAnalyzerError {
     }
 
     pub fn dump_ast(arena: &AstArena) -> String {
-        format!("")
+        let functions = arena.functions.iter().map(|func| func.dump(arena).to_string()).collect::<Vec<String>>().join("\n");
+        format!("{}", functions)
     }
 }
 
@@ -184,5 +185,411 @@ impl Display for StackAnalyzerError {
             Err(e) => ColoredString::from(format!("<source unavailable: {}>", e)),
         };
         write!(f, "{}\n{}\n{}{}", self.header(), self.location(), source_code, self.debug_info())
+    }
+}
+fn indent(s: &ColoredString) -> ColoredString {
+    ColoredString::from(s.trim_start_matches('\n').replace('\n', "\n\t"))
+}
+
+fn indent_list(items: &[ColoredString]) -> ColoredString {
+    ColoredString::from(items.iter().map(|s| format!("\t{}", indent(s))).collect::<Vec<String>>().join(",\n"))
+}
+
+impl Dumpable for FunctionDeclaration {
+    type Arena = AstArena;
+    fn dump(&self, arena: &AstArena) -> ColoredString {
+        let items: Vec<ColoredString> = self.parameter_exprs.iter().map(|expr| arena.get_expr(*expr).dump(arena)).collect();
+        ColoredString::from(format!(
+            "{}\n\t{} {}\n\t{} {}\n\t{} {}\n\t{}\n\t{}\n\t{}\n\t{}",
+            format!("Function {}:", self.name).bold().red(),
+            "Parameter type:".blue(),
+            indent(&arena.get_type(self.param_type).dump_resolved(arena)).yellow(),
+            "Return type:".blue(),
+            indent(&arena.get_type(self.return_type).dump_resolved(arena)).yellow(),
+            "Body:".blue(),
+            indent(&arena.get_stmt(self.body).dump(arena)),
+            "Parameter Exprs:".blue(),
+            "[".custom_color(CustomColor::new(129, 137, 150)),
+            indent_list(&items),
+            "]".custom_color(CustomColor::new(129, 137, 150))
+        ))
+    }
+}
+
+impl Dumpable for VarDeclaration {
+    type Arena = AstArena;
+    fn dump(&self, arena: &Self::Arena) -> ColoredString {
+        ColoredString::from(format!(
+            "{}\n\t{} {}",
+            format!("Variable {}:", self.name).bold().red(),
+            "Type:".blue(),
+            indent(&arena.get_type(self.hfs_type).dump_resolved(arena)).yellow()
+        ))
+    }
+}
+
+impl Dumpable for Operation {
+    type Arena = AstArena;
+
+    fn dump(&self, arena: &Self::Arena) -> ColoredString {
+        let op = match self {
+            Operation::Add(x, y) => ColoredString::from(format!(
+                "{}{}{}{}{}{}",
+                "Add".yellow(),
+                "(".custom_color(CustomColor::new(129, 137, 150)),
+                arena.get_expr(*x).dump(arena),
+                ", ".custom_color(CustomColor::new(129, 137, 150)),
+                arena.get_expr(*y).dump(arena),
+                ")".custom_color(CustomColor::new(129, 137, 150))
+            )),
+            Operation::Sub(x, y) => ColoredString::from(format!(
+                "{}{}{}{}{}{}",
+                "Sub".yellow(),
+                "(".custom_color(CustomColor::new(129, 137, 150)),
+                arena.get_expr(*x).dump(arena),
+                ", ".custom_color(CustomColor::new(129, 137, 150)),
+                arena.get_expr(*y).dump(arena),
+                ")".custom_color(CustomColor::new(129, 137, 150))
+            )),
+            Operation::Mul(x, y) => ColoredString::from(format!(
+                "{}{}{}{}{}{}",
+                "Mul".yellow(),
+                "(".custom_color(CustomColor::new(129, 137, 150)),
+                arena.get_expr(*x).dump(arena),
+                ", ".custom_color(CustomColor::new(129, 137, 150)),
+                arena.get_expr(*y).dump(arena),
+                ")".custom_color(CustomColor::new(129, 137, 150))
+            )),
+            Operation::Div(x, y) => ColoredString::from(format!(
+                "{}{}{}{}{}{}",
+                "Div".yellow(),
+                "(".custom_color(CustomColor::new(129, 137, 150)),
+                arena.get_expr(*x).dump(arena),
+                ", ".custom_color(CustomColor::new(129, 137, 150)),
+                arena.get_expr(*y).dump(arena),
+                ")".custom_color(CustomColor::new(129, 137, 150))
+            )),
+            Operation::Mod(x, y) => ColoredString::from(format!(
+                "{}{}{}{}{}{}",
+                "Mod".yellow(),
+                "(".custom_color(CustomColor::new(129, 137, 150)),
+                arena.get_expr(*x).dump(arena),
+                ", ".custom_color(CustomColor::new(129, 137, 150)),
+                arena.get_expr(*y).dump(arena),
+                ")".custom_color(CustomColor::new(129, 137, 150))
+            )),
+            Operation::Or(x, y) => ColoredString::from(format!(
+                "{}{}{}{}{}{}",
+                "Or".yellow(),
+                "(".custom_color(CustomColor::new(129, 137, 150)),
+                arena.get_expr(*x).dump(arena),
+                ", ".custom_color(CustomColor::new(129, 137, 150)),
+                arena.get_expr(*y).dump(arena),
+                ")".custom_color(CustomColor::new(129, 137, 150))
+            )),
+            Operation::And(x, y) => ColoredString::from(format!(
+                "{}{}{}{}{}{}",
+                "And".yellow(),
+                "(".custom_color(CustomColor::new(129, 137, 150)),
+                arena.get_expr(*x).dump(arena),
+                ", ".custom_color(CustomColor::new(129, 137, 150)),
+                arena.get_expr(*y).dump(arena),
+                ")".custom_color(CustomColor::new(129, 137, 150))
+            )),
+            Operation::Equal(x, y) => ColoredString::from(format!(
+                "{}{}{}{}{}{}",
+                "Equal".yellow(),
+                "(".custom_color(CustomColor::new(129, 137, 150)),
+                arena.get_expr(*x).dump(arena),
+                ", ".custom_color(CustomColor::new(129, 137, 150)),
+                arena.get_expr(*y).dump(arena),
+                ")".custom_color(CustomColor::new(129, 137, 150))
+            )),
+            Operation::NotEqual(x, y) => ColoredString::from(format!(
+                "{}{}{}{}{}{}",
+                "NotEqual".yellow(),
+                "(".custom_color(CustomColor::new(129, 137, 150)),
+                arena.get_expr(*x).dump(arena),
+                ", ".custom_color(CustomColor::new(129, 137, 150)),
+                arena.get_expr(*y).dump(arena),
+                ")".custom_color(CustomColor::new(129, 137, 150))
+            )),
+            Operation::Less(x, y) => ColoredString::from(format!(
+                "{}{}{}{}{}{}",
+                "Less".yellow(),
+                "(".custom_color(CustomColor::new(129, 137, 150)),
+                arena.get_expr(*x).dump(arena),
+                ", ".custom_color(CustomColor::new(129, 137, 150)),
+                arena.get_expr(*y).dump(arena),
+                ")".custom_color(CustomColor::new(129, 137, 150))
+            )),
+            Operation::LessEqual(x, y) => ColoredString::from(format!(
+                "{}{}{}{}{}{}",
+                "LessEqual".yellow(),
+                "(".custom_color(CustomColor::new(129, 137, 150)),
+                arena.get_expr(*x).dump(arena),
+                ", ".custom_color(CustomColor::new(129, 137, 150)),
+                arena.get_expr(*y).dump(arena),
+                ")".custom_color(CustomColor::new(129, 137, 150))
+            )),
+            Operation::Greater(x, y) => ColoredString::from(format!(
+                "{}{}{}{}{}{}",
+                "Greater".yellow(),
+                "(".custom_color(CustomColor::new(129, 137, 150)),
+                arena.get_expr(*x).dump(arena),
+                ", ".custom_color(CustomColor::new(129, 137, 150)),
+                arena.get_expr(*y).dump(arena),
+                ")".custom_color(CustomColor::new(129, 137, 150))
+            )),
+            Operation::GreaterEqual(x, y) => ColoredString::from(format!(
+                "{}{}{}{}{}{}",
+                "GreaterEqual".yellow(),
+                "(".custom_color(CustomColor::new(129, 137, 150)),
+                arena.get_expr(*x).dump(arena),
+                ", ".custom_color(CustomColor::new(129, 137, 150)),
+                arena.get_expr(*y).dump(arena),
+                ")".custom_color(CustomColor::new(129, 137, 150))
+            )),
+            Operation::Not(x) => ColoredString::from(format!(
+                "{}{}{}{}",
+                "Not".yellow(),
+                "(".custom_color(CustomColor::new(129, 137, 150)),
+                arena.get_expr(*x).dump(arena),
+                ")".custom_color(CustomColor::new(129, 137, 150))
+            )),
+            Operation::AddressOf(x) => ColoredString::from(format!(
+                "{}{}{}{}",
+                "AdressOf".yellow(),
+                "(".custom_color(CustomColor::new(129, 137, 150)),
+                arena.get_expr(*x).dump(arena),
+                ")".custom_color(CustomColor::new(129, 137, 150))
+            )),
+            Operation::Dereference(x) => ColoredString::from(format!(
+                "{}{}{}{}",
+                "Dereference".yellow(),
+                "(".custom_color(CustomColor::new(129, 137, 150)),
+                arena.get_expr(*x).dump(arena),
+                ")".custom_color(CustomColor::new(129, 137, 150))
+            )),
+        };
+        op
+    }
+}
+
+impl Dumpable for Identifier {
+    type Arena = AstArena;
+
+    fn dump(&self, arena: &Self::Arena) -> ColoredString {
+        match self {
+            Identifier::GlobalVar(var_id) => ColoredString::from(format!(
+                "{} {}{}{}",
+                format!("{}", arena.get_var(*var_id).name).green(),
+                "(".custom_color(CustomColor::new(129, 137, 150)),
+                "Global Variable".yellow(),
+                ")".custom_color(CustomColor::new(129, 137, 150)),
+            )),
+            Identifier::Variable(var_id) => ColoredString::from(format!(
+                "{} {}{}{}",
+                format!("{}", arena.get_var(*var_id).name).green(),
+                "(".custom_color(CustomColor::new(129, 137, 150)),
+                "Variable".yellow(),
+                ")".custom_color(CustomColor::new(129, 137, 150)),
+            )),
+
+            Identifier::Function(func_id) => ColoredString::from(format!(
+                "{} {}{}{}",
+                format!("{}", arena.get_func(*func_id).name).green(),
+                "(".custom_color(CustomColor::new(129, 137, 150)),
+                "Variable".yellow(),
+                ")".custom_color(CustomColor::new(129, 137, 150)),
+            )),
+        }
+    }
+}
+
+impl Dumpable for Expression {
+    type Arena = AstArena;
+
+    fn dump(&self, arena: &Self::Arena) -> ColoredString {
+        match self {
+            Expression::Operation(operation) =>
+                ColoredString::from(format!("{}\n\t{}", "Operation:".red().bold(), indent(&operation.dump(arena)).yellow())),
+            Expression::Identifier(name) => ColoredString::from(format!(
+                "{} {}",
+                "Identifier".red().bold(),
+                format!(
+                    "{}{}{}",
+                    "(".custom_color(CustomColor::new(129, 137, 150)),
+                    name.dump(arena),
+                    ")".custom_color(CustomColor::new(129, 137, 150)),
+                )
+            )),
+            Expression::Literal(literal) =>
+                ColoredString::from(format!("{} {}", "Literal: ".red().bold(), format!("{}", literal).green())),
+            Expression::Tuple { expressions } => {
+                let items: Vec<ColoredString> = expressions.iter().map(|expr| arena.get_expr(*expr).dump(arena)).collect();
+                ColoredString::from(format!(
+                    "{}\n\t{}\n{}\n\t{}",
+                    "Tuple:".red(),
+                    "[".custom_color(CustomColor::new(129, 137, 150)),
+                    indent_list(&items),
+                    "]".custom_color(CustomColor::new(129, 137, 150))
+                ))
+            },
+            Expression::StackKeyword(kw) => {
+                let param_exprs: Vec<ColoredString> =
+                    kw.parameter_exprs.iter().map(|expr| arena.get_expr(*expr).dump(arena)).collect();
+                let return_values: Vec<ColoredString> =
+                    kw.return_values.iter().map(|expr| arena.get_expr(*expr).dump(arena)).collect();
+                ColoredString::from(format!(
+                    "{}\n\t{} {}\n\t{} {}\n\t{}\n\t{}\n\t{}\n\t{}\n\t{}\n\t{}\n\t{}\n\t{}",
+                    format!("Function {}:", kw.name).bold().red(),
+                    "Parameter type:".blue(),
+                    indent(&arena.get_type(kw.param_type).dump_resolved(arena)).yellow(),
+                    "Return type:".blue(),
+                    indent(&arena.get_type(kw.return_type).dump_resolved(arena)).yellow(),
+                    "Parameter Exprs:".blue(),
+                    "[".custom_color(CustomColor::new(129, 137, 150)),
+                    indent_list(&param_exprs),
+                    "]".custom_color(CustomColor::new(129, 137, 150)),
+                    "Return Values:".blue(),
+                    "[".custom_color(CustomColor::new(129, 137, 150)),
+                    indent_list(&param_exprs),
+                    "]".custom_color(CustomColor::new(129, 137, 150))
+                ))
+            },
+            Expression::Parameter { index, type_id } => ColoredString::from(format!(
+                "{}\n\t{} {}\n\t{} {}",
+                "Parameter:".red().bold(),
+                "Index:".blue(),
+                format!("{}", index).green(),
+                "Type:".blue(),
+                arena.get_type(*type_id).dump_resolved(arena).yellow()
+            )),
+            Expression::ReturnValue(type_id) => ColoredString::from(format!(
+                "{}\n\t{} {}",
+                "Return Value:".red().bold(),
+                "Type:".blue(),
+                arena.get_type(*type_id).dump_resolved(arena).yellow()
+            )),
+        }
+    }
+}
+
+impl Dumpable for TopLevelId {
+    type Arena = AstArena;
+
+    fn dump(&self, arena: &Self::Arena) -> ColoredString {
+        match self {
+            TopLevelId::VariableDecl(unresolved_var_id) => arena.get_var(*unresolved_var_id).dump(arena),
+            TopLevelId::FunctionDecl(unresolved_func_id) => arena.get_func(*unresolved_func_id).dump(arena),
+            TopLevelId::Statement(unresolved_stmt_id) => arena.get_stmt(*unresolved_stmt_id).dump(arena),
+        }
+    }
+}
+
+impl Dumpable for Statement {
+    type Arena = AstArena;
+
+    fn dump(&self, arena: &Self::Arena) -> ColoredString {
+        match self {
+            Statement::ElseIf { cond_stack_block, body, else_stmt } => ColoredString::from(format!(
+                "\n{}\n\t{} {}\n\t{} {}{}",
+                "Else-If Statement:".red().bold(),
+                "Condition:".blue(),
+                indent(&arena.get_stmt(*cond_stack_block).dump(arena)),
+                "Body:".blue(),
+                indent(&arena.get_stmt(*body).dump(arena)),
+                match else_stmt {
+                    Some(stmt) => format!("\n\t{} {}", "Next Branch:".blue(), indent(&arena.get_stmt(*stmt).dump(arena))),
+                    None => format!(""),
+                }
+            )),
+            Statement::Else(unresolved_stmt_id) => ColoredString::from(format!(
+                "\n{}\n\t{} {}",
+                "Else Statement:".red().bold(),
+                "Body:".blue(),
+                indent(&arena.get_stmt(*unresolved_stmt_id).dump(arena)),
+            )),
+            Statement::If { cond_stack_block, body, else_stmt } => ColoredString::from(format!(
+                "\n{}\n\t{} {}\n\t{} {}{}",
+                "If Statement:".red().bold(),
+                "Condition:".blue(),
+                indent(&arena.get_stmt(*cond_stack_block).dump(arena)),
+                "Body:".blue(),
+                indent(&arena.get_stmt(*body).dump(arena)),
+                match else_stmt {
+                    Some(stmt) => format!("\n\t{} {}", "Next Branch:".blue(), indent(&arena.get_stmt(*stmt).dump(arena))),
+                    None => format!(""),
+                }
+            )),
+            Statement::While { cond, body } => ColoredString::from(format!(
+                "\n{}\n\t{} {}\n\t{} {}",
+                "While Loop:".red().bold(),
+                "Condition:".blue(),
+                indent(&arena.get_expr(*cond).dump(arena)),
+                "Body:".blue(),
+                indent(&arena.get_stmt(*body).dump(arena)),
+            )),
+            Statement::StackBlock(unresolved_expr_ids) => {
+                let items: Vec<ColoredString> = unresolved_expr_ids.iter().map(|id| arena.get_expr(*id).dump(arena)).collect();
+                ColoredString::from(format!(
+                    "\n{}\n\t{}\n\t{}\n\t{}\n\t{}",
+                    "Stack Block:".red().bold(),
+                    "Expressions:".blue(),
+                    "[".custom_color(CustomColor::new(129, 137, 150)),
+                    indent_list(&items),
+                    "]".custom_color(CustomColor::new(129, 137, 150)),
+                ))
+            },
+            Statement::BlockScope(unresolved_top_level_ids, scope_kind) => {
+                let items: Vec<ColoredString> = unresolved_top_level_ids.iter().map(|id| id.dump(arena)).collect();
+                ColoredString::from(format!(
+                    "\n{} {}:\n\t{}\n\t{}\n\t{}",
+                    "Block Scope".red().bold(),
+                    format!("({:?})", scope_kind).yellow(),
+                    "[".custom_color(CustomColor::new(129, 137, 150)),
+                    indent_list(&items),
+                    "]".custom_color(CustomColor::new(129, 137, 150)),
+                ))
+            },
+            Statement::Return => "Return".red().bold(),
+            Statement::Break => "Break".red().bold(),
+            Statement::Continue => "Continue".red().bold(),
+            Statement::Empty => format!("Empty").red().bold(),
+            Statement::Assignment { identifier, is_move, deref_count } => ColoredString::from(format!(
+                "\n{}\n\t{} {}\n\t{} {}\n\t{} {}",
+                "Assignment:".red().bold(),
+                "Identifier:".blue(),
+                indent(&identifier.dump(arena)),
+                "Is Move:".blue(),
+                format!("{}", is_move).green(),
+                "Deref Count:".blue(),
+                format!("{}", deref_count).green(),
+            )),
+            Statement::FunctionCall { is_move, arg_count, func_id, return_values } => {
+                let items: Vec<ColoredString> = return_values.iter().map(|id| arena.get_expr(*id).dump(arena)).collect();
+                ColoredString::from(format!(
+                    "\n{}\n\t{} {}\n\t{} {}\n\t{} {}\n\t{}\n\t{}\n\t{}\n\t{}",
+                    "Function Call:".red().bold(),
+                    "Identifier:".blue(),
+                    indent(&format!("{}", arena.get_func(*func_id).name).green()),
+                    "Is Move:".blue(),
+                    format!("{}", is_move).green(),
+                    "Arg Count:".blue(),
+                    format!("{}", arg_count).green(),
+                    "Return Values:".blue(),
+                    "[".custom_color(CustomColor::new(129, 137, 150)),
+                    indent_list(&items),
+                    "]".custom_color(CustomColor::new(129, 137, 150)),
+                ))
+            },
+        }
+    }
+}
+
+impl Type {
+    fn dump_resolved(&self, arena: &AstArena) -> ColoredString {
+        ColoredString::from(format!("{}", self.get_repr_resolved(arena)))
     }
 }

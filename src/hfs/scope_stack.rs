@@ -1,10 +1,13 @@
 use std::{collections::HashMap, path::PathBuf, rc::Rc};
 
-use crate::hfs::{
-    ast::*,
-    error::{CompileError, DiagnosticInfo},
-    stack_analyzer_errors::{StackAnalyzerError, StackAnalyzerErrorKind},
-    Token,
+use crate::{
+    hfs::{
+        ast::*,
+        error::{CompileError, DiagnosticInfo},
+        stack_analyzer_errors::{StackAnalyzerError, StackAnalyzerErrorKind},
+        Token,
+    },
+    stack_analyzer_error,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -141,10 +144,10 @@ impl ScopeStack {
             (None, _) => match self.find_function(&name) {
                 Some(id) => Ok(Identifier::Function(id)),
                 None =>
-                    return StackAnalyzerError::new(
+                    return stack_analyzer_error!(
                         StackAnalyzerErrorKind::UseOfUndeclaredIdentifier(name.to_string()),
                         self.diagnostic_info.path.clone(),
-                        vec![token.source_info],
+                        vec![token.source_info]
                     ),
             },
             (Some(id), false) => Ok(Identifier::Variable(id)),

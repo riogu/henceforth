@@ -1,10 +1,13 @@
 use std::{fs, path::PathBuf};
 
-use crate::hfs::{
-    VALID_STACK_KEYWORDS,
-    error::CompileError,
-    lexer_errors::{LexerError, LexerErrorKind},
-    token::{Literal, SourceInfo, Token, TokenKind},
+use crate::{
+    hfs::{
+        error::CompileError,
+        lexer_errors::{LexerError, LexerErrorKind},
+        token::{Literal, SourceInfo, Token, TokenKind},
+        VALID_STACK_KEYWORDS,
+    },
+    lexer_error,
 };
 
 #[derive(Debug)]
@@ -25,7 +28,6 @@ impl Lexer {
     #[must_use]
     pub fn tokenize<'a>(file: &'a File) -> Result<Vec<Token>, Box<dyn CompileError>> {
         let mut tokens = Vec::<Token>::new();
-
         for (line_number, line_string) in file.contents.iter().enumerate() {
             let mut line_offset = 1;
             let mut chars_iter = line_string.chars().peekable();
@@ -57,10 +59,10 @@ impl Lexer {
                         } else if lit.as_str() == "@" {
                             TokenKind::At
                         } else {
-                            return LexerError::new(
+                            return lexer_error!(
                                 LexerErrorKind::InvalidStackKeyword,
                                 file.path.clone(),
-                                SourceInfo::new(line_number + 1, line_offset, lit.len()),
+                                SourceInfo::new(line_number + 1, line_offset, lit.len())
                             );
                         }
                     },
@@ -71,17 +73,17 @@ impl Lexer {
                             if let Some(_) = chars_iter.next_if_eq(&'.') {
                                 TokenKind::DotDotDot
                             } else {
-                                return LexerError::new(
+                                return lexer_error!(
                                     LexerErrorKind::UnexpectedChar,
                                     file.path.clone(),
-                                    SourceInfo::new(line_number + 1, line_offset + 1, 1),
+                                    SourceInfo::new(line_number + 1, line_offset + 1, 1)
                                 );
                             }
                         } else {
-                            return LexerError::new(
+                            return lexer_error!(
                                 LexerErrorKind::UnexpectedChar,
                                 file.path.clone(),
-                                SourceInfo::new(line_number + 1, line_offset + 1, 1),
+                                SourceInfo::new(line_number + 1, line_offset + 1, 1)
                             );
                         },
                     ':' =>
@@ -112,10 +114,10 @@ impl Lexer {
                         if let Some(_) = chars_iter.next_if_eq(&'=') {
                             TokenKind::Equal
                         } else {
-                            return LexerError::new(
+                            return lexer_error!(
                                 LexerErrorKind::UnexpectedChar,
                                 file.path.clone(),
-                                SourceInfo::new(line_number + 1, line_offset + 1, 1),
+                                SourceInfo::new(line_number + 1, line_offset + 1, 1)
                             );
                         }, // ==
                     '!' =>
@@ -155,10 +157,10 @@ impl Lexer {
                         if let Some(_) = chars_iter.next_if_eq(&'|') {
                             TokenKind::Or
                         } else {
-                            return LexerError::new(
+                            return lexer_error!(
                                 LexerErrorKind::UnexpectedChar,
                                 file.path.clone(),
-                                SourceInfo::new(line_number + 1, line_offset + 1, 1),
+                                SourceInfo::new(line_number + 1, line_offset + 1, 1)
                             );
                         }, // ||
 
@@ -172,10 +174,10 @@ impl Lexer {
                                     line_offset += 1;
                                     lit.push(c);
                                 } else {
-                                    return LexerError::new(
+                                    return lexer_error!(
                                         LexerErrorKind::UnexpectedEof,
                                         file.path.clone(),
-                                        SourceInfo::new(line_number + 1, line_offset + 1, 1),
+                                        SourceInfo::new(line_number + 1, line_offset + 1, 1)
                                     );
                                 }
                             }
@@ -229,10 +231,10 @@ impl Lexer {
                         }
                     },
                     _ =>
-                        return LexerError::new(
+                        return lexer_error!(
                             LexerErrorKind::UnexpectedChar,
                             file.path.clone(),
-                            SourceInfo::new(line_number + 1, line_offset, 1),
+                            SourceInfo::new(line_number + 1, line_offset, 1)
                         ),
                 };
                 let width = kind.get_width();
@@ -253,7 +255,7 @@ mod tests {
         ast::Type,
         builder::builder::{Builder, BuilderOperation, ControlFlowOps, FunctionOps, LoopOps, PassMode, StackOps, VariableOps},
         lexer_builder::TokenSequence,
-        utils::{Phase, run_until},
+        utils::{run_until, Phase},
     };
 
     pub fn tokenize_file_into_kinds(name: &str) -> Vec<TokenKind> {

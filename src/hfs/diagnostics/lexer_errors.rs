@@ -3,8 +3,8 @@ use std::{error::Error, fmt::Display, fs, path::PathBuf};
 use colored::{ColoredString, Colorize};
 
 use crate::hfs::{
+    error::{number_length, CompileError, DebugInfo},
     SourceInfo, Token, VALID_STACK_KEYWORDS,
-    error::{CompileError, number_length},
 };
 
 #[derive(Debug)]
@@ -16,15 +16,26 @@ pub enum LexerErrorKind {
 
 #[derive(Debug)]
 pub struct LexerError {
-    kind: LexerErrorKind,
-    path: PathBuf,
-    source_info: SourceInfo,
+    pub kind: LexerErrorKind,
+    pub path: PathBuf,
+    pub source_info: SourceInfo,
+    pub debug_info: DebugInfo,
 }
 
-impl LexerError {
-    pub fn new(kind: LexerErrorKind, path: PathBuf, source_info: SourceInfo) -> Result<Vec<Token>, Box<dyn CompileError>> {
-        Err(Box::new(Self { kind, path, source_info }))
-    }
+#[macro_export]
+macro_rules! lexer_error {
+    ($kind:expr, $path:expr, $source_info:expr) => {
+        Err(Box::new(LexerError {
+            kind: $kind,
+            path: $path,
+            source_info: $source_info,
+            debug_info: $crate::hfs::diagnostics::error::DebugInfo {
+                compiler_file: file!(),
+                compiler_line: line!(),
+                compiler_column: column!(),
+            },
+        }))
+    };
 }
 
 impl CompileError for LexerError {
@@ -81,6 +92,17 @@ impl CompileError for LexerError {
             ),
         }
     }
+
+    fn debug_info(&self) -> ColoredString {
+        #[cfg(debug_assertions)]
+        return ColoredString::from(format!(
+            "Debug info:\n\t[{} @ {}:{}]",
+            self.debug_info.compiler_file, self.debug_info.compiler_line, self.debug_info.compiler_column
+        ));
+
+        #[cfg(not(debug_assertions))]
+        return ColoredString::from("");
+    }
 }
 
 impl Display for LexerError {
@@ -89,6 +111,7 @@ impl Display for LexerError {
             Ok(source_code) => source_code,
             Err(e) => ColoredString::from(format!("<source unavailable: {}>", e)),
         };
-        write!(f, "{}\n{}\n{}", self.header(), self.location(), source_code)
+
+        write!(f, "{}\n{}\n{}\n\n{}", self.header(), self.location(), source_code, self.debug_info())
     }
 }

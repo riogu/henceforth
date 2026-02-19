@@ -16,6 +16,7 @@ pub trait CompileError: Display + Debug {
     fn header(&self) -> ColoredString;
     fn location(&self) -> ColoredString;
     fn source_code(&self) -> Result<ColoredString, Box<dyn Error>>;
+    fn debug_info(&self) -> ColoredString;
 }
 
 #[derive(Debug, Default, Clone)]
@@ -32,4 +33,11 @@ impl DiagnosticInfo {
 
 pub fn number_length(n: usize) -> usize {
     n.to_string().len()
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct DebugInfo {
+    pub compiler_file: String,
+    pub compiler_line: u32,
+    pub compiler_column: u32,
 }

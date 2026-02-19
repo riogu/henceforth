@@ -1,13 +1,13 @@
 use std::{iter::Peekable, path::PathBuf, rc::Rc, vec::IntoIter};
 
-use crate::hfs::{
+use crate::{hfs::{
     ScopeKind,
     ast::*,
     error::{CompileError, DiagnosticInfo},
     parser_errors::{Expectable, ParserError, ParserErrorKind},
     token::*,
     unresolved_ast::*,
-};
+}, parser_error};
 
 pub struct Parser {
     tokens: Peekable<IntoIter<Token>>, // Own the tokens, iterate by value
@@ -18,15 +18,15 @@ impl Parser {
     fn expect(&mut self, token_kind: TokenKind) -> Result<Token, Box<dyn CompileError>> {
         match self.tokens.next() {
             Some(token) if std::mem::discriminant(&token.kind) == std::mem::discriminant(&token_kind) => Ok(token),
-            Some(found) => ParserError::new(
+            Some(found) => parser_error!(
                 ParserErrorKind::ExpectedButFound(vec![Expectable::Token(token_kind)], Some(found.kind)),
                 self.arena.diagnostic_info.path.clone(),
-                vec![found.source_info],
+                vec![found.source_info]
             ),
-            None => ParserError::new(
+            None => parser_error!(
                 ParserErrorKind::ExpectedButFound(vec![Expectable::Token(token_kind)], None),
                 self.arena.diagnostic_info.path.clone(),
-                vec![self.arena.diagnostic_info.eof_pos.clone()],
+                vec![self.arena.diagnostic_info.eof_pos.clone()]
             ),
         }
     }
@@ -35,18 +35,18 @@ impl Parser {
         let token = match self.tokens.next() {
             Some(token) => token,
             None =>
-                return ParserError::new(
+                return parser_error!(
                     ParserErrorKind::ExpectedButFound(vec![Expectable::Identifier], None),
                     self.arena.diagnostic_info.path.clone(),
-                    vec![self.arena.diagnostic_info.eof_pos.clone()],
+                    vec![self.arena.diagnostic_info.eof_pos.clone()]
                 ),
         };
         match &token.kind {
             TokenKind::Identifier(name) => Ok((name.clone(), token)),
-            _ => ParserError::new(
+            _ => parser_error!(
                 ParserErrorKind::ExpectedButFound(vec![Expectable::Identifier], Some(token.kind)),
                 self.arena.diagnostic_info.path.clone(),
-                vec![token.source_info],
+                vec![token.source_info]
             ),
         }
     }
@@ -55,18 +55,18 @@ impl Parser {
         let token = match self.tokens.next() {
             Some(token) => token,
             None =>
-                return ParserError::new(
+                return parser_error!(
                     ParserErrorKind::ExpectedButFound(vec![Expectable::StackKeyword], None),
                     self.arena.diagnostic_info.path.clone(),
-                    vec![self.arena.diagnostic_info.eof_pos.clone()],
+                    vec![self.arena.diagnostic_info.eof_pos.clone()]
                 ),
         };
         match &token.kind {
             TokenKind::StackKeyword(name) => Ok((name.clone(), token)),
-            _ => ParserError::new(
+            _ => parser_error!(
                 ParserErrorKind::ExpectedButFound(vec![Expectable::StackKeyword], Some(token.kind)),
                 self.arena.diagnostic_info.path.clone(),
-                vec![token.source_info],
+                vec![token.source_info]
             ),
         }
     }
@@ -86,10 +86,10 @@ impl Parser {
         let token = match self.tokens.peek() {
             Some(token) => token.clone(),
             None =>
-                return ParserError::new(
+                return parser_error!(
                     ParserErrorKind::ExpectedButFound(vec![Expectable::Type], None),
                     self.arena.diagnostic_info.path.clone(),
-                    vec![self.arena.diagnostic_info.eof_pos.clone()],
+                    vec![self.arena.diagnostic_info.eof_pos.clone()]
                 ),
         };
         match &token.kind {
@@ -112,10 +112,10 @@ impl Parser {
                     token,
                 ))
             },
-            kind => ParserError::new(
+            kind => parser_error!(
                 ParserErrorKind::ExpectedButFound(vec![Expectable::Type], Some(token.kind)),
                 self.arena.diagnostic_info.path.clone(),
-                vec![token.source_info],
+                vec![token.source_info]
             ),
         }
     }
@@ -188,13 +188,13 @@ impl Parser {
                 TokenKind::Let => top_level.push(UnresolvedTopLevelId::VariableDecl(parser.variable_declaration()?)),
                 TokenKind::Fn => top_level.push(UnresolvedTopLevelId::FunctionDecl(parser.function_declaration()?)),
                 _ =>
-                    return ParserError::new(
+                    return parser_error!(
                         ParserErrorKind::ExpectedButFound(
                             vec![Expectable::FunctionDecl, Expectable::VariableDecl],
                             Some(token.kind.clone()),
                         ),
                         diagnostic_info.path.clone(),
-                        vec![token.source_info.clone()],
+                        vec![token.source_info.clone()]
                     ),
             };
         }
@@ -208,7 +208,7 @@ impl Parser {
             let token = match self.tokens.peek() {
                 Some(token) => token,
                 None =>
-                    return ParserError::new(
+                    return parser_error!(
                         ParserErrorKind::ExpectedButFound(
                             vec![
                                 Expectable::VariableDecl,
@@ -219,7 +219,7 @@ impl Parser {
                             None,
                         ),
                         self.arena.diagnostic_info.path.clone(),
-                        vec![self.arena.diagnostic_info.eof_pos.clone()],
+                        vec![self.arena.diagnostic_info.eof_pos.clone()]
                     ),
             };
             match &token.kind {
@@ -241,10 +241,10 @@ impl Parser {
         let token = match self.tokens.peek() {
             Some(token) => token,
             None =>
-                return ParserError::new(
+                return parser_error!(
                     ParserErrorKind::ExpectedButFound(vec![Expectable::Statement], None),
                     self.arena.diagnostic_info.path.clone(),
-                    vec![self.arena.diagnostic_info.eof_pos.clone()],
+                    vec![self.arena.diagnostic_info.eof_pos.clone()]
                 ),
         };
         match token.kind {
@@ -279,10 +279,10 @@ impl Parser {
             TokenKind::StackKeyword(_) => Ok(self.stack_keyword_outside_stack_block()?),
 
             _ =>
-                return ParserError::new(
+                return parser_error!(
                     ParserErrorKind::ExpectedButFound(vec![Expectable::Statement], Some(token.kind.clone())),
                     self.arena.diagnostic_info.path.clone(),
-                    vec![token.source_info.clone()],
+                    vec![token.source_info.clone()]
                 ),
         }
     }
@@ -302,10 +302,10 @@ impl Parser {
         let token = match self.tokens.peek() {
             Some(token) => token,
             None =>
-                return ParserError::new(
+                return parser_error!(
                     ParserErrorKind::ExpectedButFound(vec![Expectable::AnyToken], None),
                     self.arena.diagnostic_info.path.clone(),
-                    vec![self.arena.diagnostic_info.eof_pos.clone()],
+                    vec![self.arena.diagnostic_info.eof_pos.clone()]
                 ),
         };
         match token.kind {
@@ -314,10 +314,10 @@ impl Parser {
                 let token = match self.tokens.peek() {
                     Some(token) => token,
                     None =>
-                        return ParserError::new(
+                        return parser_error!(
                             ParserErrorKind::ExpectedButFound(vec![Expectable::AnyToken], None),
                             self.arena.diagnostic_info.path.clone(),
-                            vec![self.arena.diagnostic_info.eof_pos.clone()],
+                            vec![self.arena.diagnostic_info.eof_pos.clone()]
                         ),
                 };
                 if token.kind == TokenKind::If {
@@ -360,13 +360,13 @@ impl Parser {
                 },
                 Some(token) => expressions.push(self.stack_expression()?),
                 None =>
-                    return ParserError::new(
+                    return parser_error!(
                         ParserErrorKind::ExpectedButFound(
                             vec![Expectable::StackExpression, Expectable::Token(TokenKind::RightParen)],
                             None,
                         ),
                         self.arena.diagnostic_info.path.clone(),
-                        vec![self.arena.diagnostic_info.eof_pos.clone()],
+                        vec![self.arena.diagnostic_info.eof_pos.clone()]
                     ),
             };
         }
@@ -389,10 +389,10 @@ impl Parser {
                 Ok(self.arena.alloc_unresolved_expr(UnresolvedExpression::Literal(lit.clone()), self.tokens.next().unwrap())),
             TokenKind::LeftParen => self.tuple_expression(),
             _ =>
-                return ParserError::new(
+                return parser_error!(
                     ParserErrorKind::ExpectedButFound(vec![Expectable::StackExpression], Some(token.kind.clone())),
                     self.arena.diagnostic_info.path.clone(),
-                    vec![token.source_info.clone()],
+                    vec![token.source_info.clone()]
                 ),
         }
     }
@@ -443,10 +443,10 @@ impl Parser {
             TokenKind::AddressOf =>
                 Ok(self.arena.alloc_unresolved_expr(UnresolvedExpression::Operation(UnresolvedOperation::AddressOf), token)),
             _ =>
-                return ParserError::new(
+                return parser_error!(
                     ParserErrorKind::ExpectedButFound(vec![Expectable::StackOperation], Some(kind)),
                     self.arena.diagnostic_info.path.clone(),
-                    vec![token.source_info.clone()], // shouldn't happen
+                    vec![token.source_info.clone()] // shouldn't happen
                 ),
         }
     }

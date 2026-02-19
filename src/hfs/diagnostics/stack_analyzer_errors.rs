@@ -3,8 +3,8 @@ use std::{fmt::Display, fs, path::PathBuf};
 use colored::{ColoredString, Colorize};
 
 use crate::hfs::{
-    error::{number_length, CompileError},
-    SourceInfo, Type,
+    error::{number_length, CompileError, DebugInfo},
+    AstArena, SourceInfo, Type,
 };
 
 #[derive(Debug)]
@@ -44,21 +44,29 @@ pub enum StackAnalyzerErrorKind {
 }
 
 #[derive(Debug)]
-pub struct StackAnalyzerError {
-    kind: StackAnalyzerErrorKind,
-    path: PathBuf,
-    source_info: SourceInfo,
+pub struct StackAnalyzerError<'a> {
+    pub kind: StackAnalyzerErrorKind,
+    pub arena: &'a AstArena,
+    pub source_info: SourceInfo,
+    pub debug_info: DebugInfo,
 }
 
-impl StackAnalyzerError {
-    pub fn new<T>(
-        kind: StackAnalyzerErrorKind,
-        path: PathBuf,
-        source_infos: Vec<SourceInfo>,
-    ) -> Result<T, Box<dyn CompileError>> {
-        Err(Box::new(Self { kind, path, source_info: Self::merge_source_info(source_infos) }))
-    }
-
+#[macro_export]
+macro_rules! stack_analyzer_error {
+    ($kind:expr, $arena:expr, $source_info:expr) => {
+        Err(Box::new(StackAnalyzerError {
+            kind: $kind,
+            arena: $arena,
+            source_info: StackAnalyzerError::merge_source_info($source_info),
+            debug_info: $crate::hfs::diagnostics::error::DebugInfo {
+                compiler_file: file!().to_string(),
+                compiler_line: line!(),
+                compiler_column: column!(),
+            },
+        }))
+    };
+}
+impl<'a> StackAnalyzerError<'a> {
     pub fn merge_source_info(mut source_infos: Vec<SourceInfo>) -> SourceInfo {
         source_infos.sort();
         let first = source_infos.first().unwrap();
@@ -72,7 +80,7 @@ impl StackAnalyzerError {
     }
 }
 
-impl CompileError for StackAnalyzerError {
+impl<'a> CompileError for StackAnalyzerError<'a> {
     fn message(&self) -> (String, String) {
         match &self.kind {
             StackAnalyzerErrorKind::StackUnderflow =>
@@ -118,7 +126,7 @@ impl CompileError for StackAnalyzerError {
             "{}{} {}:{}:{}",
             " ".repeat(number_length(self.source_info.line_number)),
             "-->".blue(),
-            self.path.to_str().unwrap(),
+            self.arena.diagnostic_info.path.to_str().unwrap(),
             self.source_info.line_number,
             self.source_info.line_offset
         )
@@ -126,7 +134,8 @@ impl CompileError for StackAnalyzerError {
     }
 
     fn source_code(&self) -> Result<colored::ColoredString, Box<dyn std::error::Error>> {
-        let source = fs::read_to_string(&self.path).map_err(|e| format!("Could not read source file: {}", e))?;
+        let source =
+            fs::read_to_string(&self.arena.diagnostic_info.path).map_err(|e| format!("Could not read source file: {}", e))?;
 
         let line = source
             .lines()
@@ -148,14 +157,25 @@ impl CompileError for StackAnalyzerError {
             error_pointer.red().bold()
         )));
     }
+
+    fn debug_info(&self) -> ColoredString {
+        #[cfg(debug_assertions)]
+        return ColoredString::from(format!(
+            "Debug info:\n\t[{} @ {}:{}]",
+            self.debug_info.compiler_file, self.debug_info.compiler_line, self.debug_info.compiler_column
+        ));
+
+        #[cfg(not(debug_assertions))]
+        return ColoredString::from("");
+    }
 }
 
-impl Display for StackAnalyzerError {
+impl<'a> Display for StackAnalyzerError<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let source_code = match self.source_code() {
             Ok(source_code) => source_code,
             Err(e) => ColoredString::from(format!("<source unavailable: {}>", e)),
         };
-        write!(f, "{}\n{}\n{}", self.header(), self.location(), source_code)
+        write!(f, "{}\n{}\n{}\n\n{}", self.header(), self.location(), source_code, self.debug_info())
     }
 }

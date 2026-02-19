@@ -174,7 +174,7 @@ impl IrArena {
         let id = BlockId(self.blocks.len());
         self.blocks.push(BasicBlock {
             parent_function: self.cfg_context.curr_function,
-            name: name.to_string(),
+            name: name.to_string() + "_" + &id.0.to_string(),
             predecessors: Vec::new(), // always empty, filled by alloc_terminator_for
             instructions: Vec::new(),
             terminator: None,

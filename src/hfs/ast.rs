@@ -1,6 +1,6 @@
 use std::{collections::HashMap, default, fmt::Display, rc::Rc};
 
-use crate::hfs::{error::DiagnosticInfo, token::*, RuntimeValue, ScopeKind};
+use crate::hfs::{RuntimeValue, ScopeKind, error::DiagnosticInfo, token::*};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct VarId(pub usize);

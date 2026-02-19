@@ -5,8 +5,9 @@ use std::{
 };
 
 use crate::hfs::{
-    self, BasicBlock, BlockId, CfgFunction, CfgOperation, CfgPrintable, CfgTopLevelId, InstId, Instruction, IrFuncId,
-    IrVarDeclaration, IrVarId, Literal, PRIMITIVE_TYPE_COUNT, SourceInfo, TermInstId, TerminatorInst, Token, TokenKind, ast::*,
+    self, BasicBlock, BlockId, CfgFunction, CfgOperation, CfgPrintable, CfgTopLevelId, GlobalIrVarDeclaration, GlobalIrVarId,
+    InstId, Instruction, IrFuncId, Literal, PRIMITIVE_TYPE_COUNT, SourceInfo, TermInstId, TerminatorInst, Token, TokenKind,
+    ast::*,
 };
 
 // here is where youll create the CFG pass and the new IR generation
@@ -35,7 +36,7 @@ pub struct IrArena {
     // TODO: we also need to pass metadata into this new IR
     // which includes expression provenance and etc (for optimizations and annotations)
     // we should make an annotation system and convert into it
-    pub vars: Vec<IrVarDeclaration>,
+    pub global_vars: Vec<GlobalIrVarDeclaration>,
     pub functions: Vec<CfgFunction>,
     pub instructions: Vec<Instruction>,
     pub terminators: Vec<TerminatorInst>,
@@ -43,7 +44,8 @@ pub struct IrArena {
     pub types: Vec<Type>,
 
     pub func_id_map: HashMap<FuncId, IrFuncId>,
-    var_id_map: HashMap<VarId, IrVarId>,
+    // has both local alloca and global alloca instructions
+    var_id_to_alloca_map: HashMap<VarId, InstId>,
 
     pub type_source_infos: Vec<SourceInfo>,
     type_cache: HashMap<Type, TypeId>,
@@ -54,13 +56,15 @@ pub struct IrArena {
     pub curr_block_stack: Vec<InstId>,
 
     pub cfg_context: CfgContext,
+    //
+    // NOTE: this was used by braun et al. we will reuse it for mem2reg later
 
     // For each variable, in each block, what's the current definition?
-    current_def: HashMap<(IrVarId, BlockId), InstId>,
+    // current_def: HashMap<(IrVarId, BlockId), InstId>,
     // Which blocks have all their predecessors known?
-    sealed_blocks: HashSet<BlockId>,
+    // sealed_blocks: HashSet<BlockId>,
     // Placeholder phis waiting for block to be sealed
-    incomplete_phis: HashMap<BlockId, HashMap<IrVarId, InstId>>,
+    // incomplete_phis: HashMap<BlockId, HashMap<IrVarId, InstId>>,
     // FIXME: i think i have to clean up incomplete_phis at the end with a second pass that runs
     // once we know all predecessors of every block, otherwise we might not be done with the
     // algorithm (from what i understood)
@@ -116,17 +120,39 @@ impl IrArena {
     }
 
     fn alloc_inst_for(&mut self, inst: Instruction, block_id: BlockId) -> InstId {
+        if matches!(inst, Instruction::Alloca { .. }) {
+        } else if matches!(inst, Instruction::GlobalAlloca(..)) {
+            panic!(
+                "[internal error] please use alloc_global_var and alloc_local_var instead of alloca_inst_for when creating \
+                 alloca instructions"
+            )
+        }
         let id = InstId(self.instructions.len());
         self.instructions.push(inst);
         self.get_block_mut(block_id).instructions.push(id);
         id
     }
-    pub fn alloc_var(&mut self, var: IrVarDeclaration, old_id: VarId) -> IrVarId {
-        let id = IrVarId(self.vars.len());
-        self.vars.push(var);
-        self.var_id_map.insert(old_id, id);
+
+    fn alloc_local_var(&mut self, inst: Instruction, block_id: BlockId, var_id: VarId) -> InstId {
+        // produces an alloca
+        let id = InstId(self.instructions.len());
+        self.instructions.push(inst);
+        self.var_id_to_alloca_map.insert(var_id, id);
+        self.get_block_mut(block_id).instructions.push(id);
         id
     }
+    pub fn alloc_global_var(&mut self, var: GlobalIrVarDeclaration, old_var_id: VarId) -> GlobalIrVarId {
+        let global_var_id = GlobalIrVarId(self.global_vars.len());
+        let inst_id = InstId(self.instructions.len());
+
+        self.global_vars.push(var);
+
+        self.instructions.push(Instruction::GlobalAlloca(global_var_id));
+        self.var_id_to_alloca_map.insert(old_var_id, inst_id);
+
+        global_var_id
+    }
+
     pub fn alloc_terminator_for(&mut self, mut terminator: TerminatorInst, block_id: BlockId) -> TermInstId {
         // add predecessors whenever we jump or branch somewhere
         match terminator {
@@ -174,8 +200,8 @@ impl IrArena {
     pub fn inst_name(&self, id: InstId) -> String {
         format!("%{}", id.0)
     }
-    pub fn get_var(&self, id: IrVarId) -> &IrVarDeclaration {
-        &self.vars[id.0]
+    pub fn get_var(&self, id: GlobalIrVarId) -> &GlobalIrVarDeclaration {
+        &self.global_vars[id.0]
     }
     pub fn get_func(&self, id: IrFuncId) -> &CfgFunction {
         &self.functions[id.0]
@@ -253,14 +279,16 @@ impl IrArena {
 pub struct CfgAnalyzer {
     pub ast_arena: AstArena,
     pub arena: IrArena,
-    // similar to StackAnalyzer, pretty much that
+
+    // this is used to get rid of duplication issues while lowering stack blocks
+    pub lowered_expr_cache: HashMap<ExprId, InstId>,
 }
 
 impl CfgAnalyzer {
     pub fn new(ast_arena: AstArena) -> Self {
         let mut arena = IrArena::new();
         arena.types.extend_from_slice(&ast_arena.types[PRIMITIVE_TYPE_COUNT..]);
-        Self { ast_arena, arena }
+        Self { ast_arena, arena, lowered_expr_cache: HashMap::new() }
     }
 
     pub fn lower_to_mir(top_level: Vec<TopLevelId>, ast_arena: AstArena) -> (Vec<CfgTopLevelId>, IrArena) {
@@ -274,7 +302,7 @@ impl CfgAnalyzer {
         let mut analyzed_nodes = Vec::<CfgTopLevelId>::new();
         for node in top_level.clone() {
             let new_node = match node {
-                TopLevelId::VariableDecl(id) => CfgTopLevelId::GlobalVarDecl(self.lower_variable_declaration(id)),
+                TopLevelId::VariableDecl(id) => CfgTopLevelId::GlobalVarDecl(self.lower_global_variable_declaration(id)),
                 TopLevelId::FunctionDecl(id) => CfgTopLevelId::FunctionDecl(self.lower_function_declaration(id)),
                 TopLevelId::Statement(id) => panic!("there can't be statements on global scope"),
             };
@@ -283,19 +311,30 @@ impl CfgAnalyzer {
         analyzed_nodes
     }
 
-    fn lower_variable_declaration(&mut self, id: VarId) -> IrVarId {
+    fn lower_global_variable_declaration(&mut self, id: VarId) -> GlobalIrVarId {
         // we don't do anything here at all right now
         // maybe if we add assignments to declarations we might want to in the future but for now this doesn't do anything
         let var = self.ast_arena.get_var(id);
-        self.arena.alloc_var(
-            IrVarDeclaration {
+        self.arena.alloc_global_var(
+            GlobalIrVarDeclaration {
                 source_info: self.ast_arena.get_var_token(id).source_info.clone(),
                 name: var.name.clone(),
                 hfs_type: var.hfs_type,
-                is_global: true,
             },
             id,
         )
+    }
+    fn lower_local_variable_declaration(&mut self, id: VarId) -> InstId {
+        // Note that all variables are allocated at the function entry point to make mem2reg simpler
+        // since it only works with allocas at the function entry
+        let var = self.ast_arena.get_var(id);
+        let entry_block = self.arena.get_func(self.arena.cfg_context.curr_function).entry_block;
+        let inst_id = self.arena.alloc_local_var(
+            Instruction::Alloca { source_info: self.ast_arena.get_var_token(id).source_info.clone(), type_id: var.hfs_type },
+            entry_block,
+            id,
+        );
+        inst_id
     }
 
     fn lower_stack_keyword_declaration(&mut self, id: ExprId) -> IrFuncId {
@@ -320,7 +359,6 @@ impl CfgAnalyzer {
             parameter_exprs.push(param_inst);
             self.arena.push_to_hfs_stack(param_inst);
         }
-        self.arena.seal_block(entry_block); // we can seal it once we have the parameters
 
         let curr_block_context = BlockContext {
             continue_to_block: None,
@@ -367,8 +405,17 @@ impl CfgAnalyzer {
             parameter_exprs.push(param_inst);
             self.arena.push_to_hfs_stack(param_inst);
         }
-
-        self.arena.seal_block(entry_block); // we can seal it once we have the parameters
+        let cfg_function = CfgFunction {
+            source_info: source_info.clone(),
+            name: func_decl.name,
+            param_type: func_decl.param_type,
+            return_type: func_decl.return_type,
+            parameter_insts: parameter_exprs,
+            entry_block,
+        };
+        let func_id = self.arena.alloc_function(cfg_function, id);
+        // note that this needs to be allocated before we lower the body so we can access the
+        // current function definition (ex: to put allocas at the start)
 
         let curr_block_context = BlockContext {
             continue_to_block: None,
@@ -390,17 +437,7 @@ impl CfgAnalyzer {
                 self.arena.cfg_context.curr_insert_block,
             );
         }
-
-        let cfg_function = CfgFunction {
-            source_info,
-            name: func_decl.name,
-            param_type: func_decl.param_type,
-            return_type: func_decl.return_type,
-            parameter_insts: parameter_exprs,
-            entry_block,
-        };
-
-        self.arena.alloc_function(cfg_function, id)
+        func_id
     }
     fn lower_stmt(&mut self, id: StmtId, curr_block_context: BlockContext) {
         let source_info = self.ast_arena.get_stmt_token(id).source_info.clone();
@@ -506,9 +543,6 @@ impl CfgAnalyzer {
                                 block_before_if,
                             );
 
-                            self.arena.seal_block(if_body_block);
-                            self.arena.seal_block(else_body_block);
-
                             self.arena.cfg_context.curr_insert_block = else_body_block;
 
                             let curr_block_context = BlockContext {
@@ -561,9 +595,7 @@ impl CfgAnalyzer {
                         TerminatorInst::Branch { source_info, cond, true_block: if_body_block, false_block: if_end_block },
                         block_before_if,
                     );
-                    self.arena.seal_block(if_body_block);
                 }
-                self.arena.seal_block(if_end_block);
             },
             Statement::While { cond, body } => {
                 /* jump while_cond_0;
@@ -601,7 +633,6 @@ impl CfgAnalyzer {
                     },
                     while_cond_block,
                 );
-                self.arena.seal_block(while_body_block);
 
                 let curr_block_context = BlockContext {
                     continue_to_block: Some(while_cond_block),
@@ -629,8 +660,6 @@ impl CfgAnalyzer {
                         self.arena.cfg_context.curr_insert_block,
                     );
                 }
-                self.arena.seal_block(while_end_block);
-                self.arena.seal_block(while_cond_block);
                 //--------------------------------------------------------------------------
             },
             Statement::StackBlock(expr_ids) =>
@@ -659,7 +688,7 @@ impl CfgAnalyzer {
                 for top_level_id in top_level_ids.clone() {
                     match top_level_id {
                         TopLevelId::VariableDecl(var_id) => {
-                            self.lower_variable_declaration(var_id);
+                            self.lower_local_variable_declaration(var_id);
                         },
                         TopLevelId::FunctionDecl(func_id) => panic!("[internal error] local functions are not allowed"),
                         TopLevelId::Statement(stmt_id) => self.lower_stmt(stmt_id, curr_block_context.clone()),
@@ -705,46 +734,33 @@ impl CfgAnalyzer {
             Statement::Assignment { identifier, is_move, deref_count } => {
                 // @(213) &= var; // move assignment
                 // @(213) := var; // copy assignment
-                // i sure hope we can't have side effects from stuff you push to the stack else
-                // this will be a huge source of bugs in the future...
-                // we need to add fancier stack simulation to completely get rid of duplication
-                // associated to @() stack blocks
-
                 let inst_value = if is_move {
                     self.arena.pop_hfs_stack().expect("expected value in stack for move assignment")
                 } else {
                     *self.arena.hfs_stack.last().expect("expected value in stack for copy assignment")
                 };
-                let &var_id = match identifier {
-                    Identifier::GlobalVar(var_id) | Identifier::Variable(var_id) => match self.arena.var_id_map.get(&var_id) {
-                        Some(ir_var_id) => ir_var_id,
-                        None => panic!("[internal error] tried making an assignment before creating the associated IrVarId"),
-                    },
+                let (mut address, type_id) = match identifier {
+                    Identifier::GlobalVar(var_id) | Identifier::Variable(var_id) =>
+                        match self.arena.var_id_to_alloca_map.get(&var_id) {
+                            Some(alloca_inst) => (*alloca_inst, self.ast_arena.get_var(var_id).hfs_type),
+                            None => panic!("[internal error] forgot to alloca a variable before using it"),
+                        },
                     Identifier::Function(func_id) => unreachable!("can't happen"),
                 };
-
-                if deref_count == 0 {
-                    // Normal assignment (Braun et al.)
-                    self.arena.write_variable(var_id, self.arena.cfg_context.curr_insert_block, inst_value);
-                } else {
-                    // Pointer dereference assignment (emit memory ops)
-                    // NOTE: we dont have the pointer code finished at all in the language atm
-                    let mut addr = self.arena.read_variable(var_id, self.arena.cfg_context.curr_insert_block);
-                    // Chase the pointer chain: *ptr is 1 deref, **ptr is 2, etc.
-                    for _ in 0..deref_count - 1 {
-                        let type_id = self.arena.get_var(var_id).hfs_type;
-                        // TODO: i dont think this type_id is correct ^^^^^ check later when we add
-                        // pointers for real to the language
-                        addr = self.arena.alloc_inst_for(
-                            Instruction::Load { source_info: source_info.clone(), address: addr, type_id },
+                // Chase the pointer chain: ptr^ is 1 deref, ptr^^ is 2, etc.
+                if deref_count > 0 {
+                    for _ in 0..deref_count {
+                        let type_id = self.arena.reduce_type_ptr_count(type_id, source_info.clone());
+                        address = self.arena.alloc_inst_for(
+                            Instruction::Load { source_info: source_info.clone(), address, type_id },
                             self.arena.cfg_context.curr_insert_block,
                         );
                     }
-                    self.arena.alloc_inst_for(
-                        Instruction::Store { source_info: source_info.clone(), address: addr, value: inst_value },
-                        self.arena.cfg_context.curr_insert_block,
-                    );
                 }
+                self.arena.alloc_inst_for(
+                    Instruction::Store { source_info: source_info.clone(), address, value: inst_value },
+                    self.arena.cfg_context.curr_insert_block,
+                );
             },
             Statement::FunctionCall { arg_count, func_id, is_move, return_values } => {
                 // @(213) &> func; // move call
@@ -778,16 +794,44 @@ impl CfgAnalyzer {
         }
     }
     fn lower_expr(&mut self, id: ExprId) -> InstId {
+        if let Some(cached_inst_id) = self.lowered_expr_cache.get(&id) {
+            // we used an expr cache to fix issues with duplication of expressions and not
+            // correctly balancing the stack after building out expression trees
+            // common example that causes issues:
+            // @(1 2 3 4);
+            // @(+ + + 2);
+            // the stack should see at the end:
+            // @(+ 2);
+            // because these are the top level nodes that actually matter for stack balance
+            // however this wont happen because exprid are duplicated.
+            // to fix this, we use an expr_id cache to not recompute previous expressions
+            // it is actually necessary for correctness, not just to remove wasted work.
+            return *cached_inst_id;
+        }
+
         let source_info = self.ast_arena.get_expr_token(id).source_info.clone();
-        match self.ast_arena.get_expr(id).clone() {
+        let inst_id = match self.ast_arena.get_expr(id).clone() {
             Expression::Operation(operation) => self.lower_operation(operation, source_info),
             Expression::Identifier(identifier) => match identifier {
-                Identifier::GlobalVar(var_id) | Identifier::Variable(var_id) => match self.arena.var_id_map.get(&var_id) {
-                    Some(ir_var_id) => {
-                        // phi code generation happens when you read a variable
-                        self.arena.read_variable(*ir_var_id, self.arena.cfg_context.curr_insert_block)
-                    },
-                    None => panic!("[internal error] tried making assignment before creating the associated IrVarId"),
+                Identifier::Variable(var_id) | Identifier::GlobalVar(var_id) => {
+                    // this code expects to only be used for identifiers found in stack blocks, so
+                    // they act like expressions and not addresses i.e:
+                    // let var: i32;
+                    // @(var);
+                    // we dont want this code to be used for this case:
+                    // &= var;
+                    // assignments deal with their own identifiers, and here we expect to only need to load.
+                    // note that this code also loads from global variables with the same semantics as locals.
+                    let address = *self
+                        .arena
+                        .var_id_to_alloca_map
+                        .get(&var_id)
+                        .expect("[internal error] tried loading from a variable that hasn't been alloca'd yet");
+                    let type_id = self.ast_arena.get_var(var_id).hfs_type;
+                    self.arena.alloc_inst_for(
+                        Instruction::Load { source_info, address, type_id },
+                        self.arena.cfg_context.curr_insert_block,
+                    )
                 },
                 Identifier::Function(func_id) => panic!("[internal error] can't have function identifiers as expressions."),
             },
@@ -849,7 +893,9 @@ impl CfgAnalyzer {
                     self.arena.cfg_context.curr_insert_block,
                 )
             },
-        }
+        };
+        self.lowered_expr_cache.insert(id, inst_id);
+        inst_id
     }
     fn lower_operation(&mut self, op: Operation, source_info: SourceInfo) -> InstId {
         let cfg_op = match op {
@@ -873,79 +919,80 @@ impl CfgAnalyzer {
         self.arena.alloc_inst_for(Instruction::Operation(source_info, cfg_op), self.arena.cfg_context.curr_insert_block)
     }
 }
-impl IrArena {
-    // ---------------------------------------------------------------------------------
-    // Simple and Efficient Construction of Static Single Assignment Form (Braun et. al)
-    // ---------------------------------------------------------------------------------
-    fn write_variable(&mut self, var_id: IrVarId, block_id: BlockId, value: InstId) {
-        // keep track of what a variable is while in a given block simply
-        self.current_def.insert((var_id, block_id), value);
-    }
-    fn read_variable(&mut self, var_id: IrVarId, block_id: BlockId) -> InstId {
-        // Check if we have a def in this block
-        if let Some(&val) = self.current_def.get(&(var_id, block_id)) {
-            return val;
-        }
-        // Otherwise, look in predecessors
-        self.read_variable_recursive(var_id, block_id)
-    }
-    fn read_variable_recursive(&mut self, var_id: IrVarId, block_id: BlockId) -> InstId {
-        let source_info = self.get_var(var_id).source_info.clone();
-        let val = if !self.sealed_blocks.contains(&block_id) {
-            // Incomplete CFG
-            let phi = self.alloc_inst_for(Instruction::Phi { source_info, incoming: HashMap::new() }, block_id);
-            self.incomplete_phis.entry(block_id).or_default().insert(var_id, phi);
-            phi
-        } else if self.get_block(block_id).predecessors.is_empty() {
-            // this is the entry block which has no predecessors,
-            // so the variable was used before definition
-            panic!("variable '{}' read before initialization", self.get_var(var_id).name)
-        } else if self.get_block(block_id).predecessors.len() == 1 {
-            // Optimize the common case of one predecessor: No phi needed
-            self.read_variable(var_id, self.get_block(block_id).predecessors[0])
-        } else {
-            // Break potential cycles with operandless phi
-            let phi = self.alloc_inst_for(Instruction::Phi { source_info, incoming: HashMap::new() }, block_id);
-            self.write_variable(var_id, block_id, phi);
-            self.add_phi_operands(var_id, phi, block_id)
-        };
-        self.write_variable(var_id, block_id, val);
-        val
-    }
-    fn add_phi_operands(&mut self, var_id: IrVarId, phi_id: InstId, block_id: BlockId) -> InstId {
-        // block_id is the block that this phi comes from
-        // Determine operands from predecessors
-        let mut new_incoming = Vec::<(BlockId, InstId)>::new();
-        let predecessors = self.get_block(block_id).predecessors.clone();
-        for pred in predecessors {
-            let val = self.read_variable(var_id, pred);
-            new_incoming.push((pred, val));
-        }
-        let Instruction::Phi { incoming, .. } = self.get_instruction_mut(phi_id) else {
-            panic!("[internal error] called add_phi_operands with a non-phi instruction")
-        };
-        for (block_id, inst_id) in new_incoming {
-            incoming.insert(block_id, inst_id);
-        }
-        self.try_remove_trivial_phi(phi_id)
-    }
-    fn seal_block(&mut self, block_id: BlockId) {
-        // Fill in any incomplete phis we created while block was unsealed
-        if let Some(incomplete) = self.incomplete_phis.remove(&block_id) {
-            for (var, phi) in incomplete {
-                self.add_phi_operands(var, phi, block_id);
-            }
-        }
-        self.sealed_blocks.insert(block_id);
-    }
-
-    fn try_remove_trivial_phi(&mut self, phi_id: InstId) -> InstId {
-        // TODO:
-        // we wont implement this yet, it requires tracking usages of phis throughout the code.
-        // its part of the algorithm but not necessary for correctness
-        phi_id
-    }
-}
+// impl IrArena {
+// ---------------------------------------------------------------------------------
+// Simple and Efficient Construction of Static Single Assignment Form (Braun et. al)
+// ---------------------------------------------------------------------------------
+// TODO: this is code that can be reused later for mem2reg
+// fn write_variable(&mut self, var_id: IrVarId, block_id: BlockId, value: InstId) {
+//     // keep track of what a variable is while in a given block simply
+//     self.current_def.insert((var_id, block_id), value);
+// }
+// fn read_variable(&mut self, var_id: IrVarId, block_id: BlockId) -> InstId {
+//     // Check if we have a def in this block
+//     if let Some(&val) = self.current_def.get(&(var_id, block_id)) {
+//         return val;
+//     }
+//     // Otherwise, look in predecessors
+//     self.read_variable_recursive(var_id, block_id)
+// }
+// fn read_variable_recursive(&mut self, var_id: IrVarId, block_id: BlockId) -> InstId {
+//     let source_info = self.get_var(var_id).source_info.clone();
+//     let val = if !self.sealed_blocks.contains(&block_id) {
+//         // Incomplete CFG
+//         let phi = self.alloc_inst_for(Instruction::Phi { source_info, incoming: HashMap::new() }, block_id);
+//         self.incomplete_phis.entry(block_id).or_default().insert(var_id, phi);
+//         phi
+//     } else if self.get_block(block_id).predecessors.is_empty() {
+//         // this is the entry block which has no predecessors,
+//         // so the variable was used before definition
+//         panic!("variable '{}' read before initialization", self.get_var(var_id).name)
+//     } else if self.get_block(block_id).predecessors.len() == 1 {
+//         // Optimize the common case of one predecessor: No phi needed
+//         self.read_variable(var_id, self.get_block(block_id).predecessors[0])
+//     } else {
+//         // Break potential cycles with operandless phi
+//         let phi = self.alloc_inst_for(Instruction::Phi { source_info, incoming: HashMap::new() }, block_id);
+//         self.write_variable(var_id, block_id, phi);
+//         self.add_phi_operands(var_id, phi, block_id)
+//     };
+//     self.write_variable(var_id, block_id, val);
+//     val
+// }
+// fn add_phi_operands(&mut self, var_id: IrVarId, phi_id: InstId, block_id: BlockId) -> InstId {
+//     // block_id is the block that this phi comes from
+//     // Determine operands from predecessors
+//     let mut new_incoming = Vec::<(BlockId, InstId)>::new();
+//     let predecessors = self.get_block(block_id).predecessors.clone();
+//     for pred in predecessors {
+//         let val = self.read_variable(var_id, pred);
+//         new_incoming.push((pred, val));
+//     }
+//     let Instruction::Phi { incoming, .. } = self.get_instruction_mut(phi_id) else {
+//         panic!("[internal error] called add_phi_operands with a non-phi instruction")
+//     };
+//     for (block_id, inst_id) in new_incoming {
+//         incoming.insert(block_id, inst_id);
+//     }
+//     self.try_remove_trivial_phi(phi_id)
+// }
+// fn seal_block(&mut self, block_id: BlockId) {
+//     // Fill in any incomplete phis we created while block was unsealed
+//     if let Some(incomplete) = self.incomplete_phis.remove(&block_id) {
+//         for (var, phi) in incomplete {
+//             self.add_phi_operands(var, phi, block_id);
+//         }
+//     }
+//     self.sealed_blocks.insert(block_id);
+// }
+//
+// fn try_remove_trivial_phi(&mut self, phi_id: InstId) -> InstId {
+//     // TODO:
+//     // we wont implement this yet, it requires tracking usages of phis throughout the code.
+//     // its part of the algorithm but not necessary for correctness
+//     phi_id
+// }
+// }
 
 // Debug printing functions (using the MIR syntax)
 impl CfgAnalyzer {

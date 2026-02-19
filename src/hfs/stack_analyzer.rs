@@ -259,7 +259,7 @@ impl StackAnalyzer {
         let token = self.unresolved_arena.get_unresolved_stmt_token(id);
         let unresolved_stmt = self.unresolved_arena.get_unresolved_stmt(id).clone();
         match unresolved_stmt {
-            UnresolvedStatement::ElseIf { cond, body, else_stmt } | UnresolvedStatement::If { body, else_stmt, cond } => {
+            UnresolvedStatement::ElseIf { cond, body, else_stmt } | UnresolvedStatement::If { cond, body, else_stmt } => {
                 let stack_before_branches = self.arena.hfs_stack.clone();
                 // actually adds the condition to the hfs_stack, because the stack analyzer only "sees" the if statement itself
                 let cond_stack_block = self.resolve_stmt(cond)?;
@@ -365,8 +365,11 @@ impl StackAnalyzer {
                         None
                     },
                 };
-
-                Ok(self.arena.alloc_stmt(Statement::If { cond_stack_block, body, else_stmt }, token))
+                if matches!(unresolved_stmt, UnresolvedStatement::ElseIf { .. }) {
+                    Ok(self.arena.alloc_stmt(Statement::ElseIf { cond_stack_block, body, else_stmt }, token))
+                } else {
+                    Ok(self.arena.alloc_stmt(Statement::If { cond_stack_block, body, else_stmt }, token))
+                }
             },
             UnresolvedStatement::While { body, cond } => {
                 self.resolve_stmt(cond);
@@ -419,12 +422,6 @@ impl StackAnalyzer {
                 // e.g: if we had:
                 // @(1 2 3 4);
                 // @(+ + + 2);
-                //
-                //
-                //
-                //
-                //
-                //
                 //
                 //
                 // @(+)
@@ -821,10 +818,10 @@ mod tests {
     use pretty_assertions::assert_eq;
 
     use crate::hfs::{
+        AstArena, Type,
         builder::builder::{Builder, BuilderOperation, ControlFlowOps, FunctionOps, LoopOps, PassMode, StackOps, VariableOps},
         stack_analyzer_builder::StackAnalyzerBuilder,
-        utils::{run_until, Phase},
-        AstArena, Type,
+        utils::{Phase, run_until},
     };
 
     fn analyze_file(name: &str) -> AstArena {

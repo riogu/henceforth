@@ -1,6 +1,7 @@
 fn foo: () -> (i32 i32 i32) {
-	@(1)
+	@(12 1)
 	if @(2 <) {
+// i can use 12 here
 		let var: i32;
 		@(4 5) &= var; // @(1 2 3 4)
 		if @(true) {
@@ -22,3 +23,4 @@ fn main: () -> () {
 	:> foo;
 	@pop_all
 }
+

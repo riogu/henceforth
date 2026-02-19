@@ -1,9 +1,9 @@
 use std::{
     collections::HashMap,
-    fmt::{format, Display},
+    fmt::{Display, format},
 };
 
-use crate::hfs::{ast::*, IrArena, Literal, SourceInfo};
+use crate::hfs::{IrArena, Literal, SourceInfo, ast::*};
 /*
 =================================================================================================
 Control Flow Graph IR Pass (HFS MIR - Medium-level IR)
@@ -20,11 +20,11 @@ pub struct TermInstId(pub usize);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct IrFuncId(pub usize);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
-pub struct IrVarId(pub usize);
+pub struct GlobalIrVarId(pub usize);
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum CfgTopLevelId {
-    GlobalVarDecl(IrVarId),
+    GlobalVarDecl(GlobalIrVarId),
     FunctionDecl(IrFuncId),
 }
 #[derive(Debug)]
@@ -52,11 +52,10 @@ pub struct BasicBlock {
 
 // Declarations (shared)
 #[derive(Debug)]
-pub struct IrVarDeclaration {
+pub struct GlobalIrVarDeclaration {
     pub source_info: SourceInfo,
     pub name: String,
     pub hfs_type: TypeId,
-    pub is_global: bool,
 }
 // each Instruction -> one value (this is just like LLVM SSA)
 // but not all instructions produce values (declarations, stores, etc)
@@ -76,6 +75,10 @@ pub enum Instruction {
         source_info: SourceInfo,
         type_id: TypeId,
     },
+    GlobalAlloca(GlobalIrVarId),
+    // this instruction doesnt "exist" because its only present in the global namespace
+    // please print the variable it holds and if you want annotate it like llvm with an alloca
+    // @mycool_global_var = global i32 69420
     Parameter {
         source_info: SourceInfo,
         index: usize,
@@ -230,7 +233,7 @@ impl CfgPrintable for CfgFunction {
     }
 }
 
-impl CfgPrintable for IrVarDeclaration {
+impl CfgPrintable for GlobalIrVarDeclaration {
     fn get_repr(&self, arena: &IrArena) -> String {
         let typ = arena.get_type(self.hfs_type);
         format!("let {}: {};", self.name, typ.get_repr(arena))
@@ -313,6 +316,7 @@ impl CfgPrintable for Instruction {
                 format!("keyword {}, {}", name, args_repr.join(", "))
             },
             Instruction::Alloca { source_info, type_id } => format!("alloca {}", arena.get_type(*type_id)),
+            Instruction::GlobalAlloca(global_ir_var_id) => todo!("joao pls pls help ;_;"),
         }
     }
 }

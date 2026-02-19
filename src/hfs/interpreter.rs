@@ -55,7 +55,7 @@ pub struct CallFrame {
 //---------------------------------------------------------------------------
 pub struct Interpreter {
     arena: IrArena,
-    globals: HashMap<IrVarId, RuntimeValue>,
+    globals: HashMap<GlobalIrVarId, RuntimeValue>,
     call_stack: Vec<CallFrame>,
     disable_cache: bool, // NOTE: not really used yet (but we should probably)
     curr_block_id: BlockId,
@@ -227,9 +227,10 @@ impl Interpreter {
             },
             Instruction::LoadElement { source_info, index, tuple } =>
                 todo!("[internal error] we aren't currently using Instruction::LoadElement for anything yet"),
-            Instruction::Load { source_info, address, type_id} => todo!(),
+            Instruction::Load { source_info, address, type_id } => todo!(),
             Instruction::Store { source_info, address, value } => todo!(),
             Instruction::Alloca { source_info, type_id } => todo!(),
+            Instruction::GlobalAlloca(global_ir_var_id) => todo!(),
         }
     }
     pub fn interpret_operation(&mut self, op: CfgOperation) -> RuntimeValue {

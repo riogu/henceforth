@@ -1,4 +1,4 @@
-use crate::hfs::{CfgOperation, InstId, Instruction, IrArena, IrFuncId, IrVarId, ast::*, error::CompileError, token::*};
+use crate::hfs::{CfgOperation, GlobalIrVarId, InstId, Instruction, IrArena, IrFuncId, ast::*, error::CompileError, token::*};
 
 pub const PRIMITIVE_TYPE_COUNT: usize = 4;
 
@@ -164,14 +164,15 @@ impl IrArena {
             Instruction::LoadElement { source_info, index, tuple } => todo!(),
             Instruction::ReturnValue { source_info, type_id } => type_id,
             Instruction::Load { source_info, address, type_id } => type_id,
-            Instruction::Store { source_info, address, value } => todo!(),
-            Instruction::Alloca { source_info, type_id } => todo!(),
-            // FIXME: the alloca type is whatever type_id we get but with +1 pointer depth. the
-            // issue is we want pointers to be OPAQUE in the IR. which means for this it wont match
-            // whatever the frontend thinks types are. we will have to add this special type later.
+            Instruction::Store { source_info, address, value } => self.get_type_id_of_inst(value),
+            Instruction::Alloca { source_info, type_id } => {
+                // implement this later
+                panic!("[internal error] asked for the type of an alloca instruction but i don't see why this would happen")
+            },
+            Instruction::GlobalAlloca(global_ir_var_id) => todo!(),
         }
     }
-    pub fn get_type_of_var(&self, var_id: IrVarId) -> &Type {
+    pub fn get_type_of_var(&self, var_id: GlobalIrVarId) -> &Type {
         self.get_type(self.get_var(var_id).hfs_type)
     }
     pub fn get_type_of_func(&self, func_id: IrFuncId) -> &Type {
@@ -181,5 +182,17 @@ impl IrArena {
     pub fn get_type_of_inst(&mut self, inst_id: InstId) -> &Type {
         let type_id = self.get_type_id_of_inst(inst_id);
         self.get_type(type_id)
+    }
+
+    // returns itself with the pointer count reduced by one
+    pub fn reduce_type_ptr_count(&mut self, type_id: TypeId, source_info: SourceInfo) -> TypeId {
+        let hfs_type = match self.get_type(type_id) {
+            Type::Int { ptr_count } => Type::Int { ptr_count: ptr_count - 1 },
+            Type::String { ptr_count } => Type::String { ptr_count: ptr_count - 1 },
+            Type::Bool { ptr_count } => Type::Bool { ptr_count: ptr_count - 1 },
+            Type::Float { ptr_count } => Type::Float { ptr_count: ptr_count - 1 },
+            Type::Tuple { ptr_count, type_ids } => Type::Tuple { ptr_count: ptr_count - 1, type_ids: type_ids.clone() },
+        };
+        self.alloc_type(hfs_type, source_info)
     }
 }

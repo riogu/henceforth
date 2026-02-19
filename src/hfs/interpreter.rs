@@ -18,6 +18,7 @@ pub enum RuntimeValue {
     String(String),
     Bool(bool),
     Tuple(Vec<RuntimeValue>),
+    Address(InstId),
 }
 
 impl RuntimeValue {
@@ -59,6 +60,8 @@ pub struct Interpreter {
     call_stack: Vec<CallFrame>,
     disable_cache: bool, // NOTE: not really used yet (but we should probably)
     curr_block_id: BlockId,
+
+    memory: HashMap<InstId, RuntimeValue>,
 }
 impl Interpreter {
     // utils
@@ -72,7 +75,14 @@ impl Interpreter {
 }
 impl Interpreter {
     pub fn new(arena: IrArena) -> Self {
-        Self { arena, globals: HashMap::new(), call_stack: Vec::new(), disable_cache: false, curr_block_id: BlockId(0) }
+        Self {
+            arena,
+            globals: HashMap::new(),
+            call_stack: Vec::new(),
+            disable_cache: false,
+            curr_block_id: BlockId(0),
+            memory: HashMap::new(),
+        }
     }
 
     pub fn interpret(arena: IrArena, top_level_insts: Vec<CfgTopLevelId>, scope_stack: ScopeStack) {
@@ -143,7 +153,8 @@ impl Interpreter {
         let block = self.arena.get_block(block_id);
         let term = block.terminator;
         for inst_id in block.instructions.clone() {
-            self.interpret_instruction(inst_id);
+            let val = self.interpret_instruction(inst_id);
+            self.curr_call_frame_mut().inst_values.insert(inst_id, val);
         }
         if let Some(terminator) = term {
             self.interpret_terminator(terminator);
@@ -227,10 +238,32 @@ impl Interpreter {
             },
             Instruction::LoadElement { source_info, index, tuple } =>
                 todo!("[internal error] we aren't currently using Instruction::LoadElement for anything yet"),
-            Instruction::Load { source_info, address, type_id } => todo!(),
-            Instruction::Store { source_info, address, value } => todo!(),
-            Instruction::Alloca { source_info, type_id } => todo!(),
-            Instruction::GlobalAlloca(global_ir_var_id) => todo!(),
+
+            Instruction::Store { address, value, .. } => {
+                // address is an InstId whose value is an Address(target)
+                let RuntimeValue::Address(target) = self.curr_call_frame().inst_values[&address] else {
+                    panic!("[internal error] store to non-address")
+                };
+                let val = self.curr_call_frame().inst_values[&value].clone();
+                // Store the value AT that address
+                self.memory.insert(target, val.clone());
+                val
+                // NOTE: we should never actually use the value of a store for anything...
+                // there is no real representation of the value of a store. and if everything went
+                // well we should never need it either
+            },
+
+            Instruction::Load { address, .. } => {
+                let RuntimeValue::Address(target) = self.curr_call_frame().inst_values[&address] else {
+                    panic!("[internal error] load from non-address")
+                };
+                self.memory[&target].clone()
+            },
+            Instruction::GlobalAlloca(..) | Instruction::Alloca { .. } => {
+                // The alloca itself is just an address. store a placeholder
+                // that we can load/store to. Use the InstId as the "address".
+                RuntimeValue::Address(inst_id)
+            },
         }
     }
     pub fn interpret_operation(&mut self, op: CfgOperation) -> RuntimeValue {

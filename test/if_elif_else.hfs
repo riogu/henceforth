@@ -1,3 +1,5 @@
+
+
 fn fizz_buzz: (i32) -> (str) {
 	if @(15 % 0 ==) {
 		@("fizzbuzz");
@@ -14,4 +16,76 @@ fn fizz_buzz: (i32) -> (str) {
 fn main: () -> () {
 	@(530) &> fizz_buzz;
 	@pop;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+fn fizz_buzz: (i32) -> (str) {
+  start:
+    %0 = i32 %arg0
+    %1 = 15
+    %2 = %0 % %1
+    %3 = 0
+    %4 = %2 == %3
+    branch %4, if_body, else_if_cond
+  if_body:
+    %5 = "fizzbuzz"
+    jump if_end
+  if_end:
+    %17 = phi [else_body: %16], [if_body: %15], [if_body: %5], [if_body: %10]
+    jump if_end
+  else_if_cond:
+    %6 = 3
+    %7 = %0 % %6
+    %8 = 0
+    %9 = %7 == %8
+    branch %9, if_body, else_if_cond
+  if_body:
+    %10 = "fizz"
+    jump if_end
+  else_if_cond:
+    %11 = 5
+    %12 = %0 % %11
+    %13 = 0
+    %14 = %12 == %13
+    branch %14, if_body, else_body
+  if_body:
+    %15 = "buzz"
+    jump if_end
+  else_body:
+    %16 = "no fizzbuzz"
+    jump if_end
+}
+fn main: () -> () {
+  start:
+    %18 = 530
+    %19 = call fizz_buzz, %18
+    %20 = (%0, %17)
+    return %20
 }

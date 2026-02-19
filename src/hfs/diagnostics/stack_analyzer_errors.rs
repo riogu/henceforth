@@ -81,7 +81,7 @@ impl StackAnalyzerError {
     }
 
     pub fn dump_ast(arena: &AstArena) -> String {
-        todo!()
+        format!("")
     }
 }
 

@@ -59,6 +59,7 @@ pub struct Interpreter {
     globals: HashMap<GlobalIrVarId, RuntimeValue>,
     call_stack: Vec<CallFrame>,
     disable_cache: bool, // NOTE: not really used yet (but we should probably)
+    prev_block_id: BlockId,
     curr_block_id: BlockId,
 
     memory: HashMap<InstId, RuntimeValue>,
@@ -80,6 +81,7 @@ impl Interpreter {
             globals: HashMap::new(),
             call_stack: Vec::new(),
             disable_cache: false,
+            prev_block_id: BlockId(0),
             curr_block_id: BlockId(0),
             memory: HashMap::new(),
         }
@@ -149,6 +151,7 @@ impl Interpreter {
         self.call_stack.pop().expect("[internal error] wrong scope management while calling function").return_stack
     }
     pub fn interpret_block(&mut self, block_id: BlockId) {
+        self.prev_block_id = self.curr_block_id;
         self.curr_block_id = block_id;
         let block = self.arena.get_block(block_id);
         let term = block.terminator;
@@ -210,7 +213,7 @@ impl Interpreter {
                 RuntimeValue::Tuple(runtime_return_values)
             },
             Instruction::Phi { source_info, incoming } =>
-                if let Some(inst_id) = incoming.get(&self.curr_block_id) {
+                if let Some(inst_id) = incoming.get(&self.prev_block_id) {
                     self.interpret_instruction(*inst_id)
                 } else {
                     panic!("[internal error] reached phi without going through one of its predecessor blocks")

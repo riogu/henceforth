@@ -1,0 +1,25 @@
+
+fn fizz_buzz: (i32 str) -> (str i32 i32) {
+    @pop;
+    if @(15 % 0 ==) {
+        @("fizzbuzz" 213 321)
+    } else if @(3 % 0 ==) {
+        @("fizz" 420 231)
+    } else if @(5 % 0 ==) {
+        @("buzz" 69 433)
+    } else {
+        @pop;
+        @("no fizzbuzz" 42069 2323)
+    }
+}
+
+fn foo: () -> (str i32 i32) {
+    @(420 "bar") &> fizz_buzz;
+}
+
+fn main: () -> () {
+    @() :> foo;
+    @pop;
+    @pop;
+    @pop;
+}

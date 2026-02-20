@@ -10,12 +10,11 @@ use colored::{Colorize, CustomColor};
 use crate::{
     cfg_analyzer_error,
     hfs::{
-        self,
+        self, BasicBlock, BlockId, CfgFunction, CfgOperation, CfgPrintable, CfgTopLevelId, GlobalIrVarDeclaration, GlobalIrVarId,
+        InstId, Instruction, IrFuncId, Literal, PRIMITIVE_TYPE_COUNT, SourceInfo, TermInstId, TerminatorInst, Token, TokenKind,
         ast::*,
         cfg_analyzer_errors::{CfgAnalyzerError, CfgAnalyzerErrorKind},
         error::{CompileError, DiagnosticInfo},
-        BasicBlock, BlockId, CfgFunction, CfgOperation, CfgPrintable, CfgTopLevelId, GlobalIrVarDeclaration, GlobalIrVarId,
-        InstId, Instruction, IrFuncId, Literal, SourceInfo, TermInstId, TerminatorInst, Token, TokenKind, PRIMITIVE_TYPE_COUNT,
     },
 };
 
@@ -27,7 +26,7 @@ pub struct BlockContext {
     break_to_block: Option<BlockId>,
     end_block: Option<BlockId>,
     prev_stack_change: Vec<InstId>,
-    stack_changes: Vec<(BlockId, Vec<InstId>)>,
+    stack_snapshots: Vec<(BlockId, Vec<InstId>)>,
     // its useful for stuff like break statements
 }
 
@@ -416,7 +415,7 @@ impl CfgAnalyzer {
             break_to_block: None,
             end_block: None,
             prev_stack_change: vec![],
-            stack_changes: vec![],
+            stack_snapshots: vec![],
         };
         if self.arena.get_block(self.arena.cfg_context.curr_insert_block).terminator.is_none() {
             let instructions = self.arena.pop_entire_hfs_stack();
@@ -439,6 +438,7 @@ impl CfgAnalyzer {
             entry_block,
         };
 
+        self.arena.pop_entire_hfs_stack(); // context should be reset after each function!
         Ok(self.arena.alloc_stack_keyword_as_func(cfg_function, id))
     }
 
@@ -449,7 +449,6 @@ impl CfgAnalyzer {
         let entry_block = self.arena.alloc_block("start"); // create before analyzing the parameters
         self.arena.cfg_context.curr_insert_block = entry_block;
 
-        // eprintln!("func body stmt: {:?}", self.ast_arena.get_stmt(func_decl.body));
         let mut parameter_exprs = Vec::<InstId>::new();
         for param_expr_id in func_decl.parameter_exprs {
             let param_inst = self.lower_expr(param_expr_id)?;
@@ -473,7 +472,7 @@ impl CfgAnalyzer {
             break_to_block: None,
             end_block: None,
             prev_stack_change: vec![],
-            stack_changes: vec![],
+            stack_snapshots: vec![],
         };
         self.lower_stmt(func_decl.body, curr_block_context);
         if self.arena.get_block(self.arena.cfg_context.curr_insert_block).terminator.is_none() {
@@ -488,90 +487,145 @@ impl CfgAnalyzer {
                 self.arena.cfg_context.curr_insert_block,
             );
         }
+        self.arena.hfs_stack.clear(); // context should be reset after each function!
         Ok(func_id)
     }
+    // TODO: dont forget about issues with dead code elimination. if we have code after
+    // a return; or something, we gotta be careful to eliminate it at some point
+    // otherwise we might have issues. maybe we should do that in StackAnalyzer instead?
+    // watch out for accidentally overwriting the old terminator if we run this code without dead code elimination
+    // basically, this code expects dead code elimination to have occurred BEFORE
+    // FIXME: implement a small dead code elimination on the AST before cfg_analyzer
+
+    /* example of CFG blocks that cover many of the cases of the code below:
+      start_function:
+          branch 1 < 2.0, if_body_0, else_if_cond_0;
+          if_body_0:
+              jump if_end_0;
+          else_if_cond_0:
+              branch -420 < 5, else_if_body_0, else_if_cond_1;
+              else_if_body_0:
+                  jump if_end_0;
+          else_if_cond_1:
+              stack becomes:
+              branch -3 < 5, else_if_body_1, else_body_0;
+              else_if_body_1:
+                  jump if_end_0;
+          else_body_0:
+              jump if_end_0;
+          if_end_0:
+              jump end_function;
+
+      end_function:
+          return;
+    */
+
+    fn lower_if_condition(
+        &mut self,
+        cond_stack_block: StmtId,
+        body: StmtId,
+        curr_block_context: &BlockContext,
+    ) -> Result<(InstId, BlockId, BlockId), Box<dyn CompileError>> {
+        //
+        let block_before_if = self.arena.cfg_context.curr_insert_block;
+
+        self.lower_stmt(cond_stack_block, curr_block_context.clone());
+
+        let if_body_block = self.arena.alloc_block("if_body");
+        self.arena.cfg_context.curr_insert_block = if_body_block;
+
+        // condition isnt included in the stack depth count
+        let cond = match self.arena.pop_hfs_stack() {
+            Some(cond) => cond,
+            None =>
+                return cfg_analyzer_error!(CfgAnalyzerErrorKind::StackUnderflow, &self.arena, Some(&self.ast_arena), vec![
+                    self.ast_arena.get_stmt_token(body).source_info.clone()
+                ]),
+        };
+        let cond_type = self.arena.get_type_id_of_inst(cond)?;
+        self.arena
+            .compare_types(cond_type, self.arena.bool_type(), vec![self.arena.get_instruction(cond).get_source_info()])?;
+
+        Ok((cond, block_before_if, if_body_block))
+    }
+    fn lower_if_body(
+        &mut self,
+        body: StmtId,
+        curr_block_context: &BlockContext,
+        new_if_context: bool,
+    ) -> Result<(BlockId, Vec<InstId>), Box<dyn CompileError>> {
+        self.lower_stmt(body, curr_block_context.clone()); // pay attention to this call (we manage state around it)
+
+        let stack_after_body = self.arena.hfs_stack.clone();
+
+        let if_end_block = if new_if_context {
+            self.arena.alloc_block("if_end")
+        } else {
+            // validate that we aren't getting a different stack depth
+            self.arena.compare_stacks(
+                &stack_after_body,
+                &curr_block_context.prev_stack_change,
+                stack_after_body.iter().map(|inst| self.arena.get_instruction(*inst).get_source_info()).collect(),
+            )?;
+            curr_block_context.end_block.expect("[internal error] forgot to set exit block for the current if stmt")
+        };
+
+        Ok((if_end_block, stack_after_body))
+    }
+
+    fn generate_merge_phis(
+        &mut self,
+        if_end_block: BlockId,
+        stack_snapshots: &[(BlockId, Vec<InstId>)],
+        source_info: &SourceInfo,
+    ) {
+        // to solve stack balancing, we keep track of the entire stack across branches
+        // then, we compare what changed from one branch to the other
+        // since we still have the stack from before we branched off, we need to skip elements that
+        // are repeated across branches. by doing this, we have a simple and consistent logic for
+        // creating phis that solve the disagreements between control flow paths.
+
+        self.arena.hfs_stack.clear(); // reset the stack and create it again
+
+        let result_len = stack_snapshots[0].1.len(); // all branchs must be the same length
+        for stack_idx in 0..result_len {
+            // take all stacks and group each element with each other into a phi
+            // for ex: we group every 1st pushed value together for each branch
+            let values: Vec<InstId> = stack_snapshots.iter().map(|(_, stack)| stack[stack_idx]).collect();
+            if values.iter().all(|v| *v == values[0]) {
+                // if the stack is the same across branches, then we shouldn't touch anything
+                self.arena.hfs_stack.push(values[0]);
+            } else {
+                let mut incoming = HashMap::<BlockId, InstId>::new();
+                for (block_id, snapshot) in stack_snapshots {
+                    incoming.insert(*block_id, snapshot[stack_idx]);
+                }
+                let phi =
+                    self.arena.alloc_inst_for(Instruction::Phi { source_info: source_info.clone(), incoming }, if_end_block);
+                self.arena.hfs_stack.push(phi);
+            }
+        }
+        self.arena.cfg_context.curr_insert_block = if_end_block;
+    }
+
     fn lower_stmt(&mut self, id: StmtId, curr_block_context: BlockContext) -> Result<(), Box<dyn CompileError>> {
         let source_info = self.ast_arena.get_stmt_token(id).source_info.clone();
-        // let stmt = self.ast_arena.get_stmt(id).clone();
-        // eprintln!("lowering stmt: {:?}", std::mem::discriminant(&stmt));
+
         match self.ast_arena.get_stmt(id).clone() {
             Statement::Else(stmt_id) => self.lower_stmt(stmt_id, curr_block_context),
             if_stmt @ Statement::ElseIf { cond_stack_block, body, else_stmt }
             | if_stmt @ Statement::If { cond_stack_block, body, else_stmt } => {
-                // TODO: dont forget about issues with dead code elimination. if we have code after
-                // a return; or something, we gotta be careful to eliminate it at some point
-                // otherwise we might have issues. maybe we should do that in StackAnalyzer instead?
-                // watch out for accidentally overwriting the old terminator if we run this code without dead code elimination
-                // basically, this code expects dead code elimination to have occurred BEFORE
-                // FIXME: implement a small dead code elimination on the AST before cfg_analyzer
-
-                /* example of CFG blocks that cover many of the cases of the code below:
-                  start_function:
-                      branch 1 < 2.0, if_body_0, else_if_cond_0;
-                      if_body_0:
-                          jump if_end_0;
-                      else_if_cond_0:
-                          branch -420 < 5, else_if_body_0, else_if_cond_1;
-                          else_if_body_0:
-                              jump if_end_0;
-                      else_if_cond_1:
-                          stack becomes:
-                          branch -3 < 5, else_if_body_1, else_body_0;
-                          else_if_body_1:
-                              jump if_end_0;
-                      else_body_0:
-                          jump if_end_0;
-                      if_end_0:
-                          jump end_function;
-
-                  end_function:
-                      return;
-                */
-                let mut stack_changes = curr_block_context.stack_changes.clone();
-
                 // means we are starting a new chain of ifs
-                let new_if_context = matches!(if_stmt, Statement::If { .. });
+                let mut stack_snapshots = curr_block_context.stack_snapshots.clone();
+
+                let (cond, block_before_if, if_body_block) =
+                    self.lower_if_condition(cond_stack_block, body, &curr_block_context)?;
+
                 let stack_before_branches = self.arena.hfs_stack.clone();
 
-                let block_before_if = self.arena.cfg_context.curr_insert_block;
-                self.lower_stmt(cond_stack_block, curr_block_context.clone());
-
-                let if_body_block = self.arena.alloc_block("if_body");
-                self.arena.cfg_context.curr_insert_block = if_body_block;
-
-                // condition isnt included in the stack depth count
-                let cond = match self.arena.pop_hfs_stack() {
-                    Some(cond) => cond,
-                    None =>
-                        return cfg_analyzer_error!(
-                            CfgAnalyzerErrorKind::StackUnderflow,
-                            &self.arena,
-                            Some(&self.ast_arena),
-                            vec![self.ast_arena.get_stmt_token(body).source_info.clone()]
-                        ),
-                };
-                let cond_type = self.arena.get_type_id_of_inst(cond)?;
-                self.arena
-                    .compare_types(cond_type, self.arena.bool_type(), vec![self.arena.get_instruction(cond).get_source_info()])?;
-                let if_depth_before = self.arena.hfs_stack.len();
-
-                self.lower_stmt(body, curr_block_context.clone()); // pay attention to this call (we manage state around it)
-
-                let if_depth_after = self.arena.hfs_stack.len();
-                let if_stack_change = self.arena.hfs_stack[if_depth_after - if_depth_before..].to_vec();
-                stack_changes.push((self.arena.cfg_context.curr_insert_block, if_stack_change.clone()));
-
-                let if_end_block = if new_if_context {
-                    self.arena.alloc_block("if_end")
-                } else {
-                    // validate that we aren't getting a different stack depth
-                    self.arena.compare_stacks(
-                        &if_stack_change,
-                        &curr_block_context.prev_stack_change,
-                        if_stack_change.iter().map(|inst| self.arena.get_instruction(*inst).get_source_info()).collect(),
-                    )?;
-                    curr_block_context.end_block.expect("[internal error] forgot to set exit block for the current if stmt")
-                };
+                let (if_end_block, stack_after_if_body) =
+                    self.lower_if_body(body, &curr_block_context, matches!(if_stmt, Statement::If { .. }))?;
+                stack_snapshots.push((self.arena.cfg_context.curr_insert_block, stack_after_if_body.clone()));
 
                 if self.arena.get_block(self.arena.cfg_context.curr_insert_block).terminator.is_none() {
                     self.arena.alloc_terminator_for(
@@ -579,6 +633,8 @@ impl CfgAnalyzer {
                         self.arena.cfg_context.curr_insert_block,
                     );
                 }
+                // put the condition on the stack again for validating the other branches
+                // (it wasnt consumed in this path)
                 self.arena.push_to_hfs_stack(cond);
 
                 if let Some(else_id) = else_stmt {
@@ -611,47 +667,34 @@ impl CfgAnalyzer {
                                 continue_to_block: curr_block_context.continue_to_block,
                                 break_to_block: curr_block_context.break_to_block,
                                 end_block: Some(if_end_block),
-                                prev_stack_change: if_stack_change.clone(),
-                                stack_changes: stack_changes.clone(),
+                                prev_stack_change: stack_after_if_body.clone(),
+                                stack_snapshots: stack_snapshots.clone(),
                             };
 
                             self.arena.hfs_stack = stack_before_branches.clone(); // restore stack before else
                             self.lower_stmt(else_id, curr_block_context); // pay attention to this call (we manage state around it)
-                            let else_stack_change = self.arena.hfs_stack[stack_before_branches.len()..].to_vec();
-                            stack_changes.push((self.arena.cfg_context.curr_insert_block, else_stack_change));
+                            let else_snapshot = self.arena.hfs_stack.clone();
+                            stack_snapshots.push((self.arena.cfg_context.curr_insert_block, else_snapshot));
 
-                            if self.arena.get_block(self.arena.cfg_context.curr_insert_block).terminator.is_none() {
+                            if self.arena.get_block(self.arena.cfg_context.curr_insert_block).terminator.is_none()
+                            // if the 'else' branch already set curr_insert_block to if_end_block,
+                            // we dont want the block to jump to itself
+                            && self.arena.cfg_context.curr_insert_block != if_end_block
+                            {
                                 self.arena.alloc_terminator_for(
                                     TerminatorInst::Jump(source_info.clone(), if_end_block),
                                     self.arena.cfg_context.curr_insert_block,
                                 );
                             }
                             if is_else {
-                                // here we wanna make our phis because we are done collecting all the stacks
-                                // there always needs to exist an else at the end, otherwise the chain isn't
-                                // allowed to have a stack effect. this means we are done with the context
-                                self.arena.hfs_stack = stack_before_branches.clone();
-                                for stack_idx in 0..if_stack_change.len() {
-                                    // take all stacks and group each element with each other into a phi
-                                    // for ex: we group every 1st pushed value together for each branch
-                                    let mut incoming = HashMap::<BlockId, InstId>::new();
-                                    for (block_id, stack_change) in &stack_changes {
-                                        incoming.insert(*block_id, stack_change[stack_idx]);
-                                    }
-                                    let phi = self.arena.alloc_inst_for(
-                                        Instruction::Phi { source_info: source_info.clone(), incoming },
-                                        if_end_block,
-                                    );
-                                    self.arena.hfs_stack.push(phi);
-                                }
-                                self.arena.cfg_context.curr_insert_block = if_end_block;
+                                self.generate_merge_phis(if_end_block, &stack_snapshots, &source_info);
                             }
                             Ok(())
                         },
                         otherstmt => panic!("can't have other statements in else statement, found '{:?}'", otherstmt),
                     }
                 } else {
-                    if self.arena.hfs_stack.len() != if_depth_before {
+                    if self.arena.hfs_stack.len() != stack_before_branches.len() {
                         return cfg_analyzer_error!(
                             CfgAnalyzerErrorKind::ExpectedNetZeroStackEffectIfStmt(self.arena.hfs_stack.len()),
                             &self.arena,
@@ -708,11 +751,11 @@ impl CfgAnalyzer {
                     break_to_block: Some(while_end_block),
                     end_block: None,
                     prev_stack_change: vec![],
-                    stack_changes: vec![],
+                    stack_snapshots: vec![],
                 };
 
                 let stack_depth_before = self.arena.hfs_stack.len();
-
+                self.arena.cfg_context.curr_insert_block = while_body_block;
                 self.lower_stmt(body, curr_block_context);
 
                 // Enforce stack balance
@@ -731,6 +774,8 @@ impl CfgAnalyzer {
                         self.arena.cfg_context.curr_insert_block,
                     );
                 }
+                // dont forget to put the context where it should be after we are done with the while loop
+                self.arena.cfg_context.curr_insert_block = while_end_block;
                 Ok(())
                 //--------------------------------------------------------------------------
             },

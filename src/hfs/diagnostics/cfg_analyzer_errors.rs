@@ -74,8 +74,28 @@ impl CfgAnalyzerError {
 
 impl CompileError for CfgAnalyzerError {
     fn message(&self) -> (String, String) {
-        match self.kind {
-            CfgAnalyzerErrorKind::MismatchingStackDepths(_, _) => todo!(),
+        match &self.kind {
+            CfgAnalyzerErrorKind::StackUnderflow =>
+                (String::from("stack underflow"), String::from("stack underflow occurred here")),
+            CfgAnalyzerErrorKind::ExpectedItemOnStack => (String::from("expected item on stack"), String::new()),
+            CfgAnalyzerErrorKind::ExpectedNetZeroStackEffectIfStmt(found) => (
+                format!("expected a net-zero stack effect on all branches, found a stack depth difference of {}", found),
+                String::new(),
+            ),
+            CfgAnalyzerErrorKind::ExpectedNetZeroStackEffectWhileLoop(found) => (
+                format!("expected while loop to maintain a net-zero stack effect, found a stack depth difference of {}", found),
+                String::new(),
+            ),
+            CfgAnalyzerErrorKind::MismatchingStackDepths(expected, actual) =>
+                (format!("expected a stack depth of {}, found a stack depth of {}", expected, actual), String::new()),
+            CfgAnalyzerErrorKind::IncorrectTupleLength(expected, actual) =>
+                (format!("expected a tuple of size {}, found a tuple of size {}", expected, actual), String::new()),
+            CfgAnalyzerErrorKind::IncorrectPointerCount(expected, actual) =>
+                (format!("expected a pointer count of {}, found a pointer count of {}", expected, actual), String::new()),
+            CfgAnalyzerErrorKind::MismatchingTypes(expected, actual) =>
+                (format!("expected {}, found {}", expected, actual), format!("found {}", actual)),
+            CfgAnalyzerErrorKind::NoStatementsInGlobalScope =>
+                (String::from("statements are not allowed in the global scope"), String::new()),
         }
     }
 

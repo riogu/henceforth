@@ -5,6 +5,8 @@ use std::{
     rc::Rc,
 };
 
+use colored::{Colorize, CustomColor};
+
 use crate::{
     cfg_analyzer_error,
     hfs::{
@@ -211,7 +213,7 @@ impl IrArena {
         temp
     }
     pub fn inst_name(&self, id: InstId) -> String {
-        format!("%{}", id.0)
+        format!("{}{}", "%".custom_color(CustomColor::new(136, 151, 182)), format!("{}", id.0))
     }
     pub fn get_var(&self, id: GlobalIrVarId) -> &GlobalIrVarDeclaration {
         &self.global_vars[id.0]
@@ -256,8 +258,8 @@ impl IrArena {
         }
 
         for (inst_id1, inst_id2) in stack1.iter().zip(stack2.iter()) {
-            let type_id1 = self.get_type_id_of_inst(*inst_id1);
-            let type_id2 = self.get_type_id_of_inst(*inst_id2);
+            let type_id1 = self.get_type_id_of_inst(*inst_id1)?;
+            let type_id2 = self.get_type_id_of_inst(*inst_id2)?;
             self.compare_types(type_id1, type_id2, source_infos.clone())?;
         }
         Ok(())
@@ -548,7 +550,7 @@ impl CfgAnalyzer {
                             vec![self.ast_arena.get_stmt_token(body).source_info.clone()]
                         ),
                 };
-                let cond_type = self.arena.get_type_id_of_inst(cond);
+                let cond_type = self.arena.get_type_id_of_inst(cond)?;
                 self.arena
                     .compare_types(cond_type, self.arena.bool_type(), vec![self.arena.get_instruction(cond).get_source_info()])?;
                 let if_depth_before = self.arena.hfs_stack.len();
@@ -688,7 +690,7 @@ impl CfgAnalyzer {
                 // set up the context for lowering the while body
                 self.arena.cfg_context.curr_insert_block = while_cond_block;
                 let cond = self.lower_expr(cond)?;
-                let cond_type = self.arena.get_type_id_of_inst(cond);
+                let cond_type = self.arena.get_type_id_of_inst(cond)?;
                 self.arena
                     .compare_types(cond_type, self.arena.bool_type(), vec![self.arena.get_instruction(cond).get_source_info()])?;
                 self.arena.alloc_terminator_for(

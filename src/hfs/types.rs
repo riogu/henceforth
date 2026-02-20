@@ -1,4 +1,4 @@
-use crate::hfs::{CfgOperation, GlobalIrVarId, InstId, Instruction, IrArena, IrFuncId, ast::*, error::CompileError, token::*};
+use crate::hfs::{ast::*, error::CompileError, token::*, CfgOperation, GlobalIrVarId, InstId, Instruction, IrArena, IrFuncId};
 
 pub const PRIMITIVE_TYPE_COUNT: usize = 4;
 
@@ -109,7 +109,7 @@ impl IrArena {
     }
 
     // Only expressions have types!
-    pub fn get_type_of_operation(&mut self, op: &CfgOperation) -> TypeId {
+    pub fn get_type_of_operation(&mut self, op: &CfgOperation) -> Result<TypeId, Box<dyn CompileError>> {
         match op {
             // Arithmetic operations: return the operand type
             CfgOperation::Add(lhs, rhs)
@@ -117,12 +117,10 @@ impl IrArena {
             | CfgOperation::Mul(lhs, rhs)
             | CfgOperation::Div(lhs, rhs)
             | CfgOperation::Mod(lhs, rhs) => {
-                let lhs_type = self.get_type_id_of_inst(*lhs);
-                let rhs_type = self.get_type_id_of_inst(*rhs);
-                if let Err(err) = self.compare_types(lhs_type, rhs_type) {
-                    panic!("{}", err)
-                }
-                lhs_type
+                let lhs_type = self.get_type_id_of_inst(*lhs)?;
+                let rhs_type = self.get_type_id_of_inst(*rhs)?;
+                self.compare_types(lhs_type, rhs_type, vec![self.get_instruction(*lhs).get_source_info().clone()])?;
+                Ok(lhs_type)
             },
             CfgOperation::Or(_, _)
             | CfgOperation::And(_, _)
@@ -132,44 +130,44 @@ impl IrArena {
             | CfgOperation::Less(_, _)
             | CfgOperation::LessEqual(_, _)
             | CfgOperation::Greater(_, _)
-            | CfgOperation::GreaterEqual(_, _) => self.bool_type(),
+            | CfgOperation::GreaterEqual(_, _) => Ok(self.bool_type()),
         }
     }
 
-    pub fn get_type_id_of_inst(&mut self, inst_id: InstId) -> TypeId {
+    pub fn get_type_id_of_inst(&mut self, inst_id: InstId) -> Result<TypeId, Box<dyn CompileError>> {
         match self.get_instruction(inst_id).clone() {
-            Instruction::Operation(source_info, operation) => self.get_type_of_operation(&operation),
+            Instruction::Operation(source_info, operation) => Ok(self.get_type_of_operation(&operation)?),
             Instruction::Literal(source_info, literal) => match literal {
-                Literal::Integer(_) => self.int_type(),
-                Literal::Float(_) => self.float_type(),
-                Literal::String(_) => self.string_type(),
-                Literal::Bool(_) => self.bool_type(),
+                Literal::Integer(_) => Ok(self.int_type()),
+                Literal::Float(_) => Ok(self.float_type()),
+                Literal::String(_) => Ok(self.string_type()),
+                Literal::Bool(_) => Ok(self.bool_type()),
             },
             Instruction::Tuple { source_info, instructions } => {
                 // Build tuple type from element types
                 let mut element_types = Vec::new();
                 for inst_id in instructions.clone() {
-                    let elem_type = self.get_type_id_of_inst(inst_id);
+                    let elem_type = self.get_type_id_of_inst(inst_id)?;
                     element_types.push(elem_type);
                 }
 
                 let tuple_type = Type::Tuple { type_ids: element_types, ptr_count: 0 };
-                self.alloc_type(tuple_type, source_info.clone())
+                Ok(self.alloc_type(tuple_type, source_info.clone()))
             },
-            Instruction::Parameter { source_info, index, type_id } => type_id,
+            Instruction::Parameter { source_info, index, type_id } => Ok(type_id),
             Instruction::FunctionCall { source_info, args, func_id, is_move, return_values } =>
-                self.get_func(func_id).return_type,
-            Instruction::Phi { source_info, incoming } => todo!(),
-            Instruction::StackKeyword { .. } => todo!(),
-            Instruction::LoadElement { source_info, index, tuple } => todo!(),
-            Instruction::ReturnValue { source_info, type_id } => type_id,
-            Instruction::Load { source_info, address, type_id } => type_id,
-            Instruction::Store { source_info, address, value } => self.get_type_id_of_inst(value),
+                Ok(self.get_func(func_id).return_type),
+            Instruction::Phi { source_info, incoming } => Ok(todo!()),
+            Instruction::StackKeyword { .. } => Ok(todo!()),
+            Instruction::LoadElement { source_info, index, tuple } => Ok(todo!()),
+            Instruction::ReturnValue { source_info, type_id } => Ok(type_id),
+            Instruction::Load { source_info, address, type_id } => Ok(type_id),
+            Instruction::Store { source_info, address, value } => Ok(self.get_type_id_of_inst(value)?),
             Instruction::Alloca { source_info, type_id } => {
                 // implement this later
-                panic!("[internal error] asked for the type of an alloca instruction but i don't see why this would happen")
+                Ok(panic!("[internal error] asked for the type of an alloca instruction but i don't see why this would happen"))
             },
-            Instruction::GlobalAlloca(global_ir_var_id) => todo!(),
+            Instruction::GlobalAlloca(global_ir_var_id) => Ok(todo!()),
         }
     }
     pub fn get_type_of_var(&self, var_id: GlobalIrVarId) -> &Type {
@@ -179,9 +177,9 @@ impl IrArena {
         self.get_type(self.get_func(func_id).return_type)
     }
 
-    pub fn get_type_of_inst(&mut self, inst_id: InstId) -> &Type {
-        let type_id = self.get_type_id_of_inst(inst_id);
-        self.get_type(type_id)
+    pub fn get_type_of_inst(&mut self, inst_id: InstId) -> Result<&Type, Box<dyn CompileError>> {
+        let type_id = self.get_type_id_of_inst(inst_id)?;
+        Ok(self.get_type(type_id))
     }
 
     // returns itself with the pointer count reduced by one

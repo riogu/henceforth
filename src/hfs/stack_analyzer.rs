@@ -431,11 +431,11 @@ impl StackAnalyzer {
                 // we pop until they differ, so if we had [1, 2, 3] and [1, Add(2, 3)]
                 // we would pop the 1 ending up with [Add(2, 3)]
                 let mut expr_ids = Vec::<ExprId>::new();
-                let stack_change = self.arena.get_stack_change(stack_start, self.arena.hfs_stack.clone());
+                let (stack_change, consumed_count) = self.arena.get_stack_change(stack_start, self.arena.hfs_stack.clone());
                 for &expr_id in &stack_change {
                     expr_ids.push(expr_id);
                 }
-                Ok(self.arena.alloc_stmt(Statement::StackBlock(expr_ids), token))
+                Ok(self.arena.alloc_stmt(Statement::StackBlock { expr_ids, consumed_count }, token))
             },
             UnresolvedStatement::BlockScope(unresolved_top_level_ids, scope_kind) => {
                 // FIXME: this needs to stop when it finds return/continue/break, just like
@@ -526,6 +526,10 @@ impl StackAnalyzer {
                     arg_types.push(self.arena.get_type_id_of_expr(arg_expr)?);
                     arg_count += 1;
                 }
+                // must reverse because we pop therefore we have our arguments backwards
+                // from what the type was written as (this is the language semantics of a "stack view")
+                arg_types.reverse();
+                arg_expr_tokens.reverse();
                 let arg_type_id = self.arena.alloc_type(Type::Tuple { type_ids: arg_types, ptr_count: 0 }, Token {
                     kind: TokenKind::LeftParen,
                     source_info: SourceInfo::new(0, 0, 0),
@@ -816,10 +820,10 @@ mod tests {
     use pretty_assertions::assert_eq;
 
     use crate::hfs::{
+        AstArena, Type,
         builder::builder::{Builder, BuilderOperation, ControlFlowOps, FunctionOps, LoopOps, PassMode, StackOps, VariableOps},
         stack_analyzer_builder::StackAnalyzerBuilder,
-        utils::{run_until, Phase},
-        AstArena, Type,
+        utils::{Phase, run_until},
     };
 
     fn analyze_file(name: &str) -> AstArena {

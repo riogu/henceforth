@@ -617,11 +617,11 @@ impl CfgAnalyzer {
             | if_stmt @ Statement::If { cond_stack_block, body, else_stmt } => {
                 // means we are starting a new chain of ifs
                 let mut stack_snapshots = curr_block_context.stack_snapshots.clone();
+                let stack_before_branches = self.arena.hfs_stack.clone();
 
                 let (cond, block_before_if, if_body_block) =
                     self.lower_if_condition(cond_stack_block, body, &curr_block_context)?;
-
-                let stack_before_branches = self.arena.hfs_stack.clone();
+                dbg!(&self.arena.hfs_stack);
 
                 let (if_end_block, stack_after_if_body) =
                     self.lower_if_body(body, &curr_block_context, matches!(if_stmt, Statement::If { .. }))?;
@@ -633,9 +633,6 @@ impl CfgAnalyzer {
                         self.arena.cfg_context.curr_insert_block,
                     );
                 }
-                // put the condition on the stack again for validating the other branches
-                // (it wasnt consumed in this path)
-                self.arena.push_to_hfs_stack(cond);
 
                 if let Some(else_id) = else_stmt {
                     let else_stmt = self.ast_arena.get_stmt(else_id);
@@ -667,7 +664,7 @@ impl CfgAnalyzer {
                                 continue_to_block: curr_block_context.continue_to_block,
                                 break_to_block: curr_block_context.break_to_block,
                                 end_block: Some(if_end_block),
-                                prev_stack_change: stack_after_if_body.clone(),
+                                prev_stack_change: stack_after_if_body,
                                 stack_snapshots: stack_snapshots.clone(),
                             };
 
@@ -779,7 +776,7 @@ impl CfgAnalyzer {
                 Ok(())
                 //--------------------------------------------------------------------------
             },
-            Statement::StackBlock(expr_ids) =>
+            Statement::StackBlock { expr_ids, consumed_count } =>
             /* @(1 2 3)
                if @(1 2 <) {
                    let var: i32;
@@ -795,6 +792,9 @@ impl CfgAnalyzer {
                }
             */
             {
+                for _ in 0..consumed_count {
+                    self.arena.pop_hfs_stack();
+                }
                 for expr_id in expr_ids {
                     // we add stack operations as standalone instructions in the current block (just like normal SSA)
                     // the stack semantics are validated but they act "like local variables"
@@ -804,7 +804,6 @@ impl CfgAnalyzer {
                 Ok(())
             },
             Statement::BlockScope(top_level_ids, scope_kind) => {
-                // eprintln!("BlockScope top_level_ids: {:?}", top_level_ids);
                 for top_level_id in top_level_ids.clone() {
                     match top_level_id {
                         TopLevelId::VariableDecl(var_id) => {
@@ -933,6 +932,10 @@ impl CfgAnalyzer {
                     };
                     inst_args.push(arg_inst);
                 }
+                inst_args.reverse(); // we reverse because we were popping the stack
+                // and we want the syntax to work left->right to be more readable and match the
+                // expectations of the stated type of the function that works as a "view" into the
+                // stack, not as a popped argments mechanics
                 let func_id = match self.arena.func_id_map.get(&func_id) {
                     Some(func_id) => *func_id,
                     None => panic!("[internal error] tried making a function call before creating the associated IrFuncId"),

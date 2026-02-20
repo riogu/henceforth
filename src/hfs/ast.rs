@@ -1,6 +1,6 @@
 use std::{collections::HashMap, default, fmt::Display, rc::Rc};
 
-use crate::hfs::{error::DiagnosticInfo, token::*, RuntimeValue, ScopeKind, UnresolvedAstArena};
+use crate::hfs::{RuntimeValue, ScopeKind, UnresolvedAstArena, error::DiagnosticInfo, token::*};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct VarId(pub usize);
@@ -137,7 +137,10 @@ pub enum Statement {
         cond: ExprId, // boolean from the stack or operation
         body: StmtId, // points to BlockScope
     },
-    StackBlock(Vec<ExprId>),
+    StackBlock {
+        expr_ids: Vec<ExprId>,
+        consumed_count: usize,
+    },
     BlockScope(Vec<TopLevelId>, ScopeKind),
     Return,
     Break,
@@ -356,10 +359,11 @@ impl AstArena {
         // If not, allocate it
         self.alloc_type_uncached(hfs_type, token)
     }
-    pub fn get_stack_change(&self, stack_start: Vec<ExprId>, mut hfs_stack: Vec<ExprId>) -> Vec<ExprId> {
-        let elements_to_delete = hfs_stack.iter().zip(&stack_start).take_while(|(a, b)| a == b).count();
-        hfs_stack.drain(0..elements_to_delete);
-        hfs_stack
+    pub fn get_stack_change(&self, stack_start: Vec<ExprId>, mut hfs_stack: Vec<ExprId>) -> (Vec<ExprId>, usize) {
+        let common_prefix = hfs_stack.iter().zip(&stack_start).take_while(|(a, b)| a == b).count();
+        hfs_stack.drain(0..common_prefix);
+        let consumed_count = stack_start.len() - common_prefix;
+        (hfs_stack, consumed_count)
     }
     //---------------------------------------------------------------------------------
     // provenance methods

@@ -3,8 +3,8 @@ use std::{fmt::Display, fs, path::PathBuf};
 use colored::{ColoredString, Colorize, CustomColor};
 
 use crate::hfs::{
-    error::{number_length, CompileError, DebugInfo, Dumpable},
     AstArena, Expression, FunctionDeclaration, Identifier, Operation, SourceInfo, Statement, TopLevelId, Type, VarDeclaration,
+    error::{CompileError, DebugInfo, Dumpable, number_length},
 };
 
 #[derive(Debug)]
@@ -535,7 +535,7 @@ impl Dumpable for Statement {
                 "Body:".blue(),
                 indent(&arena.get_stmt(*body).dump(arena)),
             )),
-            Statement::StackBlock(unresolved_expr_ids) => {
+            Statement::StackBlock { expr_ids: unresolved_expr_ids, consumed_count } => {
                 let items: Vec<ColoredString> = unresolved_expr_ids.iter().map(|id| arena.get_expr(*id).dump(arena)).collect();
                 ColoredString::from(format!(
                     "\n{}\n\t{}\n\t{}\n\t{}\n\t{}",

@@ -1,6 +1,7 @@
 
 fn fizz_buzz: (i32 str) -> (str i32 i32) {
-    @pop;
+    let var: str; &= var;
+    // @pop
     if @(15 % 0 ==) {
         @("fizzbuzz" 213 321)
     } else if @(3 % 0 ==) {
@@ -8,7 +9,7 @@ fn fizz_buzz: (i32 str) -> (str i32 i32) {
     } else if @(5 % 0 ==) {
         @("buzz" 69 433)
     } else {
-        @pop;
+        @pop
         @("no fizzbuzz" 42069 2323)
     }
 }
@@ -23,3 +24,4 @@ fn main: () -> () {
     @pop;
     @pop;
 }
+

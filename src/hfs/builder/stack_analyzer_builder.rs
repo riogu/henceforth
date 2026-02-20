@@ -1,10 +1,10 @@
 use std::{collections::HashMap, path::PathBuf, rc::Rc};
 
 use crate::hfs::{
-    builder::builder::{Builder, BuilderOperation, ControlFlowOps, FunctionOps, LoopOps, PassMode, StackOps, VariableOps},
-    error::DiagnosticInfo,
     AstArena, ExprId, ExprProvenance, Expression, FuncId, FunctionDeclaration, Identifier, Literal, Operation, ScopeKind,
     SourceInfo, StackKeyword, Statement, StmtId, Token, TokenKind, TopLevelId, Type, TypeId, VarDeclaration, VarId,
+    builder::builder::{Builder, BuilderOperation, ControlFlowOps, FunctionOps, LoopOps, PassMode, StackOps, VariableOps},
+    error::DiagnosticInfo,
 };
 
 pub struct StackAnalyzerBuilder {
@@ -170,7 +170,7 @@ impl StackOps for StackAnalyzerBuilder {
     fn end_stack_block(mut self, semicolon: bool) -> Self {
         if let Some(BuilderContext::StackBlock) = self.context_stack.pop() {
             let exprs = std::mem::take(&mut self.stack_block_exprs);
-            let stmt = Statement::StackBlock(exprs);
+            let stmt = Statement::StackBlock { expr_ids: exprs, consumed_count: todo!("joao you gotta figure this one out man") };
             let stmt_id = self.arena.alloc_stmt(stmt, Self::dummy_token());
 
             if let Some(BuilderContext::BlockScope { items, .. }) = self.context_stack.last_mut() {

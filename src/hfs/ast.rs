@@ -24,6 +24,16 @@ pub enum Identifier {
     Function(FuncId),
 }
 
+impl Identifier {
+    pub fn get_source_info(&self, arena: &AstArena) -> SourceInfo {
+        match self {
+            Identifier::GlobalVar(var_id) => arena.get_var_token(*var_id).source_info.clone(),
+            Identifier::Variable(var_id) => arena.get_var_token(*var_id).source_info.clone(),
+            Identifier::Function(func_id) => arena.get_function_token(*func_id).source_info.clone(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Operation {
     Add(ExprId, ExprId),

@@ -207,7 +207,11 @@ impl Dumpable for FunctionDeclaration {
             "Return type:".blue(),
             indent(&arena.get_type(self.return_type).dump_resolved(arena)).yellow(),
             "Body:".blue(),
-            indent(&arena.get_stmt(self.body).dump(arena)),
+            if self.body.0 < arena.stmts.len() {
+                indent(&arena.get_stmt(self.body).dump(arena))
+            } else {
+                indent(&format!("Body Unresolved").yellow())
+            },
             "Parameter Exprs:".blue(),
             "[".custom_color(CustomColor::new(129, 137, 150)),
             indent_list(&items),

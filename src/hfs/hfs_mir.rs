@@ -1,9 +1,9 @@
 use std::{
     collections::HashMap,
-    fmt::{Display, format},
+    fmt::{format, Display},
 };
 
-use crate::hfs::{IrArena, Literal, SourceInfo, ast::*};
+use crate::hfs::{ast::*, IrArena, Literal, SourceInfo};
 /*
 =================================================================================================
 Control Flow Graph IR Pass (HFS MIR - Medium-level IR)
@@ -126,6 +126,25 @@ pub enum Instruction {
         index: usize,
         tuple: InstId,
     },
+}
+impl Instruction {
+    pub(crate) fn get_source_info(&self) -> SourceInfo {
+        match self {
+            Instruction::Load { source_info, address, type_id } => source_info.clone(),
+            Instruction::Store { source_info, address, value } => source_info.clone(),
+            Instruction::Alloca { source_info, type_id } => source_info.clone(),
+            Instruction::GlobalAlloca(global_ir_var_id) => todo!(),
+            Instruction::Parameter { source_info, index, type_id } => source_info.clone(),
+            Instruction::ReturnValue { source_info, type_id } => source_info.clone(),
+            Instruction::FunctionCall { source_info, args, func_id, is_move, return_values } => source_info.clone(),
+            Instruction::Phi { source_info, incoming } => source_info.clone(),
+            Instruction::StackKeyword { source_info, name, args } => source_info.clone(),
+            Instruction::Tuple { source_info, instructions } => source_info.clone(),
+            Instruction::Operation(source_info, cfg_operation) => source_info.clone(),
+            Instruction::Literal(source_info, literal) => source_info.clone(),
+            Instruction::LoadElement { source_info, index, tuple } => source_info.clone(),
+        }
+    }
 }
 
 // Terminator instructions, separated from the others

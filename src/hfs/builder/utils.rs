@@ -70,7 +70,7 @@ pub fn run_until(filename: &str, phase: Phase) -> Result<Rc<dyn Byproduct>, Box<
         return Ok(Rc::new(ast_arena));
     }
 
-    let (_, inst_arena) = CfgAnalyzer::lower_to_mir(top_level_nodes, ast_arena);
+    let (_, inst_arena) = CfgAnalyzer::lower_to_mir(top_level_nodes, ast_arena, diagnostic_info.clone())?;
 
     if phase == Phase::CfgAnalyzer {
         return Ok(Rc::new(inst_arena));

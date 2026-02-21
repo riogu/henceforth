@@ -422,7 +422,90 @@ impl CfgPrintable for BasicBlock {
         parts.join("\n").into()
     }
 }
+
+fn strip_ansi(s: &str) -> String {
+    let mut out = String::new();
+    let mut chars = s.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '\x1b' {
+            for c in chars.by_ref() {
+                if c == 'm' {
+                    break;
+                }
+            }
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
 impl IrArena {
+    pub fn generate_dot(&self, top_level: &Vec<CfgTopLevelId>) -> String {
+        let mut out = String::from("digraph CFG {\n");
+        out.push_str("    node [shape=box fontname=\"Monospace\"]\n");
+
+        for node in top_level {
+            let CfgTopLevelId::FunctionDecl(func_id) = node else {
+                continue;
+            };
+            let func = self.get_func(*func_id);
+
+            out.push_str(&format!("    subgraph cluster_{} {{\n", func.name));
+            out.push_str(&format!("        label=\"fn {}\";\n", func.name));
+
+            let blocks = func.collect_blocks(self);
+
+            for block in &blocks {
+                let mut label_lines = vec![format!("{}:", block.name)];
+
+                for inst_id in &block.instructions {
+                    let inst = self.get_instruction(*inst_id);
+                    label_lines.push(format!("%{} = {}", inst_id.0, strip_ansi(&inst.get_repr(self).to_string())));
+                }
+
+                if let Some(term_id) = block.terminator {
+                    label_lines.push(strip_ansi(&self.get_terminator_instruction(term_id).get_repr(self).to_string()));
+                }
+
+                let label = label_lines.join("\\l");
+                let label = label.replace('"', "\\\"");
+                out.push_str(&format!("        {}_{} [label=\"{}\\l\"];\n", func.name, block.name, label));
+            }
+
+            for block in &blocks {
+                let Some(term_id) = block.terminator else {
+                    continue;
+                };
+                let src = format!("{}_{}\n", func.name, block.name);
+
+                match self.get_terminator_instruction(term_id) {
+                    TerminatorInst::Branch { true_block, false_block, .. } => {
+                        let t = self.get_block(*true_block);
+                        let f = self.get_block(*false_block);
+                        out.push_str(&format!(
+                            "        {}_{} -> {}_{} [label=\"true\"];\n",
+                            func.name, block.name, func.name, t.name
+                        ));
+                        out.push_str(&format!(
+                            "        {}_{} -> {}_{} [label=\"false\"];\n",
+                            func.name, block.name, func.name, f.name
+                        ));
+                    },
+                    TerminatorInst::Jump(_, target) => {
+                        let t = self.get_block(*target);
+                        out.push_str(&format!("        {}_{} -> {}_{};\n", func.name, block.name, func.name, t.name));
+                    },
+                    TerminatorInst::Return(..) | TerminatorInst::Unreachable => {},
+                }
+            }
+
+            out.push_str("    }\n");
+        }
+
+        out.push_str("}\n");
+        out
+    }
     pub fn dump(&self, top_level: &Vec<CfgTopLevelId>) {
         eprintln!("total blocks: {}", self.blocks.len());
         for (i, block) in self.blocks.iter().enumerate() {
@@ -440,5 +523,8 @@ impl IrArena {
                 CfgTopLevelId::FunctionDecl(id) => println!("{}", self.get_func(*id).get_repr(self)),
             }
         }
+        let dot = self.generate_dot(top_level);
+        std::fs::write("cfg.dot", &dot).unwrap();
+        eprintln!("\nWrote DOT file to cfg.dot. Run `dot -Tpng cfg.dot -o cfg.png` to convert into an image.");
     }
 }

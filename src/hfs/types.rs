@@ -1,4 +1,4 @@
-use crate::hfs::{ast::*, error::CompileError, token::*, CfgOperation, GlobalIrVarId, InstId, Instruction, IrArena, IrFuncId};
+use crate::hfs::{CfgOperation, GlobalIrVarId, InstId, Instruction, IrArena, IrFuncId, ast::*, error::CompileError, token::*};
 
 pub const PRIMITIVE_TYPE_COUNT: usize = 4;
 
@@ -157,7 +157,9 @@ impl IrArena {
             Instruction::Parameter { source_info, index, type_id } => Ok(type_id),
             Instruction::FunctionCall { source_info, args, func_id, is_move, return_values } =>
                 Ok(self.get_func(func_id).return_type),
-            Instruction::Phi { source_info, incoming } => Ok(todo!()),
+            Instruction::Phi { source_info, incoming } => Ok(self.get_type_id_of_inst(
+                *incoming.values().next().expect("[internal error] found phi with no elements in type checking"),
+            )?),
             Instruction::StackKeyword { .. } => Ok(todo!()),
             Instruction::LoadElement { source_info, index, tuple } => Ok(todo!()),
             Instruction::ReturnValue { source_info, type_id } => Ok(type_id),

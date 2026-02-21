@@ -18,7 +18,6 @@ use crate::{
     },
 };
 
-// here is where youll create the CFG pass and the new IR generation
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct BlockContext {

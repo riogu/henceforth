@@ -1,0 +1,10 @@
+fn main: () -> () {
+    let var: i32;
+    let ptr: i32*;
+    let ptrptr: i32**;
+    @(10) &= var;
+    @(var&) &= ptr^;
+    @(ptr&) &= ptrptr^;
+    @(777) &= ptrptr^^;
+    return;
+}

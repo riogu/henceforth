@@ -67,26 +67,6 @@ The compiler's middle-end is being built around an SSA-form MIR with explicit co
 
 **Backend (planned):** LLVM IR generation from optimized MIR.
 
-## Project Structure
-
-```
-src/hfs/
-├── lexer.rs              # Tokenization
-├── token.rs              # Token definitions
-├── parser.rs             # Recursive descent parser, produces unresolved AST
-├── unresolved_ast.rs     # First-pass AST before name resolution
-├── stack_analyzer.rs     # Stack analysis, identifier resolution, type checking
-├── ast.rs                # Resolved AST
-├── scope_stack.rs        # Symbol table / scope resolution
-├── types.rs              # Type system
-├── cfg_analyzer.rs       # CFG construction and stack validation
-├── hfs_mir.rs            # SSA-form mid-level IR
-├── interpreter.rs        # MIR interpreter
-├── ast_interpreter.rs    # AST tree-walking interpreter
-├── diagnostics/          # Error reporting
-└── builder/              # Test infrastructure
-```
-
 ## Documentation
 
 Language specification and usage docs at [riogu.github.io/henceforth](https://riogu.github.io/henceforth).

@@ -835,6 +835,14 @@ impl StackAnalyzer {
                 self.arena.alloc_and_push_to_hfs_stack(b_expr, ExprProvenance::RuntimeValue, token);
                 Ok(())
             },
+            "@rev" => {
+                while !self.arena.hfs_stack.is_empty() {
+                    let id = self.arena.pop_or_error(vec![token.clone()])?;
+                    let expr = self.arena.get_expr(id).clone();
+                    self.arena.alloc_and_push_to_hfs_stack(expr, ExprProvenance::RuntimeValue, token.clone());
+                }
+                Ok(())
+            },
             "@print" => Ok(()),
             _ => {
                 panic!("[internal error] invalid stack keyword")
@@ -850,10 +858,10 @@ mod tests {
     use pretty_assertions::assert_eq;
 
     use crate::hfs::{
-        AstArena, Type,
         builder::builder::{Builder, BuilderOperation, ControlFlowOps, FunctionOps, LoopOps, PassMode, StackOps, VariableOps},
         stack_analyzer_builder::StackAnalyzerBuilder,
-        utils::{Phase, run_until},
+        utils::{run_until, Phase},
+        AstArena, Type,
     };
 
     fn analyze_file(name: &str) -> AstArena {

@@ -543,12 +543,12 @@ impl StackAnalyzer {
                 };
                 let mut return_values = Vec::new();
                 for type_id in return_types.clone() {
-                    self.arena.alloc_and_push_to_hfs_stack(
+                    return_values.push(self.arena.alloc_and_push_to_hfs_stack(
                         Expression::ReturnValue(type_id),
                         ExprProvenance::RuntimeValue,
                         token.clone(), // TODO: (joao) some tokens are kinda not precise enough for error reporting.
                                        // you will wanna get more pinpointed tokens for better location info
-                    );
+                    ));
                 }
                 // function calls dont go to the stack
                 Ok(self.arena.alloc_stmt(Statement::FunctionCall { arg_count, func_id, is_move, return_values }, token))
@@ -850,10 +850,10 @@ mod tests {
     use pretty_assertions::assert_eq;
 
     use crate::hfs::{
+        AstArena, Type,
         builder::builder::{Builder, BuilderOperation, ControlFlowOps, FunctionOps, LoopOps, PassMode, StackOps, VariableOps},
         stack_analyzer_builder::StackAnalyzerBuilder,
-        utils::{run_until, Phase},
-        AstArena, Type,
+        utils::{Phase, run_until},
     };
 
     fn analyze_file(name: &str) -> AstArena {

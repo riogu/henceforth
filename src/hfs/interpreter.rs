@@ -190,10 +190,11 @@ impl Interpreter {
                 )
             },
             Instruction::ReturnValue { source_info, type_id } => {
-                panic!(
-                    "[internal error] found unbound 'Instruction::ReturnValue'. a ReturnValue should be bound to a value before \
-                     being interpreted"
-                )
+                RuntimeValue::default(self.arena.get_type(*type_id))
+                // panic!(
+                //     "[internal error] found unbound 'Instruction::ReturnValue'. a ReturnValue should be bound to a value before \
+                //      being interpreted"
+                // )
             },
             Instruction::FunctionCall { source_info, args, func_id, is_move, return_values } => {
                 let mut arg_values = Vec::new();

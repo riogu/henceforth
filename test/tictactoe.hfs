@@ -1,0 +1,146 @@
+// builtin lmaoooooo
+fn print: (str) -> (str) {}
+fn empty_board : () -> (str str str str str str str str str) { 
+    @(" "" "" "" "" "" "" "" "" ") 
+}
+
+fn print_board: (str str str str str str str str str) -> () {
+    let arg9: str; &= arg9;
+    let arg8: str; &= arg8;
+    let arg7: str; &= arg7;
+    let arg6: str; &= arg6;
+    let arg4: str; &= arg4;
+    let arg5: str; &= arg5;
+    let arg3: str; &= arg3;
+    let arg2: str; &= arg2;
+    let arg1: str; &= arg1;
+    @("next move:\n") &> print;
+    @(" |-----------|\n")    &> print;
+    @(" | ") &> print; @(arg1) &> print; @(" | ") &> print; @(arg2) &> print; @(" | ") &> print; @(arg3) &> print; @(" |\n") &> print;
+    @(" |-----------|\n")    &> print;
+    @(" | ") &> print; @(arg4) &> print; @(" | ") &> print; @(arg5) &> print; @(" | ") &> print; @(arg6) &> print; @(" |\n") &> print;
+    @(" |-----------|\n")    &> print;
+    @(" | ") &> print; @(arg7) &> print; @(" | ") &> print; @(arg8) &> print; @(" | ") &> print; @(arg9) &> print; @(" |\n") &> print;
+    @(" |-----------|\n")  &> print;
+    @pop_all;
+}
+
+fn tic_tac_toe: (str str str str str str str str str i32 str) -> (str str str str str str str str str) {
+
+    let player: str; &= player;
+    let board_pos: i32; &= board_pos;
+
+    let arg9: str; &= arg9;
+    let arg8: str; &= arg8;
+    let arg7: str; &= arg7;
+    let arg6: str; &= arg6;
+    let arg4: str; &= arg4;
+    let arg5: str; &= arg5;
+    let arg3: str; &= arg3;
+    let arg2: str; &= arg2;
+    let arg1: str; &= arg1;
+
+    if @(board_pos 1 ==) {
+        @(player) &= arg1;
+    } else if @(board_pos 2 ==) {
+        @(player) &= arg2;
+    } else if @(board_pos 3 ==) {
+        @(player) &= arg3;
+    } else if @(board_pos 4 ==) {
+        @(player) &= arg4;
+    } else if @(board_pos 5 ==) {
+        @(player) &= arg5;
+    } else if @(board_pos 6 ==) {
+        @(player) &= arg6;
+    } else if @(board_pos 7 ==) {
+        @(player) &= arg7;
+    } else if @(board_pos 8 ==) {
+        @(player) &= arg8;
+    } else if @(board_pos 9 ==) {
+        @(player) &= arg9;
+    } else { }
+    @(arg1 arg2 arg3 arg4 arg5 arg6 arg7 arg8 arg9) &> print_board;
+    @(arg1 arg2 arg3 arg4 arg5 arg6 arg7 arg8 arg9)
+}
+
+
+fn get_winner: (str str str str str str str str str) -> (str) {
+    let arg9: str; &= arg9;
+    let arg8: str; &= arg8;
+    let arg7: str; &= arg7;
+    let arg6: str; &= arg6;
+    let arg4: str; &= arg4;
+    let arg5: str; &= arg5;
+    let arg3: str; &= arg3;
+    let arg2: str; &= arg2;
+    let arg1: str; &= arg1;
+    if @( 
+         // horizontal win
+         arg1 "X" ==  arg2 "X" == && arg3 "X" == &&
+         arg4 "X" ==  arg5 "X" == && arg6 "X" == &&
+         ||
+         arg7 "X" ==  arg8 "X" == && arg9 "X" == &&
+         ||
+         //  diagonal win
+         arg1 "X" ==  arg5 "X" == && arg9 "X" == &&
+         ||
+         arg3 "X" ==  arg5 "X" == && arg7 "X" == &&
+         ||
+         //  vertical win
+         arg1 "X" ==  arg4 "X" == && arg7 "X" == &&
+         ||
+         arg2 "X" ==  arg5 "X" == && arg8 "X" == &&
+         ||
+         arg3 "X" ==  arg6 "X" == && arg9 "X" == &&
+         ||
+        ) { 
+        @("the winner was player 'X'!\n") 
+    } else if @(
+         // horizontal win
+         arg1 "O" ==  arg2 "O" == && arg3 "O" == &&
+         arg4 "O" ==  arg5 "O" == && arg6 "O" == &&
+         ||
+         arg7 "O" ==  arg8 "O" == && arg9 "O" == &&
+         ||
+         //  diagonal win
+         arg1 "O" ==  arg5 "O" == && arg9 "O" == &&
+         ||
+         arg3 "O" ==  arg5 "O" == && arg7 "O" == &&
+         ||
+         //  vertical win
+         arg1 "O" ==  arg4 "O" == && arg7 "O" == &&
+         ||
+         arg2 "O" ==  arg5 "O" == && arg8 "O" == &&
+         ||
+         arg3 "O" ==  arg6 "O" == && arg9 "O" == &&
+         ||
+        ) {
+        @("the winner was player 'O'!\n") 
+    } else {
+        @pop_all @("no one won!\n")
+    }
+
+}
+
+fn main: () -> () {
+    &> empty_board;
+    let arg9: str; &= arg9;
+    let arg8: str; &= arg8;
+    let arg7: str; &= arg7;
+    let arg6: str; &= arg6;
+    let arg4: str; &= arg4;
+    let arg5: str; &= arg5;
+    let arg3: str; &= arg3;
+    let arg2: str; &= arg2;
+    let arg1: str; &= arg1;
+
+    @(arg1 arg2 arg3 arg4 arg5 arg6 arg7 arg8 arg9)
+    @(4 "X") &> tic_tac_toe;
+    @(1 "O") &> tic_tac_toe;
+    @(2 "O") &> tic_tac_toe;
+    @(3 "O") &> tic_tac_toe;
+    &> get_winner; &> print;
+    @pop_all
+}
+
+

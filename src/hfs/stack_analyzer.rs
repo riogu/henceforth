@@ -753,7 +753,12 @@ impl StackAnalyzer {
                 Ok(self.arena.alloc_and_push_to_hfs_stack(Expression::Operation(Operation::Not(expr)), provenance, token))
             },
             UnresolvedOperation::Dereference => Ok(todo!()),
-            UnresolvedOperation::AddressOf => Ok(todo!()),
+            UnresolvedOperation::AddressOf => {
+                // let expr = self.arena.pop_or_error(vec![token.clone()])?;
+                // let provenance = *self.arena.get_expr_provenance(expr);
+                Ok(todo!())
+                // Ok(self.arena.alloc_and_push_to_hfs_stack(Expression::Operation(Operation::Not(expr)), , token))
+            },
             _ => Ok(panic!("[internal error] missing semantic analysis for unary operation '{:?}'", op)),
         }
     }

@@ -141,14 +141,14 @@ impl Interpreter {
         if func.name == "print" {
             for arg in &args {
                 match arg {
-                    RuntimeValue::Integer(v) => println!("{}", v),
-                    RuntimeValue::Float(v) => println!("{}", v),
-                    RuntimeValue::String(v) => println!("{}", v),
-                    RuntimeValue::Bool(v) => println!("{}", v),
+                    RuntimeValue::Integer(v) => print!("{}", v),
+                    RuntimeValue::Float(v) => print!("{}", v),
+                    RuntimeValue::String(v) => print!("{}", v),
+                    RuntimeValue::Bool(v) => print!("{}", v),
                     RuntimeValue::Tuple(runtime_values) => {
                         dbg!(runtime_values);
                     },
-                    RuntimeValue::Address(inst_id) => println!("{:?}", inst_id),
+                    RuntimeValue::Address(inst_id) => print!("{:?}", inst_id),
                 }
             }
         }

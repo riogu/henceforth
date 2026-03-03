@@ -218,11 +218,6 @@ impl Interpreter {
                 } else {
                     panic!("[internal error] reached phi without going through one of its predecessor blocks")
                 },
-            Instruction::StackKeyword { source_info, name, args } =>
-            // NOTE: in my opinion, StackKeywords shouldnt exist in MIR. we should create MIR that
-            // is the result of each StackKeyword in cfg_analyzer instead. if you do this,
-            // eliminate this instruction
-                todo!("joao implement this however you like."),
             Instruction::Tuple { source_info, instructions } => {
                 let mut runtime_values = Vec::<RuntimeValue>::new();
                 for inst_id in instructions.clone() {

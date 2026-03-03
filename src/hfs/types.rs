@@ -159,7 +159,6 @@ impl IrArena {
             Instruction::Phi { source_info, incoming } => Ok(self.get_type_id_of_inst(
                 *incoming.values().next().expect("[internal error] found phi with no elements in type checking"),
             )?),
-            Instruction::StackKeyword { .. } => Ok(todo!()),
             Instruction::LoadElement { source_info, index, tuple } => Ok(todo!()),
             Instruction::ReturnValue { source_info, type_id } => Ok(type_id),
             Instruction::Load { source_info, address, type_id } => Ok(type_id),

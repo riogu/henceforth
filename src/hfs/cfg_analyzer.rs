@@ -10,12 +10,11 @@ use colored::{Colorize, CustomColor};
 use crate::{
     cfg_analyzer_error,
     hfs::{
-        self,
+        self, BasicBlock, BlockId, CfgFunction, CfgOperation, CfgPrintable, CfgTopLevelId, GlobalIrVarDeclaration, GlobalIrVarId,
+        InstId, Instruction, IrFuncId, Literal, PRIMITIVE_TYPE_COUNT, SourceInfo, TermInstId, TerminatorInst, Token, TokenKind,
         ast::*,
         cfg_analyzer_errors::{CfgAnalyzerError, CfgAnalyzerErrorKind},
         error::{CompileError, DiagnosticInfo},
-        BasicBlock, BlockId, CfgFunction, CfgOperation, CfgPrintable, CfgTopLevelId, GlobalIrVarDeclaration, GlobalIrVarId,
-        InstId, Instruction, IrFuncId, Literal, SourceInfo, TermInstId, TerminatorInst, Token, TokenKind, PRIMITIVE_TYPE_COUNT,
     },
 };
 
@@ -87,6 +86,24 @@ impl IrArena {
         arena.alloc_type_uncached(Type::new_bool(0), SourceInfo::new(0, 0, 0));
         arena.alloc_type_uncached(Type::new_string(0), SourceInfo::new(0, 0, 0));
         arena
+    }
+
+    // Stack methods (manage the hfs stack for operations)
+    pub fn pop_or_error(&mut self, source_infos: Vec<SourceInfo>, ast_arena: &AstArena) -> Result<InstId, Box<dyn CompileError>> {
+        match self.pop_hfs_stack() {
+            Some(id) => Ok(id),
+            None => cfg_analyzer_error!(CfgAnalyzerErrorKind::StackUnderflow, &*self, Some(ast_arena), source_infos),
+        }
+    }
+    pub fn last_or_error(
+        &mut self,
+        source_infos: Vec<SourceInfo>,
+        ast_arena: &AstArena,
+    ) -> Result<InstId, Box<dyn CompileError>> {
+        match self.hfs_stack.last() {
+            Some(id) => Ok(*id),
+            None => cfg_analyzer_error!(CfgAnalyzerErrorKind::ExpectedItemOnStack, &*self, Some(ast_arena), source_infos),
+        }
     }
     fn push_to_hfs_stack(&mut self, inst: InstId) {
         self.hfs_stack.push(inst);
@@ -208,6 +225,7 @@ impl IrArena {
     pub fn pop_entire_hfs_stack(&mut self) -> Vec<InstId> {
         let temp = self.hfs_stack.clone();
         self.hfs_stack.clear();
+        self.curr_block_stack.clear();
         temp
     }
     pub fn inst_name(&self, id: InstId) -> String {
@@ -398,9 +416,9 @@ impl CfgAnalyzer {
                 self.ast_arena.get_function_token(id).source_info.clone(),
             )
         };
-        if let Some(id) = self.arena.get_func_by_name(name.clone()) {
-            return Ok(id);
-        }
+        // if let Some(id) = self.arena.get_func_by_name(name.clone()) {
+        //     return Ok(id);
+        // }
 
         let entry_block = self.arena.alloc_block("start"); // create before analyzing the parameters
         self.arena.cfg_context.curr_insert_block = entry_block;
@@ -425,7 +443,9 @@ impl CfgAnalyzer {
             prev_stack_change: vec![],
             stack_snapshots: vec![],
         };
+
         self.lower_stmt(body, curr_block_context)?;
+
         if self.arena.get_block(self.arena.cfg_context.curr_insert_block).terminator.is_none() {
             // add implicit return at the end of the function if the block is unfinished
             let instructions = self.arena.pop_entire_hfs_stack();
@@ -438,7 +458,7 @@ impl CfgAnalyzer {
                 self.arena.cfg_context.curr_insert_block,
             );
         }
-        self.arena.hfs_stack.clear(); // context should be reset after each function!
+        self.arena.pop_entire_hfs_stack(); // context should be reset after each function!
         Ok(id)
     }
     // TODO: dont forget about issues with dead code elimination. if we have code after
@@ -486,14 +506,13 @@ impl CfgAnalyzer {
         self.arena.cfg_context.curr_insert_block = if_body_block;
 
         // condition isnt included in the stack depth count
-        let cond =
-            match self.arena.pop_hfs_stack() {
-                Some(cond) => cond,
-                None =>
-                    return cfg_analyzer_error!(CfgAnalyzerErrorKind::StackUnderflow, &self.arena, Some(&self.ast_arena), vec![
-                        self.ast_arena.get_stmt_token(body).source_info.clone()
-                    ]),
-            };
+        let cond = match self.arena.pop_hfs_stack() {
+            Some(cond) => cond,
+            None =>
+                return cfg_analyzer_error!(CfgAnalyzerErrorKind::StackUnderflow, &self.arena, Some(&self.ast_arena), vec![
+                    self.ast_arena.get_stmt_token(body).source_info.clone()
+                ]),
+        };
         let cond_type = self.arena.get_type_id_of_inst(cond)?;
         self.arena
             .compare_types(cond_type, self.arena.bool_type(), vec![self.arena.get_instruction(cond).get_source_info()])?;
@@ -868,25 +887,24 @@ impl CfgAnalyzer {
                 // @(213) :> func; // copy call
                 let mut inst_args = Vec::<InstId>::new();
                 for arg in 0..arg_count {
-                    let arg_inst = match self.arena.hfs_stack.pop() {
-                        Some(inst) => inst,
-                        None =>
-                            return cfg_analyzer_error!(
-                                CfgAnalyzerErrorKind::StackUnderflow,
-                                &self.arena,
-                                Some(&self.ast_arena),
-                                vec![
-                                    self.ast_arena.get_stmt_token(id).source_info.clone(),
-                                    self.ast_arena.get_function_token(func_id).source_info.clone(),
-                                ]
-                            ),
-                    };
+                    let source_infos = vec![
+                        self.ast_arena.get_stmt_token(id).source_info.clone(),
+                        self.ast_arena.get_function_token(func_id).source_info.clone(),
+                    ];
+                    let arg_inst = self.arena.pop_or_error(source_infos, &self.ast_arena)?;
                     inst_args.push(arg_inst);
                 }
                 inst_args.reverse(); // we reverse because we were popping the stack
-                                     // and we want the syntax to work left->right to be more readable and match the
-                                     // expectations of the stated type of the function that works as a "view" into the
-                                     // stack, not as a popped argments mechanics
+                // and we want the syntax to work left->right to be more readable and match the
+                // expectations of the stated type of the function that works as a "view" into the
+                // stack, not as a popped argments mechanics
+
+                if !is_move {
+                    // restore the stack
+                    for inst_id in inst_args.clone() {
+                        self.arena.push_to_hfs_stack(inst_id);
+                    }
+                }
                 let func_id = match self.arena.func_id_map.get(&func_id) {
                     Some(func_id) => *func_id,
                     None => panic!("[internal error] tried making a function call before creating the associated IrFuncId"),

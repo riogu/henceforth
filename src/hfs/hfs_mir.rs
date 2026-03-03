@@ -110,11 +110,6 @@ pub enum Instruction {
     // we assume stack keyword calls are exactly the same as function calls
     // but just have the Type system agnostic semantics
     // we convert StackKeyword Expressions to this
-    StackKeyword {
-        source_info: SourceInfo,
-        name: String,
-        args: Vec<InstId>,
-    },
     Tuple {
         source_info: SourceInfo,
         instructions: Vec<InstId>,
@@ -140,7 +135,6 @@ impl Instruction {
             Instruction::ReturnValue { source_info, type_id } => source_info.clone(),
             Instruction::FunctionCall { source_info, args, func_id, is_move, return_values } => source_info.clone(),
             Instruction::Phi { source_info, incoming } => source_info.clone(),
-            Instruction::StackKeyword { source_info, name, args } => source_info.clone(),
             Instruction::Tuple { source_info, instructions } => source_info.clone(),
             Instruction::Operation(source_info, cfg_operation) => source_info.clone(),
             Instruction::Literal(source_info, literal) => source_info.clone(),
@@ -385,10 +379,6 @@ impl CfgPrintable for Instruction {
                 arena.inst_name(*address)
             )
             .into(),
-            Instruction::StackKeyword { source_info, name, args } => {
-                let args_repr: Vec<String> = args.iter().map(|id| arena.inst_name(*id)).collect();
-                format!("keyword {}, {}", name, args_repr.join(", ")).into()
-            },
             Instruction::Alloca { source_info, type_id } => format!(
                 "{} {}",
                 "alloca".custom_color(CustomColor::new(202, 167, 244)),

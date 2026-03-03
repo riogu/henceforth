@@ -68,7 +68,7 @@ pub enum Expression {
     },
     // type of the temporary returned from a function
     ReturnValue(TypeId),
-    StackKeyword(StackKeyword),
+    StackKeyword(String),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -105,7 +105,6 @@ pub struct StackKeywordDeclaration<'a> {
     pub name: &'a str,
     pub expected_args_size: Option<usize>,
     pub return_size: usize,
-    pub type_effect: fn(Vec<TypeId>) -> Vec<Expression>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -453,15 +452,15 @@ impl AstArena {
 
 // Grabs a signature with the syntax (a b) -> (a b c) and creates a lambda that performs that operation with a vector of types
 #[macro_export]
-macro_rules! type_effect {
+macro_rules! effect {
     (_) => {
-        |_: Vec<TypeId>| -> Vec<Expression> {
+        |_: Vec<Expression>| -> Vec<Expression> {
             vec![]
         }
     };
 
     (($($arg:ident)*) -> ($($return:ident)*)) => {
-        |types: Vec<TypeId>| -> Vec<Expression> {
+        |types: Vec<Expression>| -> Vec<Expression> {
             let mut _idx = 0;
             $(
                 let $arg = types[_idx].clone();
@@ -478,54 +477,14 @@ macro_rules! type_effect {
 // ============================================================================
 
 const STACK_KEYWORDS: &[StackKeywordDeclaration] = &[
-    StackKeywordDeclaration { name: "@pop", expected_args_size: Some(1), return_size: 0, type_effect: type_effect!((a) -> ()) },
-    StackKeywordDeclaration { name: "@pop_all", expected_args_size: None, return_size: 0, type_effect: type_effect!(_) },
-    StackKeywordDeclaration {
-        name: "@dup",
-        expected_args_size: Some(1),
-        return_size: 2,
-        type_effect: type_effect!((a) -> (a a)),
-    },
-    StackKeywordDeclaration {
-        name: "@swap",
-        expected_args_size: Some(2),
-        return_size: 2,
-        type_effect: type_effect!((a b) -> (b a)),
-    },
-    StackKeywordDeclaration {
-        name: "@over",
-        expected_args_size: Some(2),
-        return_size: 3,
-        type_effect: type_effect!((a b) -> (a b a)),
-    },
-    StackKeywordDeclaration {
-        name: "@rot",
-        expected_args_size: Some(3),
-        return_size: 3,
-        type_effect: type_effect!((a b c) -> (b c a)),
-    },
-    StackKeywordDeclaration {
-        name: "@rrot",
-        expected_args_size: Some(3),
-        return_size: 3,
-        type_effect: type_effect!((a b c) -> (c a b)),
-    },
-    StackKeywordDeclaration {
-        name: "@nip",
-        expected_args_size: Some(2),
-        return_size: 1,
-        type_effect: type_effect!((a b) -> (b)),
-    },
-    StackKeywordDeclaration {
-        name: "@tuck",
-        expected_args_size: Some(2),
-        return_size: 3,
-        type_effect: type_effect!((a b) -> (b a b)),
-    },
-    StackKeywordDeclaration {
-        name: "@print",
-        expected_args_size: Some(1),
-        return_size: 1,
-        type_effect: type_effect!((a) -> (a)),
-    },
+    StackKeywordDeclaration { name: "@pop", expected_args_size: Some(1), return_size: 0 },
+    StackKeywordDeclaration { name: "@pop_all", expected_args_size: None, return_size: 0 },
+    StackKeywordDeclaration { name: "@dup", expected_args_size: Some(1), return_size: 2 },
+    StackKeywordDeclaration { name: "@swap", expected_args_size: Some(2), return_size: 2 },
+    StackKeywordDeclaration { name: "@over", expected_args_size: Some(2), return_size: 3 },
+    StackKeywordDeclaration { name: "@rot", expected_args_size: Some(3), return_size: 3 },
+    StackKeywordDeclaration { name: "@rrot", expected_args_size: Some(3), return_size: 3 },
+    StackKeywordDeclaration { name: "@nip", expected_args_size: Some(2), return_size: 1 },
+    StackKeywordDeclaration { name: "@tuck", expected_args_size: Some(2), return_size: 3 },
+    StackKeywordDeclaration { name: "@print", expected_args_size: Some(1), return_size: 1 },
 ];

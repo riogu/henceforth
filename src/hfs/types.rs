@@ -1,4 +1,4 @@
-use crate::hfs::{CfgOperation, GlobalIrVarId, InstId, Instruction, IrArena, IrFuncId, ast::*, error::CompileError, token::*};
+use crate::hfs::{ast::*, error::CompileError, token::*, CfgOperation, GlobalIrVarId, InstId, Instruction, IrArena, IrFuncId};
 
 pub const PRIMITIVE_TYPE_COUNT: usize = 4;
 

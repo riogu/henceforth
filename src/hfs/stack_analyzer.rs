@@ -13,7 +13,7 @@ use crate::{
         error::{CompileError, DiagnosticInfo},
         stack_analyzer_errors::{JumpKeyword, StackAnalyzerError, StackAnalyzerErrorKind},
     },
-    stack_analyzer_error, type_effect,
+    stack_analyzer_error,
 };
 
 impl AstArena {
@@ -435,6 +435,7 @@ impl StackAnalyzer {
                 for &expr_id in &stack_change {
                     expr_ids.push(expr_id);
                 }
+                dbg!(expr_ids.iter().map(|id| self.arena.get_expr(*id).clone()).collect::<Vec<Expression>>());
                 Ok(self.arena.alloc_stmt(Statement::StackBlock { expr_ids, consumed_count }, token))
             },
             UnresolvedStatement::BlockScope(unresolved_top_level_ids, scope_kind) => {
@@ -659,63 +660,15 @@ impl StackAnalyzer {
                 Ok(self.arena.alloc_and_push_to_hfs_stack(Expression::Tuple { expressions: expr_ids }, tuple_provenance, token))
             },
             UnresolvedExpression::StackKeyword(name) => {
-                let kw_declaration = self.arena.get_stack_keyword_from_name(name.as_str());
-
-                let effect = kw_declaration.type_effect;
-
-                let args = match kw_declaration.expected_args_size {
-                    Some(n) => self.arena.popn_or_error(n, vec![self.unresolved_arena.get_unresolved_expr_token(id)])?,
-                    None => self.arena.pop_entire_hfs_stack(), // for @pop_all
-                };
-
-                // simulate stack
-                let mut simulated_stack: Vec<TypeId> = Vec::new();
-                for arg in &args {
-                    simulated_stack.push(self.arena.get_type_id_of_expr(*arg)?);
-                }
-
-                let return_values = effect(simulated_stack.clone());
-                let mut return_value_ids = Vec::new();
-                return_values.iter().for_each(|ret| {
-                    if let Expression::ReturnValue(id) = ret {
-                        let return_val_id = self.arena.alloc_and_push_to_hfs_stack(
-                            ret.clone(),
-                            ExprProvenance::RuntimeValue,
-                            self.arena.get_type_token(*id).clone(),
-                        );
-                        return_value_ids.push(return_val_id);
-                    } else {
-                        panic!("[internal error] stack keyword effect should return a Expression::ReturnValue")
-                    }
-                });
-
-                let mut return_value_types: Vec<TypeId> = Vec::new();
-                for id in &return_value_ids {
-                    return_value_types.push(self.arena.get_type_id_of_expr(*id)?);
-                }
-
-                // create tuples for param and return type
-                let param_type = self.arena.alloc_type(Type::Tuple { type_ids: simulated_stack, ptr_count: 0 }, Token {
-                    kind: TokenKind::LeftParen,
-                    source_info: SourceInfo { line_number: 0, line_offset: 0, token_width: 0 },
-                });
-                let return_type = self.arena.alloc_type(Type::Tuple { type_ids: return_value_types, ptr_count: 0 }, Token {
-                    kind: TokenKind::LeftParen,
-                    source_info: SourceInfo { line_number: 0, line_offset: 0, token_width: 0 },
-                });
-
                 let id = self.arena.alloc_and_push_to_hfs_stack(
-                    Expression::StackKeyword(StackKeyword {
-                        name,
-                        parameter_exprs: args,
-                        param_type,
-                        return_type,
-                        return_values: return_value_ids,
-                    }),
+                    Expression::StackKeyword(name.clone()),
                     ExprProvenance::RuntimeValue,
-                    token.clone(),
+                    self.unresolved_arena.get_unresolved_expr_token(id),
                 );
-                self.arena.pop_or_error(vec![token]);
+                self.arena.pop_or_error(vec![]); // doesnt happen
+                let kw_declaration = self.arena.get_stack_keyword_from_name(&name);
+                self.perform_stack_keyword(&name, token);
+
                 Ok(id)
             },
         }
@@ -811,6 +764,90 @@ impl StackAnalyzer {
             _ => Ok(panic!("[internal error] missing semantic analysis for unary operation '{:?}'", op)),
         }
     }
+
+    fn perform_stack_keyword(&mut self, name: &str, token: Token) -> Result<(), Box<dyn CompileError>> {
+        match name {
+            "@pop" => {
+                self.arena.pop_or_error(vec![token])?;
+                Ok(())
+            },
+            "@pop_all" => {
+                self.arena.hfs_stack.clear();
+                Ok(())
+            },
+            "@dup" => {
+                let id = self.arena.last_or_error(vec![token.clone()])?;
+                let expr = self.arena.get_expr(id).clone();
+                self.arena.alloc_and_push_to_hfs_stack(expr, ExprProvenance::RuntimeValue, token);
+                Ok(())
+            },
+            "@swap" => {
+                let a_id = self.arena.pop_or_error(vec![token.clone()])?;
+                let b_id = self.arena.pop_or_error(vec![token.clone()])?;
+                let a_expr = self.arena.get_expr(a_id).clone();
+                let b_expr = self.arena.get_expr(b_id).clone();
+                self.arena.alloc_and_push_to_hfs_stack(b_expr, ExprProvenance::RuntimeValue, token.clone());
+                self.arena.alloc_and_push_to_hfs_stack(a_expr, ExprProvenance::RuntimeValue, token);
+                Ok(())
+            },
+            "@over" => {
+                let a_id = self.arena.pop_or_error(vec![token.clone()])?;
+                let b_id = self.arena.pop_or_error(vec![token.clone()])?;
+                let a_expr = self.arena.get_expr(a_id).clone();
+                let b_expr = self.arena.get_expr(b_id).clone();
+                self.arena.alloc_and_push_to_hfs_stack(a_expr.clone(), ExprProvenance::RuntimeValue, token.clone());
+                self.arena.alloc_and_push_to_hfs_stack(b_expr, ExprProvenance::RuntimeValue, token.clone());
+                self.arena.alloc_and_push_to_hfs_stack(a_expr, ExprProvenance::RuntimeValue, token);
+                Ok(())
+            },
+            "@rot" => {
+                let a_id = self.arena.pop_or_error(vec![token.clone()])?;
+                let b_id = self.arena.pop_or_error(vec![token.clone()])?;
+                let c_id = self.arena.pop_or_error(vec![token.clone()])?;
+                let a_expr = self.arena.get_expr(a_id).clone();
+                let b_expr = self.arena.get_expr(b_id).clone();
+                let c_expr = self.arena.get_expr(c_id).clone();
+                self.arena.alloc_and_push_to_hfs_stack(b_expr, ExprProvenance::RuntimeValue, token.clone());
+                self.arena.alloc_and_push_to_hfs_stack(c_expr, ExprProvenance::RuntimeValue, token.clone());
+                self.arena.alloc_and_push_to_hfs_stack(a_expr, ExprProvenance::RuntimeValue, token);
+                Ok(())
+            },
+            "@rrot" => {
+                let a_id = self.arena.pop_or_error(vec![token.clone()])?;
+                let b_id = self.arena.pop_or_error(vec![token.clone()])?;
+                let c_id = self.arena.pop_or_error(vec![token.clone()])?;
+                let a_expr = self.arena.get_expr(a_id).clone();
+                let b_expr = self.arena.get_expr(b_id).clone();
+                let c_expr = self.arena.get_expr(c_id).clone();
+                self.arena.alloc_and_push_to_hfs_stack(c_expr, ExprProvenance::RuntimeValue, token.clone());
+                self.arena.alloc_and_push_to_hfs_stack(a_expr, ExprProvenance::RuntimeValue, token.clone());
+                self.arena.alloc_and_push_to_hfs_stack(b_expr, ExprProvenance::RuntimeValue, token);
+                Ok(())
+            },
+            "@nip" => {
+                let a_id = self.arena.pop_or_error(vec![token.clone()])?;
+                let b_id = self.arena.pop_or_error(vec![token.clone()])?;
+                let a_expr = self.arena.get_expr(a_id).clone();
+                let b_expr = self.arena.get_expr(b_id).clone();
+                self.arena.alloc_and_push_to_hfs_stack(b_expr, ExprProvenance::RuntimeValue, token);
+                Ok(())
+            },
+            "@tuck" => {
+                let a_id = self.arena.pop_or_error(vec![token.clone()])?;
+                let b_id = self.arena.pop_or_error(vec![token.clone()])?;
+                let a_expr = self.arena.get_expr(a_id).clone();
+                let b_expr = self.arena.get_expr(b_id).clone();
+                self.arena.alloc_and_push_to_hfs_stack(b_expr.clone(), ExprProvenance::RuntimeValue, token.clone());
+                self.arena.alloc_and_push_to_hfs_stack(a_expr, ExprProvenance::RuntimeValue, token.clone());
+                self.arena.alloc_and_push_to_hfs_stack(b_expr, ExprProvenance::RuntimeValue, token);
+                Ok(())
+            },
+            "@print" => Ok(()),
+            _ => {
+                panic!("[internal error] invalid stack keyword")
+            },
+        }
+    }
 }
 
 #[cfg(test)]
@@ -820,10 +857,10 @@ mod tests {
     use pretty_assertions::assert_eq;
 
     use crate::hfs::{
-        AstArena, Type,
         builder::builder::{Builder, BuilderOperation, ControlFlowOps, FunctionOps, LoopOps, PassMode, StackOps, VariableOps},
         stack_analyzer_builder::StackAnalyzerBuilder,
-        utils::{Phase, run_until},
+        utils::{run_until, Phase},
+        AstArena, Type,
     };
 
     fn analyze_file(name: &str) -> AstArena {

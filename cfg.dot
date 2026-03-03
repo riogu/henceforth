@@ -1,28 +1,7 @@
 digraph CFG {
     node [shape=box fontname="Monospace"]
-    subgraph cluster_fizz_buzz {
-        label="fn fizz_buzz";
-        fizz_buzz_start_0 [label="start_0:\l%0 = i32 %arg0\l%1 = 15\l%2 = %0 % %1\l%3 = 0\l%4 = %2 == %3\lbranch %4, if_body_1, else_if_cond_3\l"];
-        fizz_buzz_if_body_1 [label="if_body_1:\l%5 = \"fizzbuzz\"\ljump if_end_2\l"];
-        fizz_buzz_if_end_2 [label="if_end_2:\l%17 = phi [else_body_7: %16], [if_body_1: %5], [if_body_4: %10], [if_body_6: %15]\l%18 = (%17)\lreturn %18\l"];
-        fizz_buzz_else_if_cond_3 [label="else_if_cond_3:\l%6 = 3\l%7 = %0 % %6\l%8 = 0\l%9 = %7 == %8\lbranch %9, if_body_4, else_if_cond_5\l"];
-        fizz_buzz_if_body_4 [label="if_body_4:\l%10 = \"fizz\"\ljump if_end_2\l"];
-        fizz_buzz_else_if_cond_5 [label="else_if_cond_5:\l%11 = 5\l%12 = %0 % %11\l%13 = 0\l%14 = %12 == %13\lbranch %14, if_body_6, else_body_7\l"];
-        fizz_buzz_if_body_6 [label="if_body_6:\l%15 = \"buzz\"\ljump if_end_2\l"];
-        fizz_buzz_else_body_7 [label="else_body_7:\l%16 = \"no fizzbuzz\"\ljump if_end_2\l"];
-        fizz_buzz_start_0 -> fizz_buzz_if_body_1 [label="true"];
-        fizz_buzz_start_0 -> fizz_buzz_else_if_cond_3 [label="false"];
-        fizz_buzz_if_body_1 -> fizz_buzz_if_end_2;
-        fizz_buzz_else_if_cond_3 -> fizz_buzz_if_body_4 [label="true"];
-        fizz_buzz_else_if_cond_3 -> fizz_buzz_else_if_cond_5 [label="false"];
-        fizz_buzz_if_body_4 -> fizz_buzz_if_end_2;
-        fizz_buzz_else_if_cond_5 -> fizz_buzz_if_body_6 [label="true"];
-        fizz_buzz_else_if_cond_5 -> fizz_buzz_else_body_7 [label="false"];
-        fizz_buzz_if_body_6 -> fizz_buzz_if_end_2;
-        fizz_buzz_else_body_7 -> fizz_buzz_if_end_2;
-    }
     subgraph cluster_main {
         label="fn main";
-        main_start_8 [label="start_8:\l%19 = 530\l%20 = call fizz_buzz, %19\l%21 = ()\lreturn %21\l"];
+        main_start_0 [label="start_0:\l%0 = 1\l%1 = 1\l%2 = %0 + %1\l%3 = 2\l%4 = %2 * %3\l%5 = retval i32\l%6 = retval i32\l%7 = %5 / %6\l%8 = 2\l%9 = %7 * %8\l%10 = 2\l%11 = %9 % %10\l%12 = false\l%13 = retval bool\l%14 = retval bool\l%15 = %13 || %14\l%16 = !%15\l%17 = true\l%18 = %16 && %17\l%19 = ()\lreturn %19\l"];
     }
 }

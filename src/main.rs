@@ -34,8 +34,12 @@ use std::{error::Error, path::PathBuf, process::exit, rc::Rc};
 use clap::{arg, Parser};
 
 use crate::hfs::{
+    cfg_analyzer_errors::CfgAnalyzerError,
     error::{CompileError, DiagnosticInfo},
     get_eof_source_info,
+    parser_errors::ParserError,
+    stack_analyzer_errors::StackAnalyzerError,
+    CfgAnalyzer, StackAnalyzer,
 };
 
 #[derive(Parser, Debug, Clone)]
@@ -57,10 +61,12 @@ fn run() -> Result<(), Box<dyn CompileError>> {
     let (unresolved_top_level_nodes, unresolved_ast_arena) = hfs::Parser::parse_tokens(tokens.clone(), diagnostic_info.clone())?;
 
     let (top_level_nodes, ast_arena, scope_stack) =
-        hfs::StackAnalyzer::resolve(unresolved_top_level_nodes, unresolved_ast_arena, diagnostic_info.clone())?;
+        hfs::StackAnalyzer::resolve(unresolved_top_level_nodes, unresolved_ast_arena.clone(), diagnostic_info.clone())?;
 
-    let (top_level_insts, ir_arena) = hfs::CfgAnalyzer::lower_to_mir(top_level_nodes, ast_arena, diagnostic_info.clone())?;
-    ir_arena.dump(&top_level_insts);
+    let (top_level_insts, ir_arena) =
+        hfs::CfgAnalyzer::lower_to_mir(top_level_nodes, ast_arena.clone(), diagnostic_info.clone())?;
+    println!("{}", ParserError::dump_ast(&unresolved_ast_arena));
+    println!("{}", StackAnalyzerError::dump_ast(&ast_arena));
     hfs::Interpreter::interpret(ir_arena, top_level_insts, scope_stack);
 
     Ok(())
@@ -72,4 +78,3 @@ fn main() {
         exit(1);
     }
 }
-

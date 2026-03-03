@@ -3,8 +3,8 @@ use std::{fmt::Display, fs, path::PathBuf};
 use colored::{ColoredString, Colorize, CustomColor};
 
 use crate::hfs::{
+    error::{number_length, CompileError, DebugInfo, Dumpable},
     AstArena, Expression, FunctionDeclaration, Identifier, Operation, SourceInfo, Statement, TopLevelId, Type, VarDeclaration,
-    error::{CompileError, DebugInfo, Dumpable, number_length},
 };
 
 #[derive(Debug)]
@@ -440,28 +440,8 @@ impl Dumpable for Expression {
                     "]".custom_color(CustomColor::new(129, 137, 150))
                 ))
             },
-            Expression::StackKeyword(kw) => {
-                let param_exprs: Vec<ColoredString> =
-                    kw.parameter_exprs.iter().map(|expr| arena.get_expr(*expr).dump(arena)).collect();
-                let return_values: Vec<ColoredString> =
-                    kw.return_values.iter().map(|expr| arena.get_expr(*expr).dump(arena)).collect();
-                ColoredString::from(format!(
-                    "{}\n\t{} {}\n\t{} {}\n\t{}\n\t{}\n\t{}\n\t{}\n\t{}\n\t{}\n\t{}\n\t{}",
-                    format!("Function {}:", kw.name).bold().red(),
-                    "Parameter type:".blue(),
-                    indent(&arena.get_type(kw.param_type).dump_resolved(arena)).yellow(),
-                    "Return type:".blue(),
-                    indent(&arena.get_type(kw.return_type).dump_resolved(arena)).yellow(),
-                    "Parameter Exprs:".blue(),
-                    "[".custom_color(CustomColor::new(129, 137, 150)),
-                    indent_list(&param_exprs),
-                    "]".custom_color(CustomColor::new(129, 137, 150)),
-                    "Return Values:".blue(),
-                    "[".custom_color(CustomColor::new(129, 137, 150)),
-                    indent_list(&param_exprs),
-                    "]".custom_color(CustomColor::new(129, 137, 150))
-                ))
-            },
+            Expression::StackKeyword(name) =>
+                ColoredString::from(format!("{} {}", "Stack Keyword".red().bold(), format!("({name})").green())),
             Expression::Parameter { index, type_id } => ColoredString::from(format!(
                 "{}\n\t{} {}\n\t{} {}",
                 "Parameter:".red().bold(),

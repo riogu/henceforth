@@ -1,6 +1,6 @@
 use std::{collections::HashMap, default, fmt::Display, rc::Rc};
 
-use crate::hfs::{RuntimeValue, ScopeKind, UnresolvedAstArena, error::DiagnosticInfo, token::*};
+use crate::hfs::{error::DiagnosticInfo, token::*, RuntimeValue, ScopeKind, UnresolvedAstArena};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct VarId(pub usize);
@@ -521,5 +521,11 @@ const STACK_KEYWORDS: &[StackKeywordDeclaration] = &[
         expected_args_size: Some(2),
         return_size: 3,
         type_effect: type_effect!((a b) -> (b a b)),
+    },
+    StackKeywordDeclaration {
+        name: "@print",
+        expected_args_size: Some(1),
+        return_size: 1,
+        type_effect: type_effect!((a) -> (a)),
     },
 ];

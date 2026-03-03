@@ -48,7 +48,8 @@ impl std::fmt::Display for Literal {
     }
 }
 
-pub const VALID_STACK_KEYWORDS: &[&str] = &["@pop", "@pop_all", "@dup", "@swap", "@over", "@rot", "@rrot", "@nip", "@tuck"];
+pub const VALID_STACK_KEYWORDS: &[&str] =
+    &["@pop", "@pop_all", "@dup", "@swap", "@over", "@rot", "@rrot", "@nip", "@tuck", "@print"];
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum TokenKind {

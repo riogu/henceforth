@@ -134,6 +134,7 @@ impl Parser {
         }
         Ok(types)
     }
+
 }
 
 // Declarations
@@ -183,6 +184,7 @@ impl Parser {
             arena: UnresolvedAstArena::new(diagnostic_info.clone()),
         };
         let mut top_level = Vec::<UnresolvedTopLevelId>::new();
+        
         while let Some(token) = parser.tokens.peek() {
             match &token.kind {
                 TokenKind::Let => top_level.push(UnresolvedTopLevelId::VariableDecl(parser.variable_declaration()?)),
@@ -499,7 +501,7 @@ impl Parser {
         Ok(self.arena.alloc_unresolved_stmt(UnresolvedStatement::StackBlock(vec![keyword]), token))
     }
 
-    // <stack-keyword> ::= @pop | @pop_all | @dup | @swap | @over | @rot | @rrot | @nip | @tuck
+    // <stack-keyword> ::= @pop | @pop_all | @dup | @swap | @over | @rot | @rrot | @nip | @tuck | @print
     fn stack_keyword_expr(&mut self) -> Result<UnresolvedExprId, Box<dyn CompileError>> {
         let (name, token) = self.expect_stack_keyword()?;
         Ok(self.arena.alloc_unresolved_expr(UnresolvedExpression::StackKeyword(name), token))

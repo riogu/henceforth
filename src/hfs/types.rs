@@ -76,7 +76,6 @@ impl AstArena {
                 Ok(self.alloc_type(tuple_type, token))
             },
             Expression::Parameter { index, type_id } => Ok(type_id),
-            Expression::StackKeyword { .. } => Ok(todo!()),
             Expression::ReturnValue(type_id) => Ok(type_id),
         }
     }

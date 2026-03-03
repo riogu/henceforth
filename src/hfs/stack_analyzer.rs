@@ -660,16 +660,10 @@ impl StackAnalyzer {
                 Ok(self.arena.alloc_and_push_to_hfs_stack(Expression::Tuple { expressions: expr_ids }, tuple_provenance, token))
             },
             UnresolvedExpression::StackKeyword(name) => {
-                let id = self.arena.alloc_and_push_to_hfs_stack(
-                    Expression::StackKeyword(name.clone()),
-                    ExprProvenance::RuntimeValue,
-                    self.unresolved_arena.get_unresolved_expr_token(id),
-                );
-                self.arena.pop_or_error(vec![]); // doesnt happen
                 let kw_declaration = self.arena.get_stack_keyword_from_name(&name);
                 self.perform_stack_keyword(&name, token);
 
-                Ok(id)
+                Ok(ExprId(usize::MAX)) // trust me bro
             },
         }
     }
@@ -857,10 +851,10 @@ mod tests {
     use pretty_assertions::assert_eq;
 
     use crate::hfs::{
+        AstArena, Type,
         builder::builder::{Builder, BuilderOperation, ControlFlowOps, FunctionOps, LoopOps, PassMode, StackOps, VariableOps},
         stack_analyzer_builder::StackAnalyzerBuilder,
-        utils::{run_until, Phase},
-        AstArena, Type,
+        utils::{Phase, run_until},
     };
 
     fn analyze_file(name: &str) -> AstArena {

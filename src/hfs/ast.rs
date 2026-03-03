@@ -68,7 +68,6 @@ pub enum Expression {
     },
     // type of the temporary returned from a function
     ReturnValue(TypeId),
-    StackKeyword(String),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

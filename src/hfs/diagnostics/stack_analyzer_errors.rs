@@ -440,8 +440,6 @@ impl Dumpable for Expression {
                     "]".custom_color(CustomColor::new(129, 137, 150))
                 ))
             },
-            Expression::StackKeyword(name) =>
-                ColoredString::from(format!("{} {}", "Stack Keyword".red().bold(), format!("({name})").green())),
             Expression::Parameter { index, type_id } => ColoredString::from(format!(
                 "{}\n\t{} {}\n\t{} {}",
                 "Parameter:".red().bold(),

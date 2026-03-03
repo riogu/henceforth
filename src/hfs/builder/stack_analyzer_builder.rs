@@ -1,10 +1,10 @@
 use std::{collections::HashMap, path::PathBuf, rc::Rc};
 
 use crate::hfs::{
-    builder::builder::{Builder, BuilderOperation, ControlFlowOps, FunctionOps, LoopOps, PassMode, StackOps, VariableOps},
-    error::DiagnosticInfo,
     AstArena, ExprId, ExprProvenance, Expression, FuncId, FunctionDeclaration, Identifier, Literal, Operation, ScopeKind,
     SourceInfo, StackKeyword, Statement, StmtId, Token, TokenKind, TopLevelId, Type, TypeId, VarDeclaration, VarId,
+    builder::builder::{Builder, BuilderOperation, ControlFlowOps, FunctionOps, LoopOps, PassMode, StackOps, VariableOps},
+    error::DiagnosticInfo,
 };
 
 pub struct StackAnalyzerBuilder {
@@ -279,9 +279,7 @@ impl StackOps for StackAnalyzerBuilder {
     }
 
     fn push_stack_keyword(mut self, keyword: &str, semicolon: bool) -> Self {
-        let expr = Expression::StackKeyword(keyword.to_string());
         let expr_id = ExprId(self.arena.exprs.len());
-        self.arena.exprs.push(expr);
         self.arena.expr_tokens.push(Self::dummy_token());
         self.arena.expr_provenances.push(ExprProvenance::RuntimeValue);
 

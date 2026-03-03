@@ -110,6 +110,9 @@ fn push_range: (i32 i32) -> (i32 i32 i32 i32 i32) {
 }
 
 // Main program: calculate sum of factorials from 1 to 5
+
+fn print: (T) -> () { :> __builtin_print; }
+
 fn main: () -> (i32) {
     let sum: i32;
     let temp: i32;
@@ -122,6 +125,7 @@ fn main: () -> (i32) {
         &= temp;  // pop and assign
         @(temp) &> factorial;  // call factorial
         @(sum +) &= sum;  // add to sum
+        @print;
     }
     
     @(sum);  // push sum for return

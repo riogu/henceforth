@@ -138,6 +138,20 @@ impl Interpreter {
     */
     fn call_declared_function(&mut self, func_id: IrFuncId, args: Vec<RuntimeValue>) -> Vec<RuntimeValue> {
         let func = self.arena.get_func(func_id);
+        if func.name == "print" {
+            for arg in &args {
+                match arg {
+                    RuntimeValue::Integer(v) => println!("{}", v),
+                    RuntimeValue::Float(v) => println!("{}", v),
+                    RuntimeValue::String(v) => println!("{}", v),
+                    RuntimeValue::Bool(v) => println!("{}", v),
+                    RuntimeValue::Tuple(runtime_values) => {
+                        dbg!(runtime_values);
+                    },
+                    RuntimeValue::Address(inst_id) => println!("{:?}", inst_id),
+                }
+            }
+        }
 
         // bind all the parameters before interpreting the function
         let mut inst_values = HashMap::new();

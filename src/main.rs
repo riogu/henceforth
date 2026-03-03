@@ -65,8 +65,7 @@ fn run() -> Result<(), Box<dyn CompileError>> {
 
     let (top_level_insts, ir_arena) =
         hfs::CfgAnalyzer::lower_to_mir(top_level_nodes, ast_arena.clone(), diagnostic_info.clone())?;
-    println!("{}", ParserError::dump_ast(&unresolved_ast_arena));
-    println!("{}", StackAnalyzerError::dump_ast(&ast_arena));
+    ir_arena.dump(&top_level_insts);
     hfs::Interpreter::interpret(ir_arena, top_level_insts, scope_stack);
 
     Ok(())

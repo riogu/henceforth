@@ -10,11 +10,12 @@ use colored::{Colorize, CustomColor};
 use crate::{
     cfg_analyzer_error,
     hfs::{
-        self, BasicBlock, BlockId, CfgFunction, CfgOperation, CfgPrintable, CfgTopLevelId, GlobalIrVarDeclaration, GlobalIrVarId,
-        InstId, Instruction, IrFuncId, Literal, PRIMITIVE_TYPE_COUNT, SourceInfo, TermInstId, TerminatorInst, Token, TokenKind,
+        self,
         ast::*,
         cfg_analyzer_errors::{CfgAnalyzerError, CfgAnalyzerErrorKind},
         error::{CompileError, DiagnosticInfo},
+        BasicBlock, BlockId, CfgFunction, CfgOperation, CfgPrintable, CfgTopLevelId, GlobalIrVarDeclaration, GlobalIrVarId,
+        InstId, Instruction, IrFuncId, Literal, SourceInfo, TermInstId, TerminatorInst, Token, TokenKind, PRIMITIVE_TYPE_COUNT,
     },
 };
 
@@ -485,13 +486,14 @@ impl CfgAnalyzer {
         self.arena.cfg_context.curr_insert_block = if_body_block;
 
         // condition isnt included in the stack depth count
-        let cond = match self.arena.pop_hfs_stack() {
-            Some(cond) => cond,
-            None =>
-                return cfg_analyzer_error!(CfgAnalyzerErrorKind::StackUnderflow, &self.arena, Some(&self.ast_arena), vec![
-                    self.ast_arena.get_stmt_token(body).source_info.clone()
-                ]),
-        };
+        let cond =
+            match self.arena.pop_hfs_stack() {
+                Some(cond) => cond,
+                None =>
+                    return cfg_analyzer_error!(CfgAnalyzerErrorKind::StackUnderflow, &self.arena, Some(&self.ast_arena), vec![
+                        self.ast_arena.get_stmt_token(body).source_info.clone()
+                    ]),
+            };
         let cond_type = self.arena.get_type_id_of_inst(cond)?;
         self.arena
             .compare_types(cond_type, self.arena.bool_type(), vec![self.arena.get_instruction(cond).get_source_info()])?;
@@ -571,7 +573,6 @@ impl CfgAnalyzer {
 
                 let (cond, block_before_if, if_body_block) =
                     self.lower_if_condition(cond_stack_block, body, &curr_block_context)?;
-                dbg!(&self.arena.hfs_stack);
 
                 let (if_end_block, stack_after_if_body) =
                     self.lower_if_body(body, &curr_block_context, matches!(if_stmt, Statement::If { .. }))?;
@@ -883,9 +884,9 @@ impl CfgAnalyzer {
                     inst_args.push(arg_inst);
                 }
                 inst_args.reverse(); // we reverse because we were popping the stack
-                // and we want the syntax to work left->right to be more readable and match the
-                // expectations of the stated type of the function that works as a "view" into the
-                // stack, not as a popped argments mechanics
+                                     // and we want the syntax to work left->right to be more readable and match the
+                                     // expectations of the stated type of the function that works as a "view" into the
+                                     // stack, not as a popped argments mechanics
                 let func_id = match self.arena.func_id_map.get(&func_id) {
                     Some(func_id) => *func_id,
                     None => panic!("[internal error] tried making a function call before creating the associated IrFuncId"),

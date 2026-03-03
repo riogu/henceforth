@@ -1,7 +1,30 @@
 digraph CFG {
     node [shape=box fontname="Monospace"]
+    subgraph cluster_foo {
+        label="fn foo";
+        foo_start_0 [label="start_0:\l%0 = 1\l%1 = 2\l%2 = 3\l%3 = 1\l%4 = 2\l%5 = %3 < %4\l%6 = alloca i32\lbranch %5, if_body_1, else_if_cond_6\l"];
+        foo_if_body_1 [label="if_body_1:\l%7 = 4\l%8 = 5\l%9 = store %8, %6\l%10 = true\lbranch %10, if_body_2, else_body_4\l"];
+        foo_if_body_2 [label="if_body_2:\l%11 = 5\l%12 = 6\ljump if_end_3\l"];
+        foo_if_end_3 [label="if_end_3:\l%15 = phi [else_body_4: %13], [if_body_2: %11]\l%16 = phi [if_body_2: %12], [else_body_4: %14]\ljump if_end_5\l"];
+        foo_if_end_5 [label="if_end_5:\l%25 = phi [if_end_3: %7], [if_body_7: %19], [else_body_8: %22]\l%26 = phi [if_end_3: %15], [if_body_7: %20], [else_body_8: %23]\l%27 = phi [if_body_7: %21], [if_end_3: %16], [else_body_8: %24]\l%28 = (%0, %1, %2, %25, %26, %27)\lreturn %28\l"];
+        foo_else_body_4 [label="else_body_4:\l%13 = 5\l%14 = 6\ljump if_end_3\l"];
+        foo_else_if_cond_6 [label="else_if_cond_6:\l%17 = 4\l%18 = %3 < %17\lbranch %18, if_body_7, else_body_8\l"];
+        foo_if_body_7 [label="if_body_7:\l%19 = 4\l%20 = 5\l%21 = 6\ljump if_end_5\l"];
+        foo_else_body_8 [label="else_body_8:\l%22 = 4\l%23 = 5\l%24 = 6\ljump if_end_5\l"];
+        foo_start_0 -> foo_if_body_1 [label="true"];
+        foo_start_0 -> foo_else_if_cond_6 [label="false"];
+        foo_if_body_1 -> foo_if_body_2 [label="true"];
+        foo_if_body_1 -> foo_else_body_4 [label="false"];
+        foo_if_body_2 -> foo_if_end_3;
+        foo_if_end_3 -> foo_if_end_5;
+        foo_else_body_4 -> foo_if_end_3;
+        foo_else_if_cond_6 -> foo_if_body_7 [label="true"];
+        foo_else_if_cond_6 -> foo_else_body_8 [label="false"];
+        foo_if_body_7 -> foo_if_end_5;
+        foo_else_body_8 -> foo_if_end_5;
+    }
     subgraph cluster_main {
         label="fn main";
-        main_start_0 [label="start_0:\l%0 = 1\l%1 = 1\l%2 = %0 + %1\l%3 = 2\l%4 = %2 * %3\l%5 = retval i32\l%6 = retval i32\l%7 = %5 / %6\l%8 = 2\l%9 = %7 * %8\l%10 = 2\l%11 = %9 % %10\l%12 = false\l%13 = retval bool\l%14 = retval bool\l%15 = %13 || %14\l%16 = !%15\l%17 = true\l%18 = %16 && %17\l%19 = ()\lreturn %19\l"];
+        main_start_9 [label="start_9:\l%29 = call foo, \l%30 = ()\lreturn %30\l"];
     }
 }

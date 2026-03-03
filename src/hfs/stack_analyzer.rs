@@ -435,7 +435,6 @@ impl StackAnalyzer {
                 for &expr_id in &stack_change {
                     expr_ids.push(expr_id);
                 }
-                dbg!(expr_ids.iter().map(|id| self.arena.get_expr(*id).clone()).collect::<Vec<Expression>>());
                 Ok(self.arena.alloc_stmt(Statement::StackBlock { expr_ids, consumed_count }, token))
             },
             UnresolvedStatement::BlockScope(unresolved_top_level_ids, scope_kind) => {
@@ -851,10 +850,10 @@ mod tests {
     use pretty_assertions::assert_eq;
 
     use crate::hfs::{
-        AstArena, Type,
         builder::builder::{Builder, BuilderOperation, ControlFlowOps, FunctionOps, LoopOps, PassMode, StackOps, VariableOps},
         stack_analyzer_builder::StackAnalyzerBuilder,
-        utils::{Phase, run_until},
+        utils::{run_until, Phase},
+        AstArena, Type,
     };
 
     fn analyze_file(name: &str) -> AstArena {

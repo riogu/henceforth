@@ -775,8 +775,8 @@ impl StackAnalyzer {
                 Ok(())
             },
             "@swap" => {
-                let a_id = self.arena.pop_or_error(vec![token.clone()])?;
                 let b_id = self.arena.pop_or_error(vec![token.clone()])?;
+                let a_id = self.arena.pop_or_error(vec![token.clone()])?;
                 let a_expr = self.arena.get_expr(a_id).clone();
                 let b_expr = self.arena.get_expr(b_id).clone();
                 self.arena.alloc_and_push_to_hfs_stack(b_expr, ExprProvenance::RuntimeValue, token.clone());
@@ -784,8 +784,8 @@ impl StackAnalyzer {
                 Ok(())
             },
             "@over" => {
-                let a_id = self.arena.pop_or_error(vec![token.clone()])?;
                 let b_id = self.arena.pop_or_error(vec![token.clone()])?;
+                let a_id = self.arena.pop_or_error(vec![token.clone()])?;
                 let a_expr = self.arena.get_expr(a_id).clone();
                 let b_expr = self.arena.get_expr(b_id).clone();
                 self.arena.alloc_and_push_to_hfs_stack(a_expr.clone(), ExprProvenance::RuntimeValue, token.clone());
@@ -794,9 +794,9 @@ impl StackAnalyzer {
                 Ok(())
             },
             "@rot" => {
-                let a_id = self.arena.pop_or_error(vec![token.clone()])?;
-                let b_id = self.arena.pop_or_error(vec![token.clone()])?;
                 let c_id = self.arena.pop_or_error(vec![token.clone()])?;
+                let b_id = self.arena.pop_or_error(vec![token.clone()])?;
+                let a_id = self.arena.pop_or_error(vec![token.clone()])?;
                 let a_expr = self.arena.get_expr(a_id).clone();
                 let b_expr = self.arena.get_expr(b_id).clone();
                 let c_expr = self.arena.get_expr(c_id).clone();
@@ -806,9 +806,9 @@ impl StackAnalyzer {
                 Ok(())
             },
             "@rrot" => {
-                let a_id = self.arena.pop_or_error(vec![token.clone()])?;
-                let b_id = self.arena.pop_or_error(vec![token.clone()])?;
                 let c_id = self.arena.pop_or_error(vec![token.clone()])?;
+                let b_id = self.arena.pop_or_error(vec![token.clone()])?;
+                let a_id = self.arena.pop_or_error(vec![token.clone()])?;
                 let a_expr = self.arena.get_expr(a_id).clone();
                 let b_expr = self.arena.get_expr(b_id).clone();
                 let c_expr = self.arena.get_expr(c_id).clone();
@@ -818,16 +818,16 @@ impl StackAnalyzer {
                 Ok(())
             },
             "@nip" => {
-                let a_id = self.arena.pop_or_error(vec![token.clone()])?;
                 let b_id = self.arena.pop_or_error(vec![token.clone()])?;
+                let a_id = self.arena.pop_or_error(vec![token.clone()])?;
                 let a_expr = self.arena.get_expr(a_id).clone();
                 let b_expr = self.arena.get_expr(b_id).clone();
                 self.arena.alloc_and_push_to_hfs_stack(b_expr, ExprProvenance::RuntimeValue, token);
                 Ok(())
             },
             "@tuck" => {
-                let a_id = self.arena.pop_or_error(vec![token.clone()])?;
                 let b_id = self.arena.pop_or_error(vec![token.clone()])?;
+                let a_id = self.arena.pop_or_error(vec![token.clone()])?;
                 let a_expr = self.arena.get_expr(a_id).clone();
                 let b_expr = self.arena.get_expr(b_id).clone();
                 self.arena.alloc_and_push_to_hfs_stack(b_expr.clone(), ExprProvenance::RuntimeValue, token.clone());

@@ -858,6 +858,15 @@ impl StackAnalyzer {
                 }
                 Ok(())
             },
+            "@depth" => {
+                self.arena.alloc_and_push_to_hfs_stack(
+                    Expression::Literal(Literal::Integer(self.arena.hfs_stack.len() as i32)),
+                    ExprProvenance::RuntimeValue,
+                    token,
+                );
+                Ok(())
+            },
+
             "@print" => Ok(()),
             _ => {
                 panic!("[internal error] invalid stack keyword")

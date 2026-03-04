@@ -576,7 +576,6 @@ impl CfgAnalyzer {
                 self.arena.hfs_stack.push(phi);
             }
         }
-        self.arena.cfg_context.curr_insert_block = if_end_block;
     }
 
     fn lower_stmt(&mut self, id: StmtId, curr_block_context: BlockContext) -> Result<(), Box<dyn CompileError>> {
@@ -656,7 +655,6 @@ impl CfgAnalyzer {
                             if is_else {
                                 self.generate_merge_phis(if_end_block, &stack_snapshots, &source_info);
                             }
-                            Ok(())
                         },
                         otherstmt => panic!("can't have other statements in else statement, found '{:?}'", otherstmt),
                     }
@@ -673,8 +671,9 @@ impl CfgAnalyzer {
                         TerminatorInst::Branch { source_info, cond, true_block: if_body_block, false_block: if_end_block },
                         block_before_if,
                     );
-                    Ok(())
                 }
+                self.arena.cfg_context.curr_insert_block = if_end_block;
+                Ok(())
             },
             Statement::While { cond, body } => {
                 /* jump while_cond_0;

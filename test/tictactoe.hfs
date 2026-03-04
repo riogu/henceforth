@@ -61,7 +61,7 @@ fn tic_tac_toe: (str str str str str str str str str i32 str) -> (str str str st
         @(player) &= arg8;
     } else if @(board_pos 9 ==) {
         @(player) &= arg9;
-    } else {}
+    }
     @(arg1 arg2 arg3 arg4 arg5 arg6 arg7 arg8 arg9) :> print_board;
 }
 

@@ -1,0 +1,85 @@
+fn print: (str) -> () {}
+fn empty_board : () -> (str str str str str str str str str) { @(" "" "" "" "" "" "" "" "" ") }
+
+fn print_board: (str str str str str str str str str) -> () {
+    let counter: i32; @(0) &= counter;
+    @("next move:\n")     &> print;
+    @(" |-----------|\n") &> print;
+    @loop (str str str str str str str str str) {
+        @(counter 1 +) &= counter;
+        @(" | ") &> print; 
+        @arg &> print;    
+        if @(counter 3 % 0 ==) {
+            @(" |\n") &> print;
+        }
+    }
+    @(" |-----------|\n") &> print; 
+}
+
+fn tic_tac_toe: (str str str str str str str str str i32 str) -> (str str str str str str str str str) {
+    let player: str; &= player;
+    let board_pos: i32; &= board_pos;
+    @rev // reverse board (so we iterate from the 1st element)
+    @loop (str str str str str str str str str) {
+        @(board_pos 1 -) &= board_pos; 
+        if @(board_pos 0 ==) {
+            @(player)
+        } else {
+            @arg
+        }
+    }
+    :> print_board;
+    :> get_winner; if @() { &> print; } else { @pop };
+}
+fn get_winner: (str str str str str str str str str) -> (bool str) {
+    let X_count: i32; @(0) &= X_count;
+    let O_count: i32; @(0) &= O_count;
+    let iter_counter: i32; @(0) &= iter_counter;
+
+    @rev // reverse board (so we iterate from the 1st element)
+     @(1   2   3    4   5   6    7   8   9  // horizontal win
+       1   5   9    3   5   7               // diagonal win
+       1   4   7    2   5   8    3   6   9  // vertical win
+     )
+    @loop (i32 i32 i32    i32 i32 i32    i32 i32 i32
+           i32 i32 i32    i32 i32 i32
+           i32 i32 i32    i32 i32 i32    i32 i32 i32) {
+        let board_pos: i32; @arg &= board_pos;
+        @loop (str str str str str str str str str) {
+            @(board_pos 1 -) &= board_pos; 
+            if @(board_pos 0 ==) { // array access lol
+                // check array element
+                if @(@arg "X" ==) {
+                    @(X_count 1 +) &= X_count;
+                } else if @(@arg "O" ==) {
+                    @(O_count 1 +) &= O_count;
+                }
+            }
+        }
+        if @(X_count 3 == O_count 3 == ||) { break; }
+        if @(iter_counter 3 ==) { // reset the counts after every 3 iterations
+            @(0) := X_count; := O_count; &= iter_counter;
+        }
+    }
+    if @(X_count 3 ==) {
+        @(true "the winner was player 'X'!\n")
+    } else if @(O_count 3 ==) {
+        @(true "the winner was player 'O'!\n")
+    } else {
+        @(false "no one won!\n")
+    }
+
+}
+
+fn main: () -> () {
+    &> empty_board;
+    @(6 "X") &> tic_tac_toe;
+    @(1 "O") &> tic_tac_toe;
+    @(4 "X") &> tic_tac_toe;
+    @(2 "O") &> tic_tac_toe;
+    @(3 "O") &> tic_tac_toe;
+    &> get_winner; &> print;
+    @pop_all
+}
+
+

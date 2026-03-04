@@ -1,16 +1,16 @@
-// builtin lmaoooooo
-fn print: (str) -> (str) {}
+fn print: (str) -> (str) {
+    // builtin lmaoooooo
+}
 fn empty_board : () -> (str str str str str str str str str) { 
     @(" "" "" "" "" "" "" "" "" ") 
 }
-
 fn print_board: (str str str str str str str str str) -> () {
     let arg9: str; &= arg9;
     let arg8: str; &= arg8;
     let arg7: str; &= arg7;
     let arg6: str; &= arg6;
-    let arg4: str; &= arg4;
     let arg5: str; &= arg5;
+    let arg4: str; &= arg4;
     let arg3: str; &= arg3;
     let arg2: str; &= arg2;
     let arg1: str; &= arg1;
@@ -34,13 +34,16 @@ fn tic_tac_toe: (str str str str str str str str str i32 str) -> (str str str st
     let arg8: str; &= arg8;
     let arg7: str; &= arg7;
     let arg6: str; &= arg6;
-    let arg4: str; &= arg4;
     let arg5: str; &= arg5;
+    let arg4: str; &= arg4;
     let arg3: str; &= arg3;
     let arg2: str; &= arg2;
     let arg1: str; &= arg1;
 
     if @(board_pos 1 ==) {
+        if @(arg1 " " !=) {
+            @("you tried assigning to an already filled position!\n") &> print; @pop; 
+        } else {} 
         @(player) &= arg1;
     } else if @(board_pos 2 ==) {
         @(player) &= arg2;
@@ -58,9 +61,8 @@ fn tic_tac_toe: (str str str str str str str str str i32 str) -> (str str str st
         @(player) &= arg8;
     } else if @(board_pos 9 ==) {
         @(player) &= arg9;
-    } else { }
-    @(arg1 arg2 arg3 arg4 arg5 arg6 arg7 arg8 arg9) &> print_board;
-    @(arg1 arg2 arg3 arg4 arg5 arg6 arg7 arg8 arg9)
+    } else {}
+    @(arg1 arg2 arg3 arg4 arg5 arg6 arg7 arg8 arg9) :> print_board;
 }
 
 
@@ -69,8 +71,8 @@ fn get_winner: (str str str str str str str str str) -> (str) {
     let arg8: str; &= arg8;
     let arg7: str; &= arg7;
     let arg6: str; &= arg6;
-    let arg4: str; &= arg4;
     let arg5: str; &= arg5;
+    let arg4: str; &= arg4;
     let arg3: str; &= arg3;
     let arg2: str; &= arg2;
     let arg1: str; &= arg1;
@@ -124,19 +126,9 @@ fn get_winner: (str str str str str str str str str) -> (str) {
 
 fn main: () -> () {
     &> empty_board;
-    let arg9: str; &= arg9;
-    let arg8: str; &= arg8;
-    let arg7: str; &= arg7;
-    let arg6: str; &= arg6;
-    let arg4: str; &= arg4;
-    let arg5: str; &= arg5;
-    let arg3: str; &= arg3;
-    let arg2: str; &= arg2;
-    let arg1: str; &= arg1;
-
-    @(arg1 arg2 arg3 arg4 arg5 arg6 arg7 arg8 arg9)
-    @(4 "X") &> tic_tac_toe;
+    @(6 "X") &> tic_tac_toe;
     @(1 "O") &> tic_tac_toe;
+    @(4 "X") &> tic_tac_toe;
     @(2 "O") &> tic_tac_toe;
     @(3 "O") &> tic_tac_toe;
     &> get_winner; &> print;

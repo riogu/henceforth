@@ -317,7 +317,7 @@ impl IrArena {
                         Some(source_info) => source_info.clone(),
                         None => panic!("[internal error] wrong number of source infos passed"),
                     };
-                    self.compare_types(actual_elem_id, expected_elem_id, vec![elem_source_info]);
+                    self.compare_types(actual_elem_id, expected_elem_id, vec![elem_source_info])?;
                 }
                 Ok(())
             },
@@ -866,6 +866,12 @@ impl CfgAnalyzer {
                         },
                     Identifier::Function(func_id) => unreachable!("can't happen"),
                 };
+                let other_type_id = self.arena.get_type_id_of_inst(inst_value)?;
+                self.arena.compare_types(type_id, other_type_id, vec![
+                    identifier.get_source_info(&self.ast_arena),
+                    self.arena.get_instruction(inst_value).get_source_info(),
+                ])?;
+
                 // Chase the pointer chain: ptr^ is 1 deref, ptr^^ is 2, etc.
                 if deref_count > 0 {
                     for _ in 0..deref_count {

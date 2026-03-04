@@ -496,6 +496,7 @@ impl StackAnalyzer {
                         self.unresolved_arena.get_unresolved_expr_token(identifier),
                     ])?
                 };
+
                 let identifier = self.resolve_var_assignment_identifier(
                     identifier,
                     *self.arena.get_expr_provenance(value),
@@ -517,6 +518,7 @@ impl StackAnalyzer {
                 let mut arg_count = 0;
                 let mut arg_types = Vec::new();
                 let mut arg_expr_tokens = Vec::new();
+                let mut arg_exprs = Vec::new();
                 for _ in 0..param_types.len() {
                     let arg_expr = self.arena.pop_or_error(vec![
                         self.unresolved_arena.get_unresolved_stmt_token(id),
@@ -524,6 +526,7 @@ impl StackAnalyzer {
                     ])?;
                     arg_expr_tokens.push(self.arena.get_expr_token(arg_expr).clone());
                     arg_types.push(self.arena.get_type_id_of_expr(arg_expr)?);
+                    arg_exprs.push(arg_expr);
                     arg_count += 1;
                 }
                 // must reverse because we pop therefore we have our arguments backwards
@@ -534,6 +537,13 @@ impl StackAnalyzer {
                     kind: TokenKind::LeftParen,
                     source_info: SourceInfo::new(0, 0, 0),
                 });
+
+                if !is_move {
+                    // restore the stack
+                    for arg_expr in arg_exprs {
+                        self.arena.hfs_stack.push(arg_expr);
+                    }
+                }
                 // first make sure calling this function is valid given the stack state
                 self.arena.validate_func_call(func_decl.param_type, arg_type_id, arg_expr_tokens);
 

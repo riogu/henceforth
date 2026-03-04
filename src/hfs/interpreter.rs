@@ -165,23 +165,31 @@ impl Interpreter {
         self.call_stack.pop().expect("[internal error] wrong scope management while calling function").return_stack
     }
     pub fn interpret_block(&mut self, block_id: BlockId) {
-        self.prev_block_id = self.curr_block_id;
-        self.curr_block_id = block_id;
-        let block = self.arena.get_block(block_id);
-        let term = block.terminator;
-        for inst_id in block.instructions.clone() {
-            let val = self.interpret_instruction(inst_id);
-            self.curr_call_frame_mut().inst_values.insert(inst_id, val);
-        }
-        if let Some(terminator) = term {
-            self.interpret_terminator(terminator);
-        } else {
-            // TODO: joao please add a nicer print here with info about the broken block
-            panic!(
-                "[internal error] found block with no terminator in: '{}'",
-                self.arena.get_func(self.curr_call_frame().func_id).get_repr(&self.arena)
-            )
-            // panic!("[internal error] found block with no terminator: '{}'", self.arena.get_block(block_id).get_repr(&self.arena))
+        let mut next_block = Some(block_id);
+
+        while let Some(block_id) = next_block {
+            self.prev_block_id = self.curr_block_id;
+            self.curr_block_id = block_id;
+            let block = self.arena.get_block(block_id);
+            let term = block.terminator;
+
+            for inst_id in block.instructions.clone() {
+                // Invalidate cached values for this block's instructions
+                // so that loads and operations are re-evaluated on each visit.
+                self.curr_call_frame_mut().inst_values.remove(&inst_id);
+
+                let val = self.interpret_instruction(inst_id);
+                self.curr_call_frame_mut().inst_values.insert(inst_id, val);
+            }
+            if let Some(terminator) = term {
+                next_block = self.interpret_terminator(terminator);
+            } else {
+                panic!(
+                    // TODO: joao please add a nicer print here with info about the broken block
+                    "[internal error] found block with no terminator in: '{}'",
+                    self.arena.get_func(self.curr_call_frame().func_id).get_repr(&self.arena)
+                )
+            }
         }
     }
     pub fn interpret_instruction(&mut self, inst_id: InstId) -> RuntimeValue {
@@ -456,7 +464,8 @@ impl Interpreter {
             },
         }
     }
-    pub fn interpret_terminator(&mut self, term_id: TermInstId) {
+    // Returns `Some(block_id)` to continue to, or `None` to stop (return)
+    pub fn interpret_terminator(&mut self, term_id: TermInstId) -> Option<BlockId> {
         match self.arena.get_terminator_instruction(term_id) {
             TerminatorInst::Return(source_info, inst_id) => {
                 if let RuntimeValue::Tuple(return_stack) = self.interpret_instruction(*inst_id) {
@@ -464,21 +473,18 @@ impl Interpreter {
                 } else {
                     panic!("[internal error] expected a RuntimeValue::Tuple from TerminatorInst::Return")
                 }
+                None
             },
             TerminatorInst::Branch { source_info, cond, true_block, false_block } => {
                 let false_block = false_block.clone();
                 let true_block = true_block.clone();
                 if let RuntimeValue::Bool(cond) = self.interpret_instruction(*cond) {
-                    if cond {
-                        self.interpret_block(true_block);
-                    } else {
-                        self.interpret_block(false_block);
-                    }
+                    Some(if cond { true_block } else { false_block })
                 } else {
                     panic!("[internal error] expected 'RuntimeValue::Bool' in TerminatorInst::Branch condition value")
                 }
             },
-            TerminatorInst::Jump(source_info, block_id) => self.interpret_block(*block_id),
+            TerminatorInst::Jump(source_info, block_id) => Some(*block_id),
             TerminatorInst::Unreachable => panic!("[internal error] reached 'Unreachable' instruction while interpreting"),
         }
     }

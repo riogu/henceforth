@@ -1,0 +1,32 @@
+// an oracle could be used to perform complex stack manipulation without
+// specifying each step
+// could also be a step to having pattern matching
+oracle do_things_to_stack: (i32 f32 i32 f32 i32 f32) => (a b c d e f) -> (d b e c f a a);
+
+// pipelines are defined in the exact same way as a function
+pipeline do_stuff: (i32 i32) -> (i32 str) {
+	@(+ "string");
+}
+
+//
+
+fn main: () -> () {
+	@(1 2.0 3 4.0 5 6.0) &> do_things_to_stack; // called like a function
+	// [4.0 2.0 5 3 6.0 1 1]
+	@pop_all;
+	@(1 2 3 4 5 6) &> do_stuff; // will call 3 times with arguments (5 6), (3 4) and (1 2)
+	// [3 "string" 7 "string" 9 "string"] 
+	@pop_all;
+	@(true false) &> do_stuff; // a pipeline never fails it just doesn't run if the arguments don't match the expected type
+	@pop_all;
+	@(5) &> do_stuff; // same with the number of arguments, it just won't run if there's less arguments than required
+	@(1 2 3 4 5) &> do_stuff; // will call 2 times with arguments (4 5) and (2 3), won't run the third time since
+							  // there's only one item left on the stack
+	// [1 5 "string" 9 "string"]
+	@(1 "2" 3 4 5 6) &> do_stuff; // will call 2 times with arguments (5 6) (3 4) 
+								  // 1 "2" doesn't match the expected type so it won't run for those arguments
+
+	// the calling syntax could be different (at least for pipelines)
+
+}
+ 

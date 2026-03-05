@@ -176,7 +176,10 @@ impl Interpreter {
             for inst_id in block.instructions.clone() {
                 // Invalidate cached values for this block's instructions
                 // so that loads and operations are re-evaluated on each visit.
-                self.curr_call_frame_mut().inst_values.remove(&inst_id);
+                if !matches!(self.arena.get_instruction(inst_id), Instruction::Parameter { .. }) {
+                    // parameters should only be interpreted once at the start of a block
+                    self.curr_call_frame_mut().inst_values.remove(&inst_id);
+                }
 
                 let val = self.interpret_instruction(inst_id);
                 self.curr_call_frame_mut().inst_values.insert(inst_id, val);

@@ -1,0 +1,99 @@
+fn print: (str) -> () { /* builtin lmaoooooo */ }
+
+fn print_board: (str*) -> () {
+    @("next move:\n") &> print;
+    let board: str*; &= board;
+    let idx: i32; @(0) &= idx;
+    while @(idx 9 !=) {
+        if @(idx 3 % 0 ==) { @(" |-----------|\n") &> print; }
+
+        @(" | ") &> print; @(board idx + ^) &> print;
+
+        if @(idx 3 % 2 ==) { @(" |\n") &> print; }
+
+        @(idx 1 +) &= idx;
+    }
+}
+
+fn horizontal_win: (str* str) -> (bool) {
+    let board: str*; &= board;
+    let player: str; &= player;
+    @(
+      board 1 + ^ player ==  board 2 + ^ player == && board 3 + ^ player == &&
+      board 4 + ^ player ==  board 5 + ^ player == && board 6 + ^ player == &&
+      board 7 + ^ player ==  board 8 + ^ player == && board 9 + ^ player == &&
+      || ||
+     )
+}
+fn vertical_win: (str* str) -> (bool) {
+    let board: str*; &= board;
+    let player: str; &= player;
+    @(
+      board 1 + ^ player ==  board 4 + ^ player == && board 7 + ^ player == &&
+      board 2 + ^ player ==  board 5 + ^ player == && board 8 + ^ player == &&
+      board 3 + ^ player ==  board 6 + ^ player == && board 9 + ^ player == &&
+      || ||
+     )
+}
+fn diagonal_win: (str* str) -> (bool) {
+    let board: str*; &= board;
+    let player: str; &= player;
+    @(
+      board 1 + ^ player ==  board 5 + ^ player == && board 9 + ^ player == &&
+      board 3 + ^ player ==  board 5 + ^ player == && board 7 + ^ player == &&
+      ||
+     )
+}
+fn player_win: (str* str) -> (bool) {
+    :> horizontal_win; @rot
+    :> vertical_win; @rot
+    &> diagonal_win;
+    @(|| ||)
+}
+
+fn get_winner: (str* /* board */ ) -> (str) {
+    if @("X") &> player_win {
+        @("the winner was player 'X'!\n") 
+    } else if @("O") &> player_win {
+        @("the winner was player 'O'!\n") 
+    } else {
+        @("no one won!\n")
+    }
+}
+
+fn tic_tac_toe: (str* i32 str) -> (str*) {
+    let player: str; &= player;       // "X" or "O"
+    let board_pos: i32; &= board_pos; // where to play in the board
+    let board: str*; &= board;
+
+    if @(board board_pos + ^ " " !=) {
+        @("you tried assigning to an already filled position!\n") &> print; 
+    } else {
+        @(board board_pos +) &= board; // board = board + board_pos; // move forward ptr
+        @(player) &= board^;           // *board = player;
+        @(board) :> print_board;
+    }
+}
+
+fn main: () -> () {
+    let board_start: str; @(" ") &= board_start;
+    let board: str*; (board_start&) &= board;
+    // initialize the board, i guess?
+    let idx: i32; @(0) &= idx;
+    while @(idx 9 !=) {
+        @(" ") &= board^; // should this crash? this is very sus
+        // we are writing outside the varible's allocated stack space...
+        // need to decide the semantics
+        @(idx 1 +) &= idx;
+    }
+
+    @(6 "X") &> tic_tac_toe;
+    @(1 "O") &> tic_tac_toe;
+    @(4 "X") &> tic_tac_toe;
+    @(2 "O") &> tic_tac_toe;
+    @(3 "O") &> tic_tac_toe;
+    &> get_winner; &> print;
+    @pop_all
+}
+
+

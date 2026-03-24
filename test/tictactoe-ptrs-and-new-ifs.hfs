@@ -51,8 +51,9 @@ fn tic_tac_toe: (str* i32 str) -> (str*) {
     if @(board board_pos + ^ " " !=) {
         @("you tried assigning to an already filled position!\n") &> print; 
     } else {
-        @(board board_pos +) &= board; // board = board + board_pos; // move forward ptr
-        @(player) &= board^;           // *board = player;
+        let board_ptr: str*; 
+        @(board board_pos +) &= board_ptr; // board = board + board_pos; // move forward ptr
+        @(player) &= board_ptr^;           // *board = player;
         @(board) :> print_board;
     }
 }

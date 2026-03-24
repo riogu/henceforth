@@ -14,41 +14,23 @@ fn print_board: (str*) -> () {
         @(idx 1 +) &= idx;
     }
 }
-
-fn horizontal_win: (str* str) -> (bool) {
+fn player_win: (str* str) -> (bool) {
     let board: str*; &= board;
     let player: str; &= player;
     @(
+      // horizontal win
       board 1 + ^ player ==  board 2 + ^ player == && board 3 + ^ player == &&
       board 4 + ^ player ==  board 5 + ^ player == && board 6 + ^ player == &&
       board 7 + ^ player ==  board 8 + ^ player == && board 9 + ^ player == &&
-      || ||
-     )
-}
-fn vertical_win: (str* str) -> (bool) {
-    let board: str*; &= board;
-    let player: str; &= player;
-    @(
+      // vertical win
       board 1 + ^ player ==  board 4 + ^ player == && board 7 + ^ player == &&
       board 2 + ^ player ==  board 5 + ^ player == && board 8 + ^ player == &&
       board 3 + ^ player ==  board 6 + ^ player == && board 9 + ^ player == &&
-      || ||
-     )
-}
-fn diagonal_win: (str* str) -> (bool) {
-    let board: str*; &= board;
-    let player: str; &= player;
-    @(
+      // diagonal win
       board 1 + ^ player ==  board 5 + ^ player == && board 9 + ^ player == &&
       board 3 + ^ player ==  board 5 + ^ player == && board 7 + ^ player == &&
-      ||
+      || || || || || || ||
      )
-}
-fn player_win: (str* str) -> (bool) {
-    :> horizontal_win; @rot
-    :> vertical_win; @rot
-    &> diagonal_win;
-    @(|| ||)
 }
 
 fn get_winner: (str* /* board */ ) -> (str) {

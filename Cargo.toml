@@ -16,21 +16,5 @@ path = "src/lib.rs"
 
 [[test]]
 name = "error_tests"
-path = "src/hfscheck/test_generators/error_tests.rs"
+path = "tests/error_tests.rs"
 harness = false
-
-[[test]]
-name = "lexer_tests"
-path = "src/hfs/builder/static_tests/lexer_tests.rs"
-harness = true
-
-[[test]]
-name = "parser_tests"
-path = "src/hfs/builder/static_tests/parser_tests.rs"
-harness = true
-
-[[test]]
-name = "stack_analyzer_tests"
-path = "src/hfs/builder/static_tests/stack_analyzer_tests.rs"
-harness = true
-

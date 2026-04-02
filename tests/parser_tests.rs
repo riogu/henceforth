@@ -1,38 +1,36 @@
 #[cfg(test)]
 mod tests {
+
+    use pretty_assertions::assert_eq;
+
     use henceforth::hfs::{
-        ast::Type,
         builder::builder::{Builder, BuilderOperation, ControlFlowOps, FunctionOps, LoopOps, PassMode, StackOps, VariableOps},
-        lexer_builder::TokenSequence,
+        parser_builder::ParserBuilder,
         utils::{run_until, Phase},
+        Type, UnresolvedAstArena,
     };
 
-    use henceforth::hfs::{Token, TokenKind};
-
-    pub fn tokenize_file_into_kinds(name: &str) -> Vec<TokenKind> {
-        run_until(name, Phase::Lexer)
+    fn parse_file(name: &str) -> UnresolvedAstArena {
+        run_until(name, Phase::Parser)
             .expect("compilation failed")
             .as_any()
-            .downcast_ref::<Vec<Token>>()
-            .expect("Expected Vec<Token> from Lexer")
+            .downcast_ref::<UnresolvedAstArena>()
+            .expect("Expected UnresolvedAstArena from Parser")
             .clone()
-            .into_iter()
-            .map(|token| token.kind)
-            .collect()
     }
-
     #[test]
     fn test_simple_main() {
-        let tokens = tokenize_file_into_kinds("test/simple_main.hfs");
-        let expected = TokenSequence::new().func_with("main", None, None).body().end_body().build();
+        let ast = parse_file("tests/compile_tests/simple_main.hfs");
 
-        assert_eq!(tokens, expected);
+        let expected = ParserBuilder::new().func_with("main", None, None).body().end_body().build();
+
+        assert_eq!(ast, expected);
     }
 
     #[test]
     fn test_function_with_lots_of_arguments() {
-        let tokens = tokenize_file_into_kinds("test/function_with_lots_of_arguments.hfs");
-        let expected = TokenSequence::new()
+        let ast = parse_file("tests/compile_tests/function_with_lots_of_arguments.hfs");
+        let expected = ParserBuilder::new()
             .func_with(
                 "func_with_lots_of_arguments",
                 Some(vec![Type::new_int(0), Type::new_float(0), Type::new_string(0), Type::new_bool(0)]),
@@ -55,13 +53,13 @@ mod tests {
             .end_body()
             .build();
 
-        assert_eq!(tokens, expected);
+        assert_eq!(ast, expected);
     }
 
     #[test]
     fn test_function_with_no_arguments() {
-        let tokens = tokenize_file_into_kinds("test/function_with_no_arguments.hfs");
-        let expected = TokenSequence::new()
+        let ast = parse_file("tests/compile_tests/function_with_no_arguments.hfs");
+        let expected = ParserBuilder::new()
             .func_with("no_args", None, Some(vec![Type::new_int(0)]))
             .body()
             .stack_block()
@@ -73,13 +71,13 @@ mod tests {
             .end_body()
             .build();
 
-        assert_eq!(tokens, expected);
+        assert_eq!(ast, expected);
     }
 
     #[test]
     fn test_function_with_no_return_type() {
-        let tokens = tokenize_file_into_kinds("test/function_with_no_return_type.hfs");
-        let expected = TokenSequence::new()
+        let ast = parse_file("tests/compile_tests/function_with_no_return_type.hfs");
+        let expected = ParserBuilder::new()
             .func_with("no_return_type", Some(vec![Type::new_int(0)]), None)
             .body()
             .push_stack_keyword("@pop", true)
@@ -88,13 +86,14 @@ mod tests {
             .body()
             .end_body()
             .build();
-        assert_eq!(tokens, expected);
+        assert_eq!(ast, expected);
     }
 
     #[test]
     fn test_variable_declarations() {
-        let tokens = tokenize_file_into_kinds("test/variable_declarations.hfs");
-        let expected = TokenSequence::new()
+        let ast = parse_file("tests/compile_tests/variable_declarations.hfs");
+
+        let expected = ParserBuilder::new()
             .func_with("main", None, None)
             .body()
             .variable("a", Type::new_int(0))
@@ -104,13 +103,13 @@ mod tests {
             .end_body()
             .build();
 
-        assert_eq!(tokens, expected);
+        assert_eq!(ast, expected);
     }
 
     #[test]
     fn test_copy_and_move() {
-        let tokens = tokenize_file_into_kinds("test/copy_and_move.hfs");
-        let expected = TokenSequence::new()
+        let ast = parse_file("tests/compile_tests/copy_and_move.hfs");
+        let expected = ParserBuilder::new()
             .func_with("main", None, None)
             .body()
             .variable("copy", Type::new_int(0))
@@ -122,13 +121,13 @@ mod tests {
             .assign_to("move", PassMode::Move)
             .end_body()
             .build();
-        assert_eq!(tokens, expected);
+        assert_eq!(ast, expected);
     }
 
     #[test]
     fn test_operations() {
-        let tokens = tokenize_file_into_kinds("test/operations.hfs");
-        let expected = TokenSequence::new()
+        let ast = parse_file("tests/compile_tests/operations.hfs");
+        let expected = ParserBuilder::new()
             .func_with("main", None, None)
             .body()
             .stack_block()
@@ -160,13 +159,13 @@ mod tests {
             .push_stack_keyword("@pop", true)
             .end_body()
             .build();
-        assert_eq!(tokens, expected);
+        assert_eq!(ast, expected);
     }
 
     #[test]
     fn test_while_loop() {
-        let tokens = tokenize_file_into_kinds("test/while_loop.hfs");
-        let expected = TokenSequence::new()
+        let ast = parse_file("tests/compile_tests/while_loop.hfs");
+        let expected = ParserBuilder::new()
             .func_with("main", None, None)
             .body()
             .variable("a", Type::new_int(0))
@@ -206,13 +205,13 @@ mod tests {
             .return_statement()
             .end_body()
             .build();
-        assert_eq!(tokens, expected)
+        assert_eq!(ast, expected)
     }
 
     #[test]
     fn test_simple_if_else() {
-        let tokens = tokenize_file_into_kinds("test/simple_if_else.hfs");
-        let expected = TokenSequence::new()
+        let ast = parse_file("tests/compile_tests/simple_if_else.hfs");
+        let expected = ParserBuilder::new()
             .func_with("main", None, None)
             .body()
             .if_statement()
@@ -237,13 +236,13 @@ mod tests {
             .end_body()
             .end_body()
             .build();
-        assert_eq!(tokens, expected);
+        assert_eq!(ast, expected);
     }
 
     #[test]
     fn test_if_elif_else() {
-        let tokens = tokenize_file_into_kinds("test/if_elif_else.hfs");
-        let expected = TokenSequence::new()
+        let ast = parse_file("tests/compile_tests/if_elif_else.hfs");
+        let expected = ParserBuilder::new()
             .func_with("fizz_buzz", Some(vec![Type::new_int(0)]), Some(vec![Type::new_string(0)]))
             .body()
             .if_statement()
@@ -299,13 +298,13 @@ mod tests {
             .push_stack_keyword("@pop", true)
             .end_body()
             .build();
-        assert_eq!(tokens, expected);
+        assert_eq!(ast, expected);
     }
 
     #[test]
     fn test_copy_and_move_func_calls() {
-        let tokens = tokenize_file_into_kinds("test/copy_and_move_func_calls.hfs");
-        let expected = TokenSequence::new()
+        let ast = parse_file("tests/compile_tests/copy_and_move_func_calls.hfs");
+        let expected = ParserBuilder::new()
             .func_with("max", Some(vec![Type::new_int(0), Type::new_int(0)]), Some(vec![Type::new_int(0)]))
             .body()
             .if_statement()
@@ -345,6 +344,6 @@ mod tests {
             .push_stack_keyword("@pop", true)
             .end_body()
             .build();
-        assert_eq!(tokens, expected)
+        assert_eq!(ast, expected)
     }
 }

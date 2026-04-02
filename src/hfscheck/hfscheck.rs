@@ -44,7 +44,7 @@ mod tests {
 
     #[test]
     fn test_finds_error() {
-        let path = PathBuf::from("test/failure_tests/lexer1.hfs");
+        let path = PathBuf::from("tests/failure_tests/lexer/lexer1.hfs");
         let assertions = find_assertions(&path);
 
         assert_eq!(assertions.len(), 1);
@@ -53,7 +53,7 @@ mod tests {
 
     #[test]
     fn test_no_errors() {
-        let path = PathBuf::from("test/operations.hfs");
+        let path = PathBuf::from("tests/compile_tests/operations.hfs");
         let assertions = find_assertions(&path);
         assert_eq!(assertions.len(), 0);
     }

@@ -1,7 +1,6 @@
 pub mod hfscheck {
     pub mod error_parser;
     pub mod hfscheck;
-    pub mod test_generators;
 }
 
 pub mod hfs {

@@ -2,6 +2,7 @@ fn foo: (i32 bool str) -> (i32 bool str) {
 	return;
 }
 
-fn main: () -> () {
+fn main: () -> () { 
 	@(5 true "test") &> foo;
 }
+//? "expected [0-9] on stack found [0-9]" @[^*]

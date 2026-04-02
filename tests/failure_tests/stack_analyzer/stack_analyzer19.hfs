@@ -4,4 +4,5 @@ fn main: () -> () {
 	} else {
 		@(1 2 3 4 5 8 8 5 54 3 5 4 3 2 2);
 	};
+	//? "expected stack depth of * found stack depth of *" @[^*]
 }

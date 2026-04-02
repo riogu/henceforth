@@ -1,4 +1,4 @@
 fn foo: () -> () {}
 fn main: () -> () {
-	@(5) &= foo;
+	@(5) &= foo; //? "cannot assign value to function"
 }

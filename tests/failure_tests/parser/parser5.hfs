@@ -1,1 +1,1 @@
-let var:
+let var: //? "expected type"

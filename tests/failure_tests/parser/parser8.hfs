@@ -1,1 +1,1 @@
-if 0 > 0 {}
+if 0 > 0 {}//? "expected function or variable declaration"

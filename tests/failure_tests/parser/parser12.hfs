@@ -1,5 +1,5 @@
 fn main: () -> () {
 	if @() {
 		
-	} else
+	} else //? "expected token"
 

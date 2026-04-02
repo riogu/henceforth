@@ -1,1 +1,1 @@
-let var: (i32 while);
+let var: (i32 while); //? "expected type found while"

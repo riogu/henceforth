@@ -1,1 +1,1 @@
-let a: else;
+let a: else; //? "expected type found else"

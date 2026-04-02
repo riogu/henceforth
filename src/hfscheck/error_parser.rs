@@ -37,8 +37,8 @@ impl HfsRegex {
             HfsRegex::Text(text) => msg.find(text).map(|i| i + text.len()),
             HfsRegex::SingleChar => Some(1),
             HfsRegex::Wildcard => Some(0),
-            HfsRegex::Range(a, b) => msg.chars().next().filter(|c| c >= a && c <= b).map(|_| 1),
-            HfsRegex::List(items) => msg.chars().next().filter(|c| items.contains(c)).map(|_| 1),
+            HfsRegex::Range(a, b) => msg.chars().position(|c| c >= *a && c <= *b).map(|i| i + 1),
+            HfsRegex::List(items) => msg.chars().position(|c| items.contains(&c)).map(|i| i + 1),
         }
     }
 }

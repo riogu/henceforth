@@ -1,3 +1,3 @@
 fn main: () -> () {
-	while @("string test") {}
+	while @("string test") {} //? "expected bool found str"
 }

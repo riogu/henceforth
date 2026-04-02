@@ -1,4 +1,4 @@
 fn main: () -> () {
 	let a: i32;
-	&= a;
+	&= a; //? "stack underflow"
 }

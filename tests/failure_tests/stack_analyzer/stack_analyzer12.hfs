@@ -1,5 +1,5 @@
-fn foo: () -> (i32) {
-	@(true);
+fn foo: () -> (i32) { //? "expected i32 found bool"
+	@(true); 
 }
 
 fn main: () -> () {}

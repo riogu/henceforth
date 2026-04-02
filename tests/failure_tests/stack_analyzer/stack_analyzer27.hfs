@@ -1,4 +1,4 @@
 fn main: () -> () {
 	let var: str;
-	:> var;
+	:> var; //? "cannot call variable as function"
 }

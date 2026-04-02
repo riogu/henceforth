@@ -1,5 +1,5 @@
 fn foo: () -> (i32 f32) {
-	return;
+	return; //? "expected [0-9] values on stack found [0-9]"
 }
 
 fn main: () -> () {}

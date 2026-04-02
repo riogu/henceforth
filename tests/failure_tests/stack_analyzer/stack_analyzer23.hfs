@@ -1,6 +1,6 @@
 fn main: () -> () {
 	while @(true) {
-		@(true);
+		@(true); //? "expected while loop to * a net-zero stack effect"
 	}
 	@pop;
 }

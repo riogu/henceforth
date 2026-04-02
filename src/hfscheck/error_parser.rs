@@ -43,23 +43,23 @@ impl HfsRegex {
     }
 }
 
-pub struct Test<'a> {
-    path: &'a PathBuf,
-    message_check: Box<dyn Fn(String) -> bool>,
-    error_line_check: Box<dyn Fn(usize) -> bool>,
+pub struct Test {
+    pub path: PathBuf,
+    pub message_check: Box<dyn Fn(String) -> bool + Send + Sync>,
+    pub error_line_check: Box<dyn Fn(usize) -> bool + Send + Sync>,
 }
 
-impl<'a> Test<'a> {
+impl Test {
     pub fn check(&self, message: String, line: usize) -> bool {
         (self.message_check)(message) && (self.error_line_check)(line)
     }
 }
 
 impl ErrorParser {
-    pub fn generate_test(path: &'_ PathBuf, line_number: usize, error: String) -> Test<'_> {
+    pub fn generate_test(path: &'_ PathBuf, line_number: usize, error: String) -> Test {
         let mut chars_iter = error.chars().peekable();
-        let mut error_line_check: Box<dyn Fn(usize) -> bool> = Box::new(move |l| l == line_number);
-        let mut message_check: Box<dyn Fn(String) -> bool> = Box::new(|_| true);
+        let mut error_line_check: Box<dyn Fn(usize) -> bool + Send + Sync> = Box::new(move |l| l == line_number);
+        let mut message_check: Box<dyn Fn(String) -> bool + Send + Sync> = Box::new(|_| true);
         while let Some(char) = chars_iter.next() {
             match char {
                 ' ' | '\t' | '\n' => continue,
@@ -81,14 +81,14 @@ impl ErrorParser {
                         error_line_check = ErrorParser::generate_error_line_check(error_position, line_number);
                     }
                 },
-                c => panic!("found {c}"),
+                c => panic!("found {c} in {path:?}"),
             }
         }
 
-        return Test { path, message_check, error_line_check };
+        return Test { path: path.clone(), message_check, error_line_check };
     }
 
-    fn generate_error_line_check(error_position: String, line_number: usize) -> Box<dyn Fn(usize) -> bool> {
+    fn generate_error_line_check(error_position: String, line_number: usize) -> Box<dyn Fn(usize) -> bool + Send + Sync> {
         match error_position.chars().nth(0) {
             Some('^') => match &error_position[1..] {
                 "*" => Box::new(move |pos| pos < line_number),
@@ -110,7 +110,7 @@ impl ErrorParser {
         }
     }
 
-    fn hfs_regex(message: String) -> Box<dyn Fn(String) -> bool> {
+    fn hfs_regex(message: String) -> Box<dyn Fn(String) -> bool + Send + Sync> {
         let patterns: Vec<HfsRegex> = message.split(' ').map(HfsRegex::new).collect();
         Box::new(move |msg| {
             let mut last_found_pos = 0;

@@ -1,1 +1,1 @@
-fn main: () => () {} //? "unexpected eof"
+fn main: () => () {} //? "unexpected character"

@@ -184,30 +184,40 @@ impl Lexer {
                             if let Some(_) = chars_iter.next_if_eq(&'"') {
                                 break;
                             } else {
-                                if let Some(c) = chars_iter.next() {
-                                    line_offset += 1;
-                                    if c == '\\' {
-                                        match chars_iter.next() {
-                                            Some('n') => lit.push('\n'),
-                                            Some('t') => lit.push('\t'),
-                                            Some('\\') => lit.push('\\'),
-                                            Some('"') => lit.push('"'),
-                                            Some(c) => {
-                                                lit.push('\\');
-                                                lit.push(c);
-                                            }, // unknown escape
-                                            None => {
-                                                return lexer_error!(
-                                                    LexerErrorKind::UnexpectedEof,
-                                                    file.path.clone(),
-                                                    SourceInfo::new(line_number + 1, line_offset + 1, 1),
-                                                    tokens
-                                                )
-                                            },
+                                match chars_iter.next() {
+                                    Some(c) => {
+                                        line_offset += 1;
+                                        if c == '\\' {
+                                            match chars_iter.next() {
+                                                Some('n') => lit.push('\n'),
+                                                Some('t') => lit.push('\t'),
+                                                Some('\\') => lit.push('\\'),
+                                                Some('"') => lit.push('"'),
+                                                Some(c) => {
+                                                    lit.push('\\');
+                                                    lit.push(c);
+                                                }, // unknown escape
+                                                None => {
+                                                    return lexer_error!(
+                                                        LexerErrorKind::UnexpectedEof,
+                                                        file.path.clone(),
+                                                        SourceInfo::new(line_number + 1, line_offset + 1, 1),
+                                                        tokens
+                                                    )
+                                                },
+                                            }
+                                        } else {
+                                            lit.push(c);
                                         }
-                                    } else {
-                                        lit.push(c);
-                                    }
+                                    },
+                                    None => {
+                                        return lexer_error!(
+                                            LexerErrorKind::UnexpectedEof,
+                                            file.path.clone(),
+                                            SourceInfo::new(line_number + 1, line_offset + 1, 1),
+                                            tokens
+                                        )
+                                    },
                                 }
                             }
                         }

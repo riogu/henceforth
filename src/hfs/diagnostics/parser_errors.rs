@@ -89,6 +89,10 @@ impl ParserError {
 }
 
 impl CompileError for ParserError {
+    fn get_line(&self) -> usize {
+        return self.source_info.line_number;
+    }
+
     fn message(&self) -> (String, String) {
         match &self.kind {
             ParserErrorKind::ExpectedButFound(expected, found) => match found {

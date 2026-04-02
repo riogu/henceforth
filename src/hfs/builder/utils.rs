@@ -35,7 +35,7 @@ impl Byproduct for () {
     }
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone, Copy)]
 pub enum Phase {
     Lexer,
     Parser,

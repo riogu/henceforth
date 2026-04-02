@@ -1,5 +1,7 @@
 use std::{fs, path::PathBuf};
 
+use crate::hfscheck::error_parser::{ErrorParser, Test};
+
 #[derive(Debug, PartialEq)]
 pub enum Assertion<'a> {
     Error(&'a PathBuf, usize, String),
@@ -34,6 +36,17 @@ pub fn find_assertions(path: &'_ PathBuf) -> Vec<Assertion<'_>> {
         }
     }
     return assertions;
+}
+
+pub fn generate_tests(path: &PathBuf) -> Vec<Test> {
+    let assertions = find_assertions(path);
+    let mut tests = Vec::new();
+    for assertion in assertions {
+        match assertion {
+            Assertion::Error(path, line, error) => tests.push(ErrorParser::generate_test(path, line, error)),
+        }
+    }
+    return tests;
 }
 
 #[cfg(test)]

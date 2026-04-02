@@ -118,6 +118,10 @@ impl CompileError for LexerError {
         #[cfg(not(debug_assertions))]
         return ColoredString::from("");
     }
+
+    fn get_line(&self) -> usize {
+        return self.source_info.line_number;
+    }
 }
 
 impl Display for LexerError {

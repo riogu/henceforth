@@ -73,6 +73,9 @@ impl CfgAnalyzerError {
 }
 
 impl CompileError for CfgAnalyzerError {
+    fn get_line(&self) -> usize {
+        return self.source_info.line_number;
+    }
     fn message(&self) -> (String, String) {
         match &self.kind {
             CfgAnalyzerErrorKind::StackUnderflow => {

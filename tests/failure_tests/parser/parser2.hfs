@@ -1,1 +1,1 @@
-let a i32; 
+let a i32; //? "expected . found i32"

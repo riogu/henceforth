@@ -14,6 +14,7 @@ pub trait CompileError: Display + Debug {
     fn location(&self) -> ColoredString;
     fn source_code(&self) -> Result<ColoredString, Box<dyn Error>>;
     fn debug_info(&self) -> ColoredString;
+    fn get_line(&self) -> usize;
 }
 
 #[derive(Debug, Default, Clone)]

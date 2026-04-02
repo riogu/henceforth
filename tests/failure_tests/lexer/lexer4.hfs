@@ -1,1 +1,2 @@
-« //? "unexpected character"
+«
+//? "unexpected character" @[^1]

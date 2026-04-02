@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::hfs::{ast::*, cfg_analyzer::*, hfs_mir::*, scope_stack::*, token::*};
+use crate::hfs::{IrArena, ast::*, hfs_mir::*, scope_stack::*, token::*};
 
 //---------------------------------------------------------------------------
 // Runtime values
@@ -231,13 +231,12 @@ impl Interpreter {
                 // capture them). maybe one day we might want to allow capturing them
                 RuntimeValue::Tuple(runtime_return_values)
             },
-            Instruction::Phi { source_info: _, incoming } => {
+            Instruction::Phi { source_info: _, incoming } =>
                 if let Some(inst_id) = incoming.get(&self.prev_block_id) {
                     self.interpret_instruction(*inst_id)
                 } else {
                     panic!("[internal error] reached phi without going through one of its predecessor blocks")
-                }
-            },
+                },
             Instruction::Tuple { source_info: _, instructions } => {
                 let mut runtime_values = Vec::<RuntimeValue>::new();
                 for inst_id in instructions.clone() {

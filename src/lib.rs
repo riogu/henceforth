@@ -11,6 +11,7 @@ pub mod hfs {
     pub mod diagnostics;
     pub mod hfs_mir;
     pub mod interpreter;
+    pub mod ir_arena;
     pub mod lexer;
     pub mod parser;
     pub mod scope_stack;
@@ -24,6 +25,7 @@ pub mod hfs {
     pub use diagnostics::*;
     pub use hfs_mir::*;
     pub use interpreter::*;
+    pub use ir_arena::*;
     pub use lexer::*;
     pub use parser::*;
     pub use scope_stack::*;

@@ -1,3 +1,4 @@
+// ? "invalid stack keyword" @[v*]
 
 
 
@@ -107,5 +108,4 @@
 
 
 
-
-@drop // InvalidStackKeyword
+@drop 

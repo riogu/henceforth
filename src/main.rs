@@ -1,45 +1,14 @@
 #![allow(unused)]
 
-mod hfs {
-    pub mod ast;
-    // pub mod ast_interpreter;
-    pub mod builder;
-    pub mod cfg_analyzer;
-    pub mod diagnostics;
-    pub mod hfs_mir;
-    pub mod interpreter;
-    pub mod lexer;
-    pub mod parser;
-    pub mod scope_stack;
-    pub mod stack_analyzer;
-    pub mod token;
-    pub mod types;
-    pub mod unresolved_ast;
-    pub use ast::*;
-    pub use builder::*;
-    pub use cfg_analyzer::*;
-    pub use diagnostics::*;
-    pub use hfs_mir::*;
-    pub use interpreter::*;
-    pub use lexer::*;
-    pub use parser::*;
-    pub use scope_stack::*;
-    pub use stack_analyzer::*;
-    pub use token::*;
-    pub use types::*;
-    pub use unresolved_ast::*;
-}
 use std::{error::Error, path::PathBuf, process::exit, rc::Rc};
 
 use clap::{arg, Parser};
 
-use crate::hfs::{
+use henceforth::hfs::{
+    self,
     cfg_analyzer_errors::CfgAnalyzerError,
     error::{CompileError, DiagnosticInfo},
     get_eof_source_info,
-    parser_errors::ParserError,
-    stack_analyzer_errors::StackAnalyzerError,
-    CfgAnalyzer, StackAnalyzer,
 };
 
 #[derive(Parser, Debug, Clone)]
@@ -66,7 +35,7 @@ fn run() -> Result<(), Box<dyn CompileError>> {
     let (top_level_insts, ir_arena) =
         hfs::CfgAnalyzer::lower_to_mir(top_level_nodes, ast_arena.clone(), diagnostic_info.clone())?;
 
-    println!("{}",CfgAnalyzerError::dump_ast_and_ir(None, &ir_arena));
+    println!("{}", CfgAnalyzerError::dump_ast_and_ir(None, &ir_arena));
 
     hfs::Interpreter::interpret(ir_arena, top_level_insts, scope_stack);
 

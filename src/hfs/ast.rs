@@ -176,7 +176,7 @@ impl Display for Type {
             Type::Bool { ptr_count } => write!(f, "bool"),
             Type::Float { ptr_count } => write!(f, "f32"),
             Type::Tuple { type_ids, ptr_count } => write!(f, "tuple"),
-                // todo!("this might not be printable with the current structure"),
+            // todo!("this might not be printable with the current structure"),
         }
     }
 }

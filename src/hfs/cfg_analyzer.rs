@@ -5,11 +5,11 @@ use colored::{Colorize, CustomColor};
 use crate::{
     cfg_analyzer_error,
     hfs::{
+        BasicBlock, BlockId, CfgFunction, CfgOperation, CfgPrintable, CfgTopLevelId, GlobalIrVarDeclaration, GlobalIrVarId,
+        InstId, Instruction, IrFuncId, PRIMITIVE_TYPE_COUNT, SourceInfo, TermInstId, TerminatorInst,
         ast::*,
         cfg_analyzer_errors::CfgAnalyzerErrorKind,
         error::{CompileError, DiagnosticInfo},
-        BasicBlock, BlockId, CfgFunction, CfgOperation, CfgPrintable, CfgTopLevelId, GlobalIrVarDeclaration, GlobalIrVarId,
-        InstId, Instruction, IrFuncId, SourceInfo, TermInstId, TerminatorInst, PRIMITIVE_TYPE_COUNT,
     },
 };
 
@@ -24,7 +24,7 @@ pub struct BlockContext {
 }
 
 #[derive(Debug, Default)]
-pub struct CfgContext {
+pub struct IrContext {
     pub curr_function: IrFuncId,
     pub curr_insert_block: BlockId,
     // we use this to track what the stack is for each construct
@@ -56,7 +56,7 @@ pub struct IrArena {
     // its used to keep track of each merging stack
     pub curr_block_stack: Vec<InstId>,
 
-    pub cfg_context: CfgContext,
+    pub cfg_context: IrContext,
     //
     // NOTE: this was used by braun et al. we will reuse it for mem2reg later
 
@@ -345,14 +345,13 @@ impl CfgAnalyzer {
             let new_node = match node {
                 TopLevelId::VariableDecl(id) => CfgTopLevelId::GlobalVarDecl(self.lower_global_variable_declaration(id)),
                 TopLevelId::FunctionDecl(id) => CfgTopLevelId::FunctionDecl(self.lower_function_declaration(id)?),
-                TopLevelId::Statement(id) => {
+                TopLevelId::Statement(id) =>
                     return cfg_analyzer_error!(
                         CfgAnalyzerErrorKind::NoStatementsInGlobalScope,
                         &self.arena,
                         Some(&self.ast_arena),
                         vec![self.ast_arena.get_stmt_token(id).source_info.clone()]
-                    )
-                },
+                    ),
             };
             analyzed_nodes.push(new_node);
         }
@@ -489,14 +488,10 @@ impl CfgAnalyzer {
         // condition isnt included in the stack depth count
         let cond = match self.arena.pop_hfs_stack() {
             Some(cond) => cond,
-            None => {
-                return cfg_analyzer_error!(
-                    CfgAnalyzerErrorKind::StackUnderflow,
-                    &self.arena,
-                    Some(&self.ast_arena),
-                    vec![self.ast_arena.get_stmt_token(body).source_info.clone()]
-                )
-            },
+            None =>
+                return cfg_analyzer_error!(CfgAnalyzerErrorKind::StackUnderflow, &self.arena, Some(&self.ast_arena), vec![
+                    self.ast_arena.get_stmt_token(body).source_info.clone()
+                ]),
         };
         let cond_type = self.arena.get_type_id_of_inst(cond)?;
         self.arena
@@ -685,11 +680,8 @@ impl CfgAnalyzer {
                 self.arena.cfg_context.curr_insert_block = while_cond_block;
                 let cond = self.lower_expr(cond)?;
                 let cond_type = self.arena.get_type_id_of_inst(cond)?;
-                self.arena.compare_types(
-                    cond_type,
-                    self.arena.bool_type(),
-                    vec![self.arena.get_instruction(cond).get_source_info()],
-                )?;
+                self.arena
+                    .compare_types(cond_type, self.arena.bool_type(), vec![self.arena.get_instruction(cond).get_source_info()])?;
                 self.arena.alloc_terminator_for(
                     TerminatorInst::Branch {
                         source_info: source_info.clone(),
@@ -819,7 +811,7 @@ impl CfgAnalyzer {
                 let inst_value = if is_move {
                     match self.arena.pop_hfs_stack() {
                         Some(val) => val,
-                        None => {
+                        None =>
                             return cfg_analyzer_error!(
                                 CfgAnalyzerErrorKind::StackUnderflow,
                                 &self.arena,
@@ -828,13 +820,12 @@ impl CfgAnalyzer {
                                     self.ast_arena.get_stmt_token(id).source_info.clone(),
                                     identifier.get_source_info(&self.ast_arena)
                                 ]
-                            )
-                        },
+                            ),
                     }
                 } else {
                     match self.arena.hfs_stack.last() {
                         Some(val) => *val,
-                        None => {
+                        None =>
                             return cfg_analyzer_error!(
                                 CfgAnalyzerErrorKind::ExpectedItemOnStack,
                                 &self.arena,
@@ -843,8 +834,7 @@ impl CfgAnalyzer {
                                     self.ast_arena.get_stmt_token(id).source_info.clone(),
                                     identifier.get_source_info(&self.ast_arena)
                                 ]
-                            )
-                        },
+                            ),
                     }
                 };
                 let (mut address, type_id) = match identifier {
@@ -857,11 +847,10 @@ impl CfgAnalyzer {
                     Identifier::Function(_) => unreachable!("can't happen"),
                 };
                 let other_type_id = self.arena.get_type_id_of_inst(inst_value)?;
-                self.arena.compare_types(
-                    type_id,
-                    other_type_id,
-                    vec![identifier.get_source_info(&self.ast_arena), self.arena.get_instruction(inst_value).get_source_info()],
-                )?;
+                self.arena.compare_types(type_id, other_type_id, vec![
+                    identifier.get_source_info(&self.ast_arena),
+                    self.arena.get_instruction(inst_value).get_source_info(),
+                ])?;
 
                 // Chase the pointer chain: ptr^ is 1 deref, ptr^^ is 2, etc.
                 if deref_count > 0 {
@@ -892,9 +881,9 @@ impl CfgAnalyzer {
                     inst_args.push(arg_inst);
                 }
                 inst_args.reverse(); // we reverse because we were popping the stack
-                                     // and we want the syntax to work left->right to be more readable and match the
-                                     // expectations of the stated type of the function that works as a "view" into the
-                                     // stack, not as a popped argments mechanics
+                // and we want the syntax to work left->right to be more readable and match the
+                // expectations of the stated type of the function that works as a "view" into the
+                // stack, not as a popped argments mechanics
 
                 if !is_move {
                     // restore the stack
@@ -969,9 +958,8 @@ impl CfgAnalyzer {
                 },
                 Identifier::Function(_) => panic!("[internal error] can't have function identifiers as expressions."),
             },
-            Expression::Literal(literal) => {
-                self.arena.alloc_inst_for(Instruction::Literal(source_info, literal), self.arena.cfg_context.curr_insert_block)
-            },
+            Expression::Literal(literal) =>
+                self.arena.alloc_inst_for(Instruction::Literal(source_info, literal), self.arena.cfg_context.curr_insert_block),
             Expression::Tuple { expressions } => {
                 let mut instructions = Vec::<InstId>::new();
                 for expr_id in expressions {
@@ -984,12 +972,10 @@ impl CfgAnalyzer {
             // NOTE: Expression::Parameter are weird because this instruction isnt really used or
             // will even really be lowered to any assembly in reality. it probably doesnt need to
             // be added to any block, it can be kept inside the CfgFunction struct
-            {
                 self.arena.alloc_inst_for(
                     Instruction::Parameter { source_info, index, type_id },
                     self.arena.cfg_context.curr_insert_block,
-                )
-            },
+                ),
             Expression::ReturnValue(type_id) => self
                 .arena
                 .alloc_inst_for(Instruction::ReturnValue { source_info, type_id }, self.arena.cfg_context.curr_insert_block),
@@ -1005,9 +991,8 @@ impl CfgAnalyzer {
             Operation::Div(expr_id, expr_id1) => CfgOperation::Div(self.lower_expr(expr_id)?, self.lower_expr(expr_id1)?),
             Operation::Mod(expr_id, expr_id1) => CfgOperation::Mod(self.lower_expr(expr_id)?, self.lower_expr(expr_id1)?),
             Operation::Equal(expr_id, expr_id1) => CfgOperation::Equal(self.lower_expr(expr_id)?, self.lower_expr(expr_id1)?),
-            Operation::NotEqual(expr_id, expr_id1) => {
-                CfgOperation::NotEqual(self.lower_expr(expr_id)?, self.lower_expr(expr_id1)?)
-            },
+            Operation::NotEqual(expr_id, expr_id1) =>
+                CfgOperation::NotEqual(self.lower_expr(expr_id)?, self.lower_expr(expr_id1)?),
             Operation::Less(expr_id, expr_id1) => CfgOperation::Less(self.lower_expr(expr_id)?, self.lower_expr(expr_id1)?),
             Operation::LessEqual(expr_id, expr1) => CfgOperation::LessEqual(self.lower_expr(expr_id)?, self.lower_expr(expr1)?),
             Operation::Greater(expr_id, expr_id1) => CfgOperation::Greater(self.lower_expr(expr_id)?, self.lower_expr(expr_id1)?),

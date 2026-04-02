@@ -1,7 +1,6 @@
 use std::{path::PathBuf, rc::Rc};
 
 use crate::hfs::{
-    self,
     builder::builder::{Builder, BuilderOperation, ControlFlowOps, FunctionOps, LoopOps, PassMode, StackOps, VariableOps},
     error::DiagnosticInfo,
     Literal, ScopeKind, SourceInfo, Token, Type, TypeId, UnresolvedAstArena, UnresolvedExprId, UnresolvedExpression,
@@ -27,8 +26,8 @@ struct FunctionContext {
 }
 
 enum BuilderContext {
-    WhileLoop { cond: UnresolvedStmtId },
-    IfStatement { cond: UnresolvedStmtId },
+    WhileLoop,
+    IfStatement,
     StackBlock,
     BlockScope { items: Vec<UnresolvedTopLevelId>, scope_kind: ScopeKind },
 }
@@ -52,11 +51,10 @@ impl Builder<UnresolvedStmtOrExpr> for ParserBuilder {
     type Built = UnresolvedAstArena;
     fn new() -> Self {
         ParserBuilder {
-            arena: UnresolvedAstArena::new(Rc::new(DiagnosticInfo::new(PathBuf::new(), SourceInfo {
-                line_number: 0,
-                line_offset: 0,
-                token_width: 0,
-            }))),
+            arena: UnresolvedAstArena::new(Rc::new(DiagnosticInfo::new(
+                PathBuf::new(),
+                SourceInfo { line_number: 0, line_offset: 0, token_width: 0 },
+            ))),
             current_function: None,
             stack_block_exprs: Vec::new(),
             context_stack: Vec::new(),
@@ -107,7 +105,7 @@ impl VariableOps for ParserBuilder {
             self.arena.alloc_unresolved_expr(UnresolvedExpression::Identifier(name.to_string()), Self::dummy_token());
 
         let is_move = matches!(mode, PassMode::Move);
-        let stmt = UnresolvedStatement::Assignment { identifier, is_move, deref_count: todo!("add stuff here joao") };
+        let stmt = UnresolvedStatement::Assignment { identifier, is_move, deref_count: 0 };
         let stmt_id = self.arena.alloc_unresolved_stmt(stmt, Self::dummy_token());
 
         if let Some(BuilderContext::BlockScope { items, .. }) = self.context_stack.last_mut() {
@@ -120,8 +118,8 @@ impl VariableOps for ParserBuilder {
 
 impl LoopOps for ParserBuilder {
     fn while_loop(mut self) -> Self {
-        let cond = UnresolvedStmtId(self.arena.unresolved_stmts.len().saturating_sub(1));
-        self.context_stack.push(BuilderContext::WhileLoop { cond });
+        let _ = UnresolvedStmtId(self.arena.unresolved_stmts.len().saturating_sub(1));
+        self.context_stack.push(BuilderContext::WhileLoop);
         self.context_stack.push(BuilderContext::BlockScope { items: Vec::new(), scope_kind: ScopeKind::WhileLoop });
 
         self
@@ -130,18 +128,17 @@ impl LoopOps for ParserBuilder {
 
 impl ControlFlowOps for ParserBuilder {
     fn if_statement(mut self) -> Self {
-        let cond = UnresolvedStmtId(self.arena.unresolved_stmts.len().saturating_sub(1));
-        self.context_stack.push(BuilderContext::IfStatement { cond });
+        let _ = UnresolvedStmtId(self.arena.unresolved_stmts.len().saturating_sub(1));
+        self.context_stack.push(BuilderContext::IfStatement);
         self.context_stack.push(BuilderContext::BlockScope { items: Vec::new(), scope_kind: ScopeKind::IfStmt });
 
         self
     }
 
     fn elif_statement(mut self) -> Self {
-        let prev_block = self.context_stack.pop();
-        let cond = UnresolvedStmtId(self.arena.unresolved_stmts.len().saturating_sub(1));
+        let _ = UnresolvedStmtId(self.arena.unresolved_stmts.len().saturating_sub(1));
 
-        self.context_stack.push(BuilderContext::IfStatement { cond });
+        self.context_stack.push(BuilderContext::IfStatement);
         self.context_stack.push(BuilderContext::BlockScope { items: Vec::new(), scope_kind: ScopeKind::IfStmt });
 
         self

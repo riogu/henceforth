@@ -1,15 +1,12 @@
 use std::{
-    env,
     error::Error,
-    fmt::{write, Debug, Display},
-    fs,
-    io::Read,
+    fmt::{Debug, Display},
     path::PathBuf,
 };
 
-use colored::{ColoredString, Colorize};
+use colored::ColoredString;
 
-use crate::hfs::{File, SourceInfo, Token, TokenKind, VALID_STACK_KEYWORDS};
+use crate::hfs::SourceInfo;
 
 pub trait CompileError: Display + Debug {
     fn message(&self) -> (String, String);

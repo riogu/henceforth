@@ -1,7 +1,5 @@
 use std::path::PathBuf;
 
-use crate::hfs::utils::Phase;
-
 pub struct ErrorParser {}
 
 pub enum HfsRegex {
@@ -61,7 +59,7 @@ impl ErrorParser {
     pub fn generate_test(path: &'_ PathBuf, line_number: usize, error: String) -> Test<'_> {
         let mut chars_iter = error.chars().peekable();
         let mut error_line_check: Box<dyn Fn(usize) -> bool> = Box::new(move |l| l == line_number);
-        let mut message_check: Box<dyn Fn(String) -> bool> = Box::new(|msg| true);
+        let mut message_check: Box<dyn Fn(String) -> bool> = Box::new(|_| true);
         while let Some(char) = chars_iter.next() {
             match char {
                 ' ' | '\t' | '\n' => continue,
@@ -74,7 +72,7 @@ impl ErrorParser {
                     message_check = ErrorParser::hfs_regex(message);
                 },
                 '@' => {
-                    if let Some(char) = chars_iter.next_if_eq(&'[') {
+                    if let Some(_) = chars_iter.next_if_eq(&'[') {
                         let mut error_position = String::new();
                         while let Some(char) = chars_iter.next_if(|c| c != &']') {
                             error_position.push(char);

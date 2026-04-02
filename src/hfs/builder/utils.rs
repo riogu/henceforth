@@ -48,7 +48,6 @@ pub fn run_until(filename: &str, phase: Phase) -> Result<Rc<dyn Byproduct>, Box<
     let path = PathBuf::from(filename);
 
     let file = File::new(path);
-    let file_name = file.path.to_str().unwrap().to_string();
 
     let tokens = Lexer::tokenize(&file)?;
     let diagnostic_info = Rc::new(DiagnosticInfo::new(file.path, get_eof_source_info(&tokens)));
@@ -63,7 +62,7 @@ pub fn run_until(filename: &str, phase: Phase) -> Result<Rc<dyn Byproduct>, Box<
         return Ok(Rc::new(unresolved_ast_arena));
     }
 
-    let (top_level_nodes, ast_arena, scope_stack) =
+    let (top_level_nodes, ast_arena, _) =
         StackAnalyzer::resolve(unresolved_top_level_nodes, unresolved_ast_arena, diagnostic_info.clone())?;
 
     if phase == Phase::StackAnalyzer {

@@ -1,10 +1,10 @@
 use std::{collections::HashMap, path::PathBuf, rc::Rc};
 
 use crate::hfs::{
-    AstArena, ExprId, ExprProvenance, Expression, FuncId, FunctionDeclaration, Identifier, Literal, Operation, ScopeKind,
-    SourceInfo, StackKeyword, Statement, StmtId, Token, TokenKind, TopLevelId, Type, TypeId, VarDeclaration, VarId,
     builder::builder::{Builder, BuilderOperation, ControlFlowOps, FunctionOps, LoopOps, PassMode, StackOps, VariableOps},
     error::DiagnosticInfo,
+    AstArena, ExprId, ExprProvenance, Expression, FuncId, FunctionDeclaration, Identifier, Literal, Operation, ScopeKind,
+    SourceInfo, Statement, StmtId, Token, TokenKind, TopLevelId, Type, TypeId, VarDeclaration, VarId,
 };
 
 pub struct StackAnalyzerBuilder {
@@ -71,12 +71,11 @@ struct FunctionContext {
     name: String,
     param_type: TypeId,
     return_type: TypeId,
-    body_stmt_id: Option<StmtId>,
 }
 
 enum BuilderContext {
-    WhileLoop { cond: StmtId },
-    IfStatement { cond: StmtId },
+    WhileLoop,
+    IfStatement,
     StackBlock,
     BlockScope { items: Vec<TopLevelId>, scope_kind: ScopeKind },
 }
@@ -86,11 +85,10 @@ impl Builder<StmtOrExpr> for StackAnalyzerBuilder {
 
     fn new() -> Self {
         StackAnalyzerBuilder {
-            arena: AstArena::new(Rc::new(DiagnosticInfo::new(PathBuf::new(), SourceInfo {
-                line_number: 0,
-                line_offset: 0,
-                token_width: 0,
-            }))),
+            arena: AstArena::new(Rc::new(DiagnosticInfo::new(
+                PathBuf::new(),
+                SourceInfo { line_number: 0, line_offset: 0, token_width: 0 },
+            ))),
             current_function: None,
             stack_block_exprs: Vec::new(),
             context_stack: Vec::new(),
@@ -147,7 +145,7 @@ impl VariableOps for StackAnalyzerBuilder {
         let identifier = Identifier::Variable(var_id);
 
         let is_move = matches!(mode, PassMode::Move);
-        let stmt = Statement::Assignment { identifier, is_move, deref_count: todo!("joao this needs a real value") };
+        let stmt = Statement::Assignment { identifier, is_move, deref_count: 0 };
         let token = Self::dummy_token();
         let stmt_id = self.arena.alloc_stmt(stmt, token.clone());
         self.arena.stmt_tokens.push(token);
@@ -170,7 +168,7 @@ impl StackOps for StackAnalyzerBuilder {
     fn end_stack_block(mut self, semicolon: bool) -> Self {
         if let Some(BuilderContext::StackBlock) = self.context_stack.pop() {
             let exprs = std::mem::take(&mut self.stack_block_exprs);
-            let stmt = Statement::StackBlock { expr_ids: exprs, consumed_count: todo!("joao you gotta figure this one out man") };
+            let stmt = Statement::StackBlock { expr_ids: exprs, consumed_count: 0 };
             let stmt_id = self.arena.alloc_stmt(stmt, Self::dummy_token());
 
             if let Some(BuilderContext::BlockScope { items, .. }) = self.context_stack.last_mut() {
@@ -278,7 +276,7 @@ impl StackOps for StackAnalyzerBuilder {
         self
     }
 
-    fn push_stack_keyword(mut self, keyword: &str, semicolon: bool) -> Self {
+    fn push_stack_keyword(mut self, _keyword: &str, semicolon: bool) -> Self {
         let expr_id = ExprId(self.arena.exprs.len());
         self.arena.expr_tokens.push(Self::dummy_token());
         self.arena.expr_provenances.push(ExprProvenance::RuntimeValue);
@@ -327,8 +325,7 @@ impl FunctionOps for StackAnalyzerBuilder {
     }
 
     fn func_with(mut self, name: &str, args: Option<Vec<Type>>, return_type: Option<Vec<Type>>) -> Self {
-        self.current_function =
-            Some(FunctionContext { name: name.to_string(), param_type: TypeId(69), return_type: TypeId(69), body_stmt_id: None });
+        self.current_function = Some(FunctionContext { name: name.to_string(), param_type: TypeId(69), return_type: TypeId(69) });
 
         let param_type = self.args(args);
         self = param_type;
@@ -342,7 +339,7 @@ impl FunctionOps for StackAnalyzerBuilder {
         self
     }
 
-    fn body(mut self) -> Self {
+    fn body(self) -> Self {
         self
     }
 
@@ -384,8 +381,7 @@ impl FunctionOps for StackAnalyzerBuilder {
         };
 
         let is_move = matches!(mode, PassMode::Move);
-        // let stmt = Statement::FunctionCall { arg_count, func_id, is_move };
-        let stmt = todo!("sorry joao i broke your testing code with ast changes");
+        let stmt = Statement::FunctionCall { arg_count, func_id, is_move, return_values: Vec::new() };
         let token = Self::dummy_token();
         let stmt_id = self.arena.alloc_stmt(stmt, token.clone());
         self.arena.stmt_tokens.push(token);
@@ -413,8 +409,8 @@ impl FunctionOps for StackAnalyzerBuilder {
 
 impl LoopOps for StackAnalyzerBuilder {
     fn while_loop(mut self) -> Self {
-        let cond = StmtId(self.arena.stmts.len().saturating_sub(1));
-        self.context_stack.push(BuilderContext::WhileLoop { cond });
+        let _ = StmtId(self.arena.stmts.len().saturating_sub(1));
+        self.context_stack.push(BuilderContext::WhileLoop);
         self.context_stack.push(BuilderContext::BlockScope { items: Vec::new(), scope_kind: ScopeKind::WhileLoop });
 
         self
@@ -423,8 +419,8 @@ impl LoopOps for StackAnalyzerBuilder {
 
 impl ControlFlowOps for StackAnalyzerBuilder {
     fn if_statement(mut self) -> Self {
-        let cond = StmtId(self.arena.stmts.len().saturating_sub(1));
-        self.context_stack.push(BuilderContext::IfStatement { cond });
+        let _ = StmtId(self.arena.stmts.len().saturating_sub(1));
+        self.context_stack.push(BuilderContext::IfStatement);
         self.context_stack.push(BuilderContext::BlockScope { items: Vec::new(), scope_kind: ScopeKind::IfStmt });
 
         self
@@ -432,9 +428,9 @@ impl ControlFlowOps for StackAnalyzerBuilder {
 
     fn elif_statement(mut self) -> Self {
         let _prev_block = self.context_stack.pop();
-        let cond = StmtId(self.arena.stmts.len().saturating_sub(1));
+        let _ = StmtId(self.arena.stmts.len().saturating_sub(1));
 
-        self.context_stack.push(BuilderContext::IfStatement { cond });
+        self.context_stack.push(BuilderContext::IfStatement);
         self.context_stack.push(BuilderContext::BlockScope { items: Vec::new(), scope_kind: ScopeKind::IfStmt });
 
         self

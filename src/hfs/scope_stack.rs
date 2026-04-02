@@ -1,4 +1,4 @@
-use std::{collections::HashMap, path::PathBuf, rc::Rc};
+use std::{collections::HashMap, rc::Rc};
 
 use crate::{
     hfs::{
@@ -33,7 +33,6 @@ pub struct ScopeStack {
     pub mangled_global_vars: HashMap<String, VarId>,
     pub mangled_locals: HashMap<String, VarId>,
     pub mangled_functions: HashMap<String, FuncId>,
-    diagnostic_info: Rc<DiagnosticInfo>,
 }
 
 impl ScopeStack {
@@ -48,7 +47,6 @@ impl ScopeStack {
             mangled_global_vars: HashMap::new(),
             mangled_locals: HashMap::new(),
             mangled_functions: HashMap::new(),
-            diagnostic_info,
         }
     }
     pub fn push_function_and_scope(&mut self, name: &str, func_id: FuncId, curr_func_return_type: TypeId) {
@@ -78,8 +76,9 @@ impl ScopeStack {
         match curr_stack.kind {
             ScopeKind::Global => self.mangled_global_vars.insert(mangled_name, var_id),
             ScopeKind::Function => self.mangled_locals.insert(mangled_name, var_id),
-            ScopeKind::Block | ScopeKind::WhileLoop | ScopeKind::IfStmt | ScopeKind::ElseStmt =>
-                self.mangled_locals.insert(mangled_name, var_id),
+            ScopeKind::Block | ScopeKind::WhileLoop | ScopeKind::IfStmt | ScopeKind::ElseStmt => {
+                self.mangled_locals.insert(mangled_name, var_id)
+            },
         };
     }
     pub fn pop(&mut self) {
@@ -143,12 +142,13 @@ impl ScopeStack {
         match self.find_variable(&name) {
             (None, _) => match self.find_function(&name) {
                 Some(id) => Ok(Identifier::Function(id)),
-                None =>
+                None => {
                     return stack_analyzer_error!(
                         StackAnalyzerErrorKind::UseOfUndeclaredIdentifier(name.to_string()),
                         arena,
                         vec![token.source_info]
-                    ),
+                    )
+                },
             },
             (Some(id), false) => Ok(Identifier::Variable(id)),
             (Some(id), true) => Ok(Identifier::GlobalVar(id)),

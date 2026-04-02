@@ -1,9 +1,4 @@
-use std::{
-    error::Error,
-    fmt::{format, Display},
-    fs,
-    path::PathBuf,
-};
+use std::{error::Error, fmt::Display, fs, path::PathBuf};
 
 use colored::{ColoredString, Colorize, CustomColor};
 
@@ -220,7 +215,7 @@ impl Dumpable for UnresolvedVarDeclaration {
 impl Dumpable for UnresolvedOperation {
     type Arena = UnresolvedAstArena;
 
-    fn dump(&self, arena: &Self::Arena) -> ColoredString {
+    fn dump(&self, _arena: &Self::Arena) -> ColoredString {
         let op = match self {
             UnresolvedOperation::Add => ColoredString::from(format!("Add")),
             UnresolvedOperation::Sub => ColoredString::from(format!("Sub")),
@@ -253,10 +248,12 @@ impl Dumpable for UnresolvedExpression {
                 "Operation:".red().bold(),
                 indent(&unresolved_operation.dump(arena)).yellow()
             )),
-            UnresolvedExpression::Identifier(name) =>
-                ColoredString::from(format!("{} {}", "Identifier".red().bold(), format!("({name})").green())),
-            UnresolvedExpression::Literal(literal) =>
-                ColoredString::from(format!("{} {}", "Literal: ".red().bold(), format!("{}", literal).green())),
+            UnresolvedExpression::Identifier(name) => {
+                ColoredString::from(format!("{} {}", "Identifier".red().bold(), format!("({name})").green()))
+            },
+            UnresolvedExpression::Literal(literal) => {
+                ColoredString::from(format!("{} {}", "Literal: ".red().bold(), format!("{}", literal).green()))
+            },
             UnresolvedExpression::Tuple { expressions } => {
                 let items: Vec<ColoredString> =
                     expressions.iter().map(|expr| arena.get_unresolved_expr(*expr).dump(arena)).collect();
@@ -268,8 +265,9 @@ impl Dumpable for UnresolvedExpression {
                     "]".custom_color(CustomColor::new(129, 137, 150))
                 ))
             },
-            UnresolvedExpression::StackKeyword(name) =>
-                ColoredString::from(format!("{} {}", "Stack Keyword".red().bold(), format!("({name})").green())),
+            UnresolvedExpression::StackKeyword(name) => {
+                ColoredString::from(format!("{} {}", "Stack Keyword".red().bold(), format!("({name})").green()))
+            },
         }
     }
 }

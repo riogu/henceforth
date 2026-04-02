@@ -1,7 +1,4 @@
-use crate::hfs::{
-    token::{Literal, TokenKind},
-    Type, UnresolvedOperation,
-};
+use crate::hfs::{token::Literal, Type, UnresolvedOperation};
 
 pub enum BuilderOperation {
     Add,

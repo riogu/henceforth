@@ -1,4 +1,4 @@
-use std::{iter::Peekable, path::PathBuf, rc::Rc, vec::IntoIter};
+use std::{iter::Peekable, rc::Rc, vec::IntoIter};
 
 use crate::{hfs::{
     ScopeKind,
@@ -112,7 +112,7 @@ impl Parser {
                     token,
                 ))
             },
-            kind => parser_error!(
+            _ => parser_error!(
                 ParserErrorKind::ExpectedButFound(vec![Expectable::Type], Some(token.kind)),
                 &self.arena,
                 vec![token.source_info]
@@ -121,7 +121,7 @@ impl Parser {
     }
 
     fn type_list(&mut self) -> Result<Vec<TypeId>, Box<dyn CompileError>> {
-        self.expect(TokenKind::LeftParen);
+        self.expect(TokenKind::LeftParen)?;
         let mut types = Vec::<TypeId>::new();
         loop {
             if let Some(token) = self.tokens.peek()
@@ -264,7 +264,7 @@ impl Parser {
                     TokenKind::Break => Ok(self.arena.alloc_unresolved_stmt(UnresolvedStatement::Break, token)),
                     TokenKind::Continue => Ok(self.arena.alloc_unresolved_stmt(UnresolvedStatement::Continue, token)),
                     TokenKind::Return => Ok(self.arena.alloc_unresolved_stmt(UnresolvedStatement::Return, token)),
-                    _ => Ok(unreachable!()),
+                    _ => unreachable!(),
                 }
             },
             TokenKind::Semicolon => {
@@ -360,7 +360,7 @@ impl Parser {
                     self.expect(TokenKind::RightParen)?;
                     break;
                 },
-                Some(token) => expressions.push(self.stack_expression()?),
+                Some(_) => expressions.push(self.stack_expression()?),
                 None =>
                     return parser_error!(
                         ParserErrorKind::ExpectedButFound(
@@ -382,7 +382,7 @@ impl Parser {
         };
         match &token.kind {
             kind if kind.is_stack_operator() => self.stack_operation(),
-            TokenKind::StackKeyword(keyword) => self.stack_keyword_expr(),
+            TokenKind::StackKeyword(_) => self.stack_keyword_expr(),
             TokenKind::Identifier(_) => {
                 let (name, token) = self.expect_identifier()?;
                 Ok(self.arena.alloc_unresolved_expr(UnresolvedExpression::Identifier(name), token))
@@ -510,12 +510,11 @@ impl Parser {
 
 #[cfg(test)]
 mod tests {
-    use std::path::PathBuf;
 
     use pretty_assertions::assert_eq;
 
     use crate::hfs::{
-        File, Lexer, Parser, Type, UnresolvedAstArena,
+        Type, UnresolvedAstArena,
         builder::builder::{Builder, BuilderOperation, ControlFlowOps, FunctionOps, LoopOps, PassMode, StackOps, VariableOps},
         parser_builder::ParserBuilder,
         utils::{Phase, run_until},

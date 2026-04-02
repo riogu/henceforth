@@ -1,6 +1,6 @@
-use std::{collections::HashMap, default, fmt::Display, rc::Rc};
+use std::{collections::HashMap, fmt::Display, rc::Rc};
 
-use crate::hfs::{error::DiagnosticInfo, token::*, RuntimeValue, ScopeKind, UnresolvedAstArena};
+use crate::hfs::{error::DiagnosticInfo, token::*, ScopeKind, UnresolvedAstArena};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct VarId(pub usize);
@@ -171,11 +171,11 @@ pub enum Type {
 impl Display for Type {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Type::Int { ptr_count } => write!(f, "i32"),
-            Type::String { ptr_count } => write!(f, "str"),
-            Type::Bool { ptr_count } => write!(f, "bool"),
-            Type::Float { ptr_count } => write!(f, "f32"),
-            Type::Tuple { type_ids, ptr_count } => write!(f, "tuple"),
+            Type::Int { ptr_count: _ } => write!(f, "i32"),
+            Type::String { ptr_count: _ } => write!(f, "str"),
+            Type::Bool { ptr_count: _ } => write!(f, "bool"),
+            Type::Float { ptr_count: _ } => write!(f, "f32"),
+            Type::Tuple { type_ids: _, ptr_count: _ } => write!(f, "tuple"),
             // todo!("this might not be printable with the current structure"),
         }
     }
@@ -184,11 +184,11 @@ impl Display for Type {
 impl Type {
     pub fn get_repr_unresolved(&self, arena: &UnresolvedAstArena) -> String {
         match self {
-            Type::Int { ptr_count } => format!("i32"),
-            Type::String { ptr_count } => format!("str"),
-            Type::Bool { ptr_count } => format!("bool"),
-            Type::Float { ptr_count } => format!("f32"),
-            Type::Tuple { type_ids, ptr_count } => format!(
+            Type::Int { ptr_count: _ } => format!("i32"),
+            Type::String { ptr_count: _ } => format!("str"),
+            Type::Bool { ptr_count: _ } => format!("bool"),
+            Type::Float { ptr_count: _ } => format!("f32"),
+            Type::Tuple { type_ids, ptr_count: _ } => format!(
                 "Tuple<{}>",
                 type_ids.iter().map(|id| arena.get_type(*id).get_repr_unresolved(arena)).collect::<Vec<String>>().join(", ")
             ),
@@ -196,11 +196,11 @@ impl Type {
     }
     pub fn get_repr_resolved(&self, arena: &AstArena) -> String {
         match self {
-            Type::Int { ptr_count } => format!("i32"),
-            Type::String { ptr_count } => format!("str"),
-            Type::Bool { ptr_count } => format!("bool"),
-            Type::Float { ptr_count } => format!("f32"),
-            Type::Tuple { type_ids, ptr_count } => format!(
+            Type::Int { ptr_count: _ } => format!("i32"),
+            Type::String { ptr_count: _ } => format!("str"),
+            Type::Bool { ptr_count: _ } => format!("bool"),
+            Type::Float { ptr_count: _ } => format!("f32"),
+            Type::Tuple { type_ids, ptr_count: _ } => format!(
                 "Tuple<{}>",
                 type_ids.iter().map(|id| arena.get_type(*id).get_repr_resolved(arena)).collect::<Vec<String>>().join(", ")
             ),

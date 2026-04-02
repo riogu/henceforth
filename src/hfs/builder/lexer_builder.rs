@@ -69,14 +69,14 @@ impl Builder<TokenKind> for TokenSequence {
 }
 
 impl FunctionOps for TokenSequence {
-    fn args(mut self, args: Option<Vec<Type>>) -> Self {
+    fn args(self, args: Option<Vec<Type>>) -> Self {
         if let Some(args) = args {
             let tokens = args.into_iter().map(|typename| typename.into()).collect::<Vec<TokenKind>>();
             return self.push_many(tokens);
         }
         self
     }
-    fn return_types(mut self, return_types: Option<Vec<Type>>) -> Self {
+    fn return_types(self, return_types: Option<Vec<Type>>) -> Self {
         if let Some(return_types) = return_types {
             let tokens = return_types.into_iter().map(|typename| typename.into()).collect::<Vec<TokenKind>>();
             return self.push_many(tokens);
@@ -84,7 +84,7 @@ impl FunctionOps for TokenSequence {
         self
     }
 
-    fn func_with(mut self, name: &str, args: Option<Vec<Type>>, return_type: Option<Vec<Type>>) -> Self {
+    fn func_with(self, name: &str, args: Option<Vec<Type>>, return_type: Option<Vec<Type>>) -> Self {
         self.push(TokenKind::Fn)
             .push(TokenKind::Identifier(name.to_string()))
             .push(TokenKind::Colon)
@@ -97,15 +97,15 @@ impl FunctionOps for TokenSequence {
             .push(TokenKind::RightParen)
     }
 
-    fn body(mut self) -> Self {
+    fn body(self) -> Self {
         self.push(TokenKind::LeftBrace)
     }
 
-    fn end_body(mut self) -> Self {
+    fn end_body(self) -> Self {
         self.push(TokenKind::RightBrace)
     }
 
-    fn return_statement(mut self) -> Self {
+    fn return_statement(self) -> Self {
         self.push(TokenKind::Return).push(TokenKind::Semicolon)
     }
 
@@ -120,7 +120,7 @@ impl FunctionOps for TokenSequence {
 }
 
 impl StackOps for TokenSequence {
-    fn stack_block(mut self) -> Self {
+    fn stack_block(self) -> Self {
         self.push(TokenKind::At).push(TokenKind::LeftParen)
     }
 
@@ -132,11 +132,11 @@ impl StackOps for TokenSequence {
         self
     }
 
-    fn push_literal<T: Into<Literal>>(mut self, lit: T) -> Self {
+    fn push_literal<T: Into<Literal>>(self, lit: T) -> Self {
         self.push(TokenKind::Literal(lit.into()))
     }
 
-    fn push_operation(mut self, op: BuilderOperation) -> Self {
+    fn push_operation(self, op: BuilderOperation) -> Self {
         self.push(op.into())
     }
 

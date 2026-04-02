@@ -1,13 +1,6 @@
 use std::collections::HashMap;
 
-use crate::hfs::{
-    ast::*,
-    cfg_analyzer::*,
-    hfs_mir::*,
-    scope_stack::{self, *},
-    token::*,
-    types::*,
-};
+use crate::hfs::{ast::*, cfg_analyzer::*, hfs_mir::*, scope_stack::*, token::*};
 
 //---------------------------------------------------------------------------
 // Runtime values
@@ -95,7 +88,7 @@ impl Interpreter {
                     let default_val = RuntimeValue::default(interpreter.arena.get_type_of_var(ir_var_id));
                     interpreter.globals.insert(ir_var_id, default_val);
                 },
-                CfgTopLevelId::FunctionDecl(ir_func_id) => { /* do nothing, declarations dont matter for interpreting */ },
+                CfgTopLevelId::FunctionDecl(_) => { /* do nothing, declarations dont matter for interpreting */ },
             }
         }
 
@@ -205,7 +198,7 @@ impl Interpreter {
         }
 
         match self.arena.get_instruction(inst_id) {
-            Instruction::Parameter { source_info, index, type_id } => {
+            Instruction::Parameter { source_info: _, index: _, type_id: _ } => {
                 // parameters should always hit the cache (because they are bound at the start of
                 // the function
                 panic!(
@@ -214,14 +207,14 @@ impl Interpreter {
                     self.arena.get_func(self.curr_call_frame().func_id).get_repr(&self.arena)
                 )
             },
-            Instruction::ReturnValue { source_info, type_id } => {
+            Instruction::ReturnValue { source_info: _, type_id } => {
                 RuntimeValue::default(self.arena.get_type(*type_id))
                 // panic!(
                 //     "[internal error] found unbound 'Instruction::ReturnValue'. a ReturnValue should be bound to a value before \
                 //      being interpreted"
                 // )
             },
-            Instruction::FunctionCall { source_info, args, func_id, is_move, return_values } => {
+            Instruction::FunctionCall { source_info: _, args, func_id, is_move: _, return_values } => {
                 let mut arg_values = Vec::new();
                 let func_id = func_id.clone();
                 let return_values = return_values.clone();
@@ -238,21 +231,22 @@ impl Interpreter {
                 // capture them). maybe one day we might want to allow capturing them
                 RuntimeValue::Tuple(runtime_return_values)
             },
-            Instruction::Phi { source_info, incoming } =>
+            Instruction::Phi { source_info: _, incoming } => {
                 if let Some(inst_id) = incoming.get(&self.prev_block_id) {
                     self.interpret_instruction(*inst_id)
                 } else {
                     panic!("[internal error] reached phi without going through one of its predecessor blocks")
-                },
-            Instruction::Tuple { source_info, instructions } => {
+                }
+            },
+            Instruction::Tuple { source_info: _, instructions } => {
                 let mut runtime_values = Vec::<RuntimeValue>::new();
                 for inst_id in instructions.clone() {
                     runtime_values.push(self.interpret_instruction(inst_id));
                 }
                 RuntimeValue::Tuple(runtime_values)
             },
-            Instruction::Operation(source_info, cfg_operation) => self.interpret_operation(*cfg_operation),
-            Instruction::Literal(source_info, literal) => match literal {
+            Instruction::Operation(_, cfg_operation) => self.interpret_operation(*cfg_operation),
+            Instruction::Literal(_, literal) => match literal {
                 // NOTE: we are not interning strings or literals at all right now
                 // it might be a good idea to do this later for performance
                 Literal::Integer(val) => RuntimeValue::Integer(*val),
@@ -260,8 +254,9 @@ impl Interpreter {
                 Literal::String(val) => RuntimeValue::String(val.clone()),
                 Literal::Bool(val) => RuntimeValue::Bool(*val),
             },
-            Instruction::LoadElement { source_info, index, tuple } =>
-                todo!("[internal error] we aren't currently using Instruction::LoadElement for anything yet"),
+            Instruction::LoadElement { source_info: _, index: _, tuple: _ } => {
+                todo!("[internal error] we aren't currently using Instruction::LoadElement for anything yet")
+            },
 
             Instruction::Store { address, value, .. } => {
                 // address is an InstId whose value is an Address(target)
@@ -470,7 +465,7 @@ impl Interpreter {
     // Returns `Some(block_id)` to continue to, or `None` to stop (return)
     pub fn interpret_terminator(&mut self, term_id: TermInstId) -> Option<BlockId> {
         match self.arena.get_terminator_instruction(term_id) {
-            TerminatorInst::Return(source_info, inst_id) => {
+            TerminatorInst::Return(_, inst_id) => {
                 if let RuntimeValue::Tuple(return_stack) = self.interpret_instruction(*inst_id) {
                     self.curr_call_frame_mut().return_stack = return_stack;
                 } else {
@@ -478,7 +473,7 @@ impl Interpreter {
                 }
                 None
             },
-            TerminatorInst::Branch { source_info, cond, true_block, false_block } => {
+            TerminatorInst::Branch { source_info: _, cond, true_block, false_block } => {
                 let false_block = false_block.clone();
                 let true_block = true_block.clone();
                 if let RuntimeValue::Bool(cond) = self.interpret_instruction(*cond) {
@@ -487,7 +482,7 @@ impl Interpreter {
                     panic!("[internal error] expected 'RuntimeValue::Bool' in TerminatorInst::Branch condition value")
                 }
             },
-            TerminatorInst::Jump(source_info, block_id) => Some(*block_id),
+            TerminatorInst::Jump(_, block_id) => Some(*block_id),
             TerminatorInst::Unreachable => panic!("[internal error] reached 'Unreachable' instruction while interpreting"),
         }
     }

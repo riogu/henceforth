@@ -1,6 +1,4 @@
-use std::{char, fs, path::PathBuf};
-
-use crate::hfscheck::error_parser::ErrorParser;
+use std::{fs, path::PathBuf};
 
 #[derive(Debug, PartialEq)]
 pub enum Assertion<'a> {
@@ -17,7 +15,7 @@ pub fn find_assertions(path: &'_ PathBuf) -> Vec<Assertion<'_>> {
             match ch {
                 '/' => {
                     line_column += 1;
-                    if let Some(char) = chars_iter.next_if_eq(&'/') {
+                    if let Some(_) = chars_iter.next_if_eq(&'/') {
                         line_column += 1;
                         if let Some(char) = chars_iter.next() {
                             match char {

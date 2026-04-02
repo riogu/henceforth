@@ -39,8 +39,8 @@ impl AstArena {
             | Operation::LessEqual(_, _)
             | Operation::Greater(_, _)
             | Operation::GreaterEqual(_, _) => Ok(self.bool_type()),
-            Operation::AddressOf(expr_id) => Ok(todo!()),
-            Operation::Dereference(expr_id) => Ok(todo!()),
+            Operation::AddressOf(_) => todo!(),
+            Operation::Dereference(_) => todo!(),
         }
     }
 
@@ -75,7 +75,7 @@ impl AstArena {
                 let tuple_type = Type::Tuple { type_ids: element_types, ptr_count: 0 };
                 Ok(self.alloc_type(tuple_type, token))
             },
-            Expression::Parameter { index, type_id } => Ok(type_id),
+            Expression::Parameter { index: _, type_id } => Ok(type_id),
             Expression::ReturnValue(type_id) => Ok(type_id),
         }
     }
@@ -135,8 +135,8 @@ impl IrArena {
 
     pub fn get_type_id_of_inst(&mut self, inst_id: InstId) -> Result<TypeId, Box<dyn CompileError>> {
         match self.get_instruction(inst_id).clone() {
-            Instruction::Operation(source_info, operation) => Ok(self.get_type_of_operation(&operation)?),
-            Instruction::Literal(source_info, literal) => match literal {
+            Instruction::Operation(_, operation) => Ok(self.get_type_of_operation(&operation)?),
+            Instruction::Literal(_, literal) => match literal {
                 Literal::Integer(_) => Ok(self.int_type()),
                 Literal::Float(_) => Ok(self.float_type()),
                 Literal::String(_) => Ok(self.string_type()),
@@ -153,21 +153,22 @@ impl IrArena {
                 let tuple_type = Type::Tuple { type_ids: element_types, ptr_count: 0 };
                 Ok(self.alloc_type(tuple_type, source_info.clone()))
             },
-            Instruction::Parameter { source_info, index, type_id } => Ok(type_id),
-            Instruction::FunctionCall { source_info, args, func_id, is_move, return_values } =>
-                Ok(self.get_func(func_id).return_type),
-            Instruction::Phi { source_info, incoming } => Ok(self.get_type_id_of_inst(
+            Instruction::Parameter { source_info: _, index: _, type_id } => Ok(type_id),
+            Instruction::FunctionCall { source_info: _, args: _, func_id, is_move: _, return_values: _ } => {
+                Ok(self.get_func(func_id).return_type)
+            },
+            Instruction::Phi { source_info: _, incoming } => Ok(self.get_type_id_of_inst(
                 *incoming.values().next().expect("[internal error] found phi with no elements in type checking"),
             )?),
-            Instruction::LoadElement { source_info, index, tuple } => Ok(todo!()),
-            Instruction::ReturnValue { source_info, type_id } => Ok(type_id),
-            Instruction::Load { source_info, address, type_id } => Ok(type_id),
-            Instruction::Store { source_info, address, value } => Ok(self.get_type_id_of_inst(value)?),
-            Instruction::Alloca { source_info, type_id } => {
+            Instruction::LoadElement { source_info: _, index: _, tuple: _ } => todo!(),
+            Instruction::ReturnValue { source_info: _, type_id } => Ok(type_id),
+            Instruction::Load { source_info: _, address: _, type_id } => Ok(type_id),
+            Instruction::Store { source_info: _, address: _, value } => Ok(self.get_type_id_of_inst(value)?),
+            Instruction::Alloca { source_info: _, type_id: _ } => {
                 // implement this later
-                Ok(panic!("[internal error] asked for the type of an alloca instruction but i don't see why this would happen"))
+                panic!("[internal error] asked for the type of an alloca instruction but i don't see why this would happen")
             },
-            Instruction::GlobalAlloca(global_ir_var_id) => Ok(todo!()),
+            Instruction::GlobalAlloca(_) => todo!(),
         }
     }
     pub fn get_type_of_var(&self, var_id: GlobalIrVarId) -> &Type {

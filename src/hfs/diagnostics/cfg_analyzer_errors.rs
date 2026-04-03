@@ -3,9 +3,9 @@ use std::{fmt::Display, fs, path::PathBuf};
 use colored::{ColoredString, Colorize};
 
 use crate::hfs::{
-    error::{number_length, CompileError, DebugInfo},
-    stack_analyzer_errors::StackAnalyzerError,
     AstArena, CfgPrintable, IrArena, SourceInfo, Type,
+    error::{CompileError, DebugInfo, number_length},
+    stack_analyzer_errors::StackAnalyzerError,
 };
 
 #[derive(Debug)]
@@ -64,23 +64,25 @@ impl CfgAnalyzerError {
             Some(ast_arena) => StackAnalyzerError::dump_ast(ast_arena),
             None => String::new(),
         };
-        let functions =
-            ir_arena.functions.iter().map(|func| func.get_repr(ir_arena).to_string()).collect::<Vec<String>>().join("\n");
-        let global_vars =
-            ir_arena.global_vars.iter().map(|var| var.get_repr(ir_arena).to_string()).collect::<Vec<String>>().join("\n");
+
+        let mut functions: Vec<_> = ir_arena.functions.iter().collect();
+        functions.sort_by_key(|(k, _)| *k);
+        let functions = functions.into_iter().map(|(_, func)| func.get_repr(ir_arena).to_string()).collect::<Vec<_>>().join("\n");
+
+        let mut glob_vars: Vec<_> = ir_arena.global_vars.iter().collect();
+        glob_vars.sort_by_key(|(k, _)| *k);
+        let global_vars = glob_vars.into_iter().map(|(_, var)| var.get_repr(ir_arena).to_string()).collect::<Vec<_>>().join("\n");
+
         format!("{}\n\n{}\n\n{}", ast_repr, functions, global_vars)
     }
 }
 
 impl CompileError for CfgAnalyzerError {
-    fn get_line(&self) -> usize {
-        return self.source_info.line_number;
-    }
+    fn get_line(&self) -> usize { return self.source_info.line_number; }
     fn message(&self) -> (String, String) {
         match &self.kind {
-            CfgAnalyzerErrorKind::StackUnderflow => {
-                (String::from("stack underflow"), String::from("stack underflow occurred here"))
-            },
+            CfgAnalyzerErrorKind::StackUnderflow =>
+                (String::from("stack underflow"), String::from("stack underflow occurred here")),
             CfgAnalyzerErrorKind::ExpectedItemOnStack => (String::from("expected item on stack"), String::new()),
             CfgAnalyzerErrorKind::ExpectedNetZeroStackEffectIfStmt(found) => (
                 format!("expected a net-zero stack effect on all branches, found a stack depth difference of {}", found),
@@ -90,27 +92,20 @@ impl CompileError for CfgAnalyzerError {
                 format!("expected while loop to maintain a net-zero stack effect, found a stack depth difference of {}", found),
                 String::new(),
             ),
-            CfgAnalyzerErrorKind::MismatchingStackDepths(expected, actual) => {
-                (format!("expected a stack depth of {}, found a stack depth of {}", expected, actual), String::new())
-            },
-            CfgAnalyzerErrorKind::IncorrectTupleLength(expected, actual) => {
-                (format!("expected a tuple of size {}, found a tuple of size {}", expected, actual), String::new())
-            },
-            CfgAnalyzerErrorKind::IncorrectPointerCount(expected, actual) => {
-                (format!("expected a pointer count of {}, found a pointer count of {}", expected, actual), String::new())
-            },
-            CfgAnalyzerErrorKind::MismatchingTypes(expected, actual) => {
-                (format!("expected {}, found {}", expected, actual), format!("found {}", actual))
-            },
-            CfgAnalyzerErrorKind::NoStatementsInGlobalScope => {
-                (String::from("statements are not allowed in the global scope"), String::new())
-            },
+            CfgAnalyzerErrorKind::MismatchingStackDepths(expected, actual) =>
+                (format!("expected a stack depth of {}, found a stack depth of {}", expected, actual), String::new()),
+            CfgAnalyzerErrorKind::IncorrectTupleLength(expected, actual) =>
+                (format!("expected a tuple of size {}, found a tuple of size {}", expected, actual), String::new()),
+            CfgAnalyzerErrorKind::IncorrectPointerCount(expected, actual) =>
+                (format!("expected a pointer count of {}, found a pointer count of {}", expected, actual), String::new()),
+            CfgAnalyzerErrorKind::MismatchingTypes(expected, actual) =>
+                (format!("expected {}, found {}", expected, actual), format!("found {}", actual)),
+            CfgAnalyzerErrorKind::NoStatementsInGlobalScope =>
+                (String::from("statements are not allowed in the global scope"), String::new()),
         }
     }
 
-    fn header(&self) -> colored::ColoredString {
-        format!("{} {}", "error:".red().bold(), self.message().0.bold()).into()
-    }
+    fn header(&self) -> colored::ColoredString { format!("{} {}", "error:".red().bold(), self.message().0.bold()).into() }
 
     fn location(&self) -> colored::ColoredString {
         format!(

@@ -12,7 +12,7 @@ indent_style = "Block"
 # Function and control flow formatting
 fn_params_layout = "Tall"  # Similar to your AllowAllParametersOfDeclarationOnNextLine: false
 fn_call_width = 115
-fn_single_line = false  # Mirrors AllowShortFunctionsOnASingleLine: Empty
+fn_single_line = true  # Mirrors AllowShortFunctionsOnASingleLine: Empty
 
 # Brace style
 brace_style = "SameLineWhere"  # Closest to Attach, keeps braces on same line
@@ -74,5 +74,5 @@ use_try_shorthand = true  # Use ? operator
 use_field_init_shorthand = true  # Use struct shorthand when possible
 
 # Where clause formatting
-where_single_line = false  # Always break where clauses across lines
+where_single_line = true  # Always break where clauses across lines
 match_arm_blocks = false

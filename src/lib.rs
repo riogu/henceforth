@@ -13,6 +13,7 @@ pub mod hfs {
     pub mod interpreter;
     pub mod ir_arena;
     pub mod lexer;
+    pub mod optimizer;
     pub mod parser;
     pub mod scope_stack;
     pub mod stack_analyzer;
@@ -27,6 +28,7 @@ pub mod hfs {
     pub use interpreter::*;
     pub use ir_arena::*;
     pub use lexer::*;
+    pub use optimizer::*;
     pub use parser::*;
     pub use scope_stack::*;
     pub use stack_analyzer::*;

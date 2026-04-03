@@ -2,10 +2,9 @@
 
 use std::{error::Error, path::PathBuf, process::exit, rc::Rc};
 
-use clap::{arg, Parser};
-
+use clap::{Parser, arg};
 use henceforth::hfs::{
-    self,
+    self, OptPipeline,
     cfg_analyzer_errors::CfgAnalyzerError,
     error::{CompileError, DiagnosticInfo},
     get_eof_source_info,
@@ -32,10 +31,12 @@ fn run() -> Result<(), Box<dyn CompileError>> {
     let (top_level_nodes, ast_arena, scope_stack) =
         hfs::StackAnalyzer::resolve(unresolved_top_level_nodes, unresolved_ast_arena.clone(), diagnostic_info.clone())?;
 
-    let (top_level_insts, ir_arena) =
+    let (top_level_insts, mut ir_arena) =
         hfs::CfgAnalyzer::lower_to_mir(top_level_nodes, ast_arena.clone(), diagnostic_info.clone())?;
 
     println!("{}", CfgAnalyzerError::dump_ast_and_ir(None, &ir_arena));
+
+    hfs::OptPipeline::run(&mut hfs::O0::new(), &mut ir_arena);
 
     hfs::Interpreter::interpret(ir_arena, top_level_insts, scope_stack);
 

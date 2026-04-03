@@ -213,6 +213,8 @@ impl fmt::Display for TokenKind {
     }
 }
 
+pub const UNKNOWN_SOURCE: SourceInfo = SourceInfo { line_number: 0, line_offset: 0, token_width: 0 };
+
 #[derive(Debug, Clone, PartialEq, Hash, Eq, Default, Ord, PartialOrd)]
 pub struct SourceInfo {
     pub line_number: usize,
@@ -220,7 +222,6 @@ pub struct SourceInfo {
     pub token_width: usize,
     // line_string: &'a str,
 }
-
 impl SourceInfo {
     pub fn new(line_number: usize, line_offset: usize, token_width: usize) -> Self {
         Self { line_number, line_offset, token_width }

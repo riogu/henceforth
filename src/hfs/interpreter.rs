@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+use slotmap::Key;
+
 use crate::hfs::{IrArena, ast::*, hfs_mir::*, scope_stack::*, token::*};
 
 //---------------------------------------------------------------------------
@@ -59,13 +61,9 @@ pub struct Interpreter {
 }
 impl Interpreter {
     // utils
-    pub fn curr_call_frame(&self) -> &CallFrame {
-        self.call_stack.last().expect("call stack shouldn't be empty")
-    }
+    pub fn curr_call_frame(&self) -> &CallFrame { self.call_stack.last().expect("call stack shouldn't be empty") }
 
-    pub fn curr_call_frame_mut(&mut self) -> &mut CallFrame {
-        self.call_stack.last_mut().expect("call stack shouldn't be empty")
-    }
+    pub fn curr_call_frame_mut(&mut self) -> &mut CallFrame { self.call_stack.last_mut().expect("call stack shouldn't be empty") }
 }
 impl Interpreter {
     pub fn new(arena: IrArena) -> Self {
@@ -74,8 +72,8 @@ impl Interpreter {
             globals: HashMap::new(),
             call_stack: Vec::new(),
             disable_cache: false,
-            prev_block_id: BlockId(0),
-            curr_block_id: BlockId(0),
+            prev_block_id: BlockId::null(),
+            curr_block_id: BlockId::null(),
             memory: HashMap::new(),
         }
     }

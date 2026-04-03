@@ -1,11 +1,12 @@
 use std::{collections::HashMap, fmt::Debug, rc::Rc};
 
 use colored::{Colorize, CustomColor};
+use slotmap::SlotMap;
 
 use crate::{
     cfg_analyzer_error,
     hfs::{
-        BasicBlock, BlockId, CfgFunction, GlobalIrVarDeclaration, GlobalIrVarId, InstId, Instruction, IrFuncId, SourceInfo,
+        BasicBlock, BlockId, GlobalIrVarDeclaration, GlobalIrVarId, InstId, Instruction, IrFuncId, IrFunction, SourceInfo,
         TermInstId, TerminatorInst,
         ast::*,
         cfg_analyzer_errors::CfgAnalyzerErrorKind,
@@ -17,9 +18,6 @@ use crate::{
 pub struct IrContext {
     pub curr_function: IrFuncId,
     pub curr_insert_block: BlockId,
-    // we use this to track what the stack is for each construct
-    // such as if statements. we build it up on the first branch, and then after that we compare
-    // the new branches with the first one, for the same context
 }
 
 #[derive(Debug, Default)]
@@ -27,11 +25,11 @@ pub struct IrArena {
     // TODO: we also need to pass metadata into this new IR
     // which includes expression provenance and etc (for optimizations and annotations)
     // we should make an annotation system and convert into it
-    pub global_vars: Vec<GlobalIrVarDeclaration>,
-    pub functions: Vec<CfgFunction>,
-    pub instructions: Vec<Instruction>,
-    pub terminators: Vec<TerminatorInst>,
-    pub blocks: Vec<BasicBlock>,
+    pub global_vars: SlotMap<GlobalIrVarId, GlobalIrVarDeclaration>,
+    pub functions: SlotMap<IrFuncId, IrFunction>,
+    pub instructions: SlotMap<InstId, Instruction>,
+    pub terminators: SlotMap<TermInstId, TerminatorInst>,
+    pub blocks: SlotMap<BlockId, BasicBlock>,
     pub types: Vec<Type>,
 
     pub func_id_map: HashMap<FuncId, IrFuncId>,
@@ -46,7 +44,7 @@ pub struct IrArena {
     // its used to keep track of each merging stack
     pub curr_block_stack: Vec<InstId>,
 
-    pub cfg_context: IrContext,
+    pub ir_context: IrContext,
     //
     // NOTE: this was used by braun et al. we will reuse it for mem2reg later
 
@@ -115,11 +113,10 @@ impl IrArena {
         } // If not, allocate it
         self.alloc_type_uncached(hfs_type, source_info)
     }
-    pub fn alloc_function(&mut self, func: CfgFunction, old_id: FuncId) -> IrFuncId {
-        let id = IrFuncId(self.functions.len());
-        self.functions.push(func);
+    pub fn alloc_function(&mut self, func: IrFunction, old_id: FuncId) -> IrFuncId {
+        let id = self.functions.insert(func);
         self.func_id_map.insert(old_id, id);
-        self.cfg_context.curr_function = id;
+        self.ir_context.curr_function = id;
         id
     }
 
@@ -131,27 +128,22 @@ impl IrArena {
                  alloca instructions"
             )
         }
-        let id = InstId(self.instructions.len());
-        self.instructions.push(inst);
+        let id = self.instructions.insert(inst);
         self.get_block_mut(block_id).instructions.push(id);
         id
     }
 
     pub fn alloc_local_var(&mut self, inst: Instruction, block_id: BlockId, var_id: VarId) -> InstId {
         // produces an alloca
-        let id = InstId(self.instructions.len());
-        self.instructions.push(inst);
+        let id = self.instructions.insert(inst);
         self.var_id_to_alloca_map.insert(var_id, id);
         self.get_block_mut(block_id).instructions.push(id);
         id
     }
     pub fn alloc_global_var(&mut self, var: GlobalIrVarDeclaration, old_var_id: VarId) -> GlobalIrVarId {
-        let global_var_id = GlobalIrVarId(self.global_vars.len());
-        let inst_id = InstId(self.instructions.len());
+        let global_var_id = self.global_vars.insert(var);
 
-        self.global_vars.push(var);
-
-        self.instructions.push(Instruction::GlobalAlloca(global_var_id));
+        let inst_id = self.instructions.insert(Instruction::GlobalAlloca(global_var_id));
         self.var_id_to_alloca_map.insert(old_var_id, inst_id);
 
         global_var_id
@@ -165,29 +157,30 @@ impl IrArena {
         // add predecessors whenever we jump or branch somewhere
         match terminator {
             TerminatorInst::Branch { source_info: _, cond: _, true_block, false_block } => {
+                self.get_block_mut(block_id).successors.push(true_block);
+                self.get_block_mut(block_id).successors.push(false_block);
                 self.get_block_mut(true_block).predecessors.push(block_id);
                 self.get_block_mut(false_block).predecessors.push(block_id);
             },
             TerminatorInst::Jump(_, jump_to_id) => {
+                self.get_block_mut(block_id).successors.push(jump_to_id);
                 self.get_block_mut(jump_to_id).predecessors.push(block_id);
             },
             TerminatorInst::Return(..) | TerminatorInst::Unreachable => {}, // no successors, nothing to update
         }
-        let id = TermInstId(self.terminators.len());
-        self.terminators.push(terminator);
+        let id = self.terminators.insert(terminator);
         self.get_block_mut(block_id).terminator = Some(id);
         Ok(id)
     }
     pub fn alloc_block(&mut self, name: &str) -> BlockId {
-        let id = BlockId(self.blocks.len());
-        self.blocks.push(BasicBlock {
-            parent_function: self.cfg_context.curr_function,
-            name: name.to_string() + "_" + &id.0.to_string(),
+        self.blocks.insert_with_key(|key| BasicBlock {
+            parent_function: self.ir_context.curr_function,
+            name: name.to_string() + "_" + &key.to_string(),
             predecessors: Vec::new(), // always empty, filled by alloc_terminator_for
+            successors: Vec::new(),   // always empty, filled by alloc_terminator_for
             instructions: Vec::new(),
             terminator: None,
-        });
-        id
+        })
     }
 }
 
@@ -199,32 +192,25 @@ impl IrArena {
         temp
     }
     pub fn inst_name(&self, id: InstId) -> String {
-        format!("{}{}", "%".custom_color(CustomColor::new(136, 151, 182)), format!("{}", id.0))
+        format!("{}{}", "%".custom_color(CustomColor::new(136, 151, 182)), format!("{}", id))
     }
-    pub fn get_var(&self, id: GlobalIrVarId) -> &GlobalIrVarDeclaration {
-        &self.global_vars[id.0]
+    pub fn get_var(&self, id: GlobalIrVarId) -> &GlobalIrVarDeclaration { &self.global_vars[id] }
+    pub fn get_func(&self, id: IrFuncId) -> &IrFunction { &self.functions[id] }
+    pub fn get_type(&self, id: TypeId) -> &Type { &self.types[id.0] }
+    pub fn get_instruction_mut(&mut self, id: InstId) -> &mut Instruction { &mut self.instructions[id] }
+    pub fn get_instruction(&self, id: InstId) -> &Instruction { &self.instructions[id] }
+    pub fn try_get_instruction(&self, id: InstId) -> Option<&Instruction> {
+        // this is used by optimization passes and other analyses that don't know if we might've
+        // deleted a held InstId, and will crash if there wasn't
+        // therefore we simply skip over these if we receive a None
+        self.instructions.get(id)
     }
-    pub fn get_func(&self, id: IrFuncId) -> &CfgFunction {
-        &self.functions[id.0]
-    }
-    pub fn get_type(&self, id: TypeId) -> &Type {
-        &self.types[id.0]
-    }
-    pub fn get_instruction(&self, id: InstId) -> &Instruction {
-        &self.instructions[id.0]
-    }
-    pub fn get_instruction_mut(&mut self, id: InstId) -> &mut Instruction {
-        &mut self.instructions[id.0]
-    }
-    pub fn get_terminator_instruction(&self, id: TermInstId) -> &TerminatorInst {
-        &self.terminators[id.0]
-    }
-    pub fn get_block(&self, id: BlockId) -> &BasicBlock {
-        &self.blocks[id.0]
-    }
-    pub fn get_block_mut(&mut self, id: BlockId) -> &mut BasicBlock {
-        &mut self.blocks[id.0]
-    }
+    pub fn remove_instruction(&mut self, id: InstId) -> Option<Instruction> { self.instructions.remove(id) }
+
+    pub fn get_terminator_instruction(&self, id: TermInstId) -> &TerminatorInst { &self.terminators[id] }
+    pub fn get_block(&self, id: BlockId) -> &BasicBlock { &self.blocks[id] }
+    pub fn get_block_mut(&mut self, id: BlockId) -> &mut BasicBlock { &mut self.blocks[id] }
+    pub fn try_get_block(&self, id: BlockId) -> Option<&BasicBlock> { self.blocks.get(id) }
 
     pub fn compare_stacks(
         &mut self,
@@ -300,4 +286,18 @@ impl IrArena {
             ),
         }
     }
+}
+
+// ============================================================================
+// DefUseInfo related code
+// used by the Optimizer
+// ============================================================================
+pub struct DefUseInfo {
+    pub users: HashMap<InstId, Vec<InstId>>,
+}
+impl IrArena {
+    // link a definition to all its uses
+    pub fn compute(&self) { todo!() }
+    pub fn users_of(&self, id: InstId) -> &[InstId] { todo!() }
+    pub fn replace_all_uses_with(&mut self, old_id: InstId, new_id: InstId) {}
 }

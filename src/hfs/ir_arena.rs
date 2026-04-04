@@ -201,9 +201,7 @@ impl IrArena {
         // therefore we simply skip over these if we receive a None
         self.instructions.get(id)
     }
-    pub fn remove_inst(&mut self, id: InstId) -> Option<Instruction> {
-        self.instructions.remove(id) 
-    }
+    pub fn remove_inst(&mut self, id: InstId) -> Option<Instruction> { self.instructions.remove(id) }
 
     pub fn get_term(&self, id: TermInstId) -> &TerminatorInst { &self.terminators[id] }
     pub fn get_block(&self, id: BlockId) -> &BasicBlock { &self.blocks[id] }
@@ -305,27 +303,28 @@ pub struct DefUseInfo {
 }
 impl DefUseInfo {
     pub fn compute(arena: &IrArena, func_id: IrFuncId) -> Self {
-        let mut users: HashMap<InstId, Vec<(InstOrTermId, usize)>> = HashMap::new();
+        let mut def_use = Self { users: HashMap::new() };
         for block_id in arena.get_blocks_in(func_id) {
             let block = arena.get_block(block_id);
             for inst_id in block.instructions.clone() {
                 // iterate every instruction, check what is in its operands and add the current inst to
                 // the operand's user list (because this instruction is a user of that operand's value)
                 for (op_idx, operand_id) in arena.get_inst(inst_id).get_operands().iter().enumerate() {
-                    users.entry(*operand_id).or_default().push((InstOrTermId::InstId(inst_id), op_idx));
-                }
-                let terminator = arena.get_term(
-                    block.terminator.expect("[internal error] found block with no terminator while computing DefUseInfo"),
-                );
-                for (op_idx, operand_id) in terminator.get_operands().iter().enumerate() {
-                    users.entry(*operand_id).or_default().push((InstOrTermId::InstId(inst_id), op_idx));
+                    def_use.add_user(*operand_id, inst_id, op_idx);
                 }
             }
+            let term_id = block.terminator.expect("[internal error] found block with no terminator while computing DefUseInfo");
+            let terminator = arena.get_term(term_id);
+            for (op_idx, operand_id) in terminator.get_operands().iter().enumerate() {
+                def_use.add_user(*operand_id, term_id, op_idx);
+            }
         }
-        Self { users }
+        def_use
     }
     pub fn users_of(&self, inst_id: InstId) -> &[(InstOrTermId, usize)] { self.users.get(&inst_id).map_or(&[], |v| v.as_slice()) }
-
+    pub fn add_user(&mut self, def: InstId, user: impl Into<InstOrTermId>, operand_idx: usize) {
+        self.users.entry(def).or_default().push((user.into(), operand_idx));
+    }
     pub fn remove_user(&mut self, def: InstId, removed_user: impl Into<InstOrTermId>) {
         // we need this often as DefUseInfo gets stale frequently when stuff is deleted or changed
         let removed_user = removed_user.into();
@@ -335,5 +334,5 @@ impl DefUseInfo {
     }
 }
 impl IrArena {
-    pub fn replace_all_uses_with(&mut self, old_id: InstId, new_id: InstId, def_use: &mut DefUseInfo) {}
+    pub fn replace_all_uses_with(&mut self, _old_id: InstId, _new_id: InstId, _def_use: &mut DefUseInfo) {}
 }

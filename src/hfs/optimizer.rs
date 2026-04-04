@@ -1,6 +1,4 @@
-use std::collections::HashSet;
-
-use crate::hfs::{BlockId, DefUseInfo, InstId, InstOrTermId, IrArena, IrFuncId};
+use crate::hfs::{DefUseInfo, IrArena, IrFuncId};
 
 // these are the basic traits and APIs our passes/pipelines must meet
 //
@@ -8,13 +6,13 @@ pub trait IrPass {
     fn new() -> Box<Self>
     where Self: Sized;
     fn name(&self) -> &str;
-    fn run(&mut self, arena: &mut IrArena, func_id: IrFuncId) -> bool; // returns true if changed
+    fn run(&self, arena: &mut IrArena, func_id: IrFuncId) -> bool; // returns true if changed
 }
 pub trait CleanupPass: IrPass {}
 pub trait OptPass: IrPass {
     // opt passes usually require some form of cleanup
-    fn get_cleanup_passes(&mut self) -> &mut [Box<dyn CleanupPass>];
-    fn run_cleanup(&mut self, arena: &mut IrArena, func_id: IrFuncId) -> bool {
+    fn get_cleanup_passes(&self) -> &[Box<dyn CleanupPass>];
+    fn run_cleanup(&self, arena: &mut IrArena, func_id: IrFuncId) -> bool {
         let mut any_changed = false;
         for cleanup_pass in self.get_cleanup_passes() {
             any_changed |= cleanup_pass.run(arena, func_id);
@@ -44,23 +42,22 @@ pub trait OptPipeline {
 // Cleanup passes
 // ======================================================================================
 
-struct RemoveStaleInstIds {
-    any_changed: bool,
-}
+struct RemoveStaleInstIds;
 impl CleanupPass for RemoveStaleInstIds {}
 impl IrPass for RemoveStaleInstIds {
-    fn new() -> Box<Self> { Box::new(RemoveStaleInstIds { any_changed: false }) }
+    fn new() -> Box<Self> { Box::new(RemoveStaleInstIds) }
     fn name(&self) -> &str { "RemoveStaleInstIds: clean all blocks that have stale InstIds" }
-    fn run(&mut self, arena: &mut IrArena, func_id: IrFuncId) -> bool {
+    fn run(&self, arena: &mut IrArena, func_id: IrFuncId) -> bool {
+        let mut any_changed = false;
         for block_id in arena.get_blocks_in(func_id) {
             let block = &mut arena.blocks[block_id];
             let len_before = block.instructions.len();
 
             block.instructions.retain(|id| arena.instructions.contains_key(*id));
 
-            self.any_changed |= block.instructions.len() != len_before;
+            any_changed |= block.instructions.len() != len_before;
         }
-        self.any_changed
+        any_changed
     }
     // SlotMap will return none if this instruction no longer exists, and we want to remove those
 }
@@ -73,12 +70,12 @@ struct DeadCodeElimination {
     cleanup_passes: Vec<Box<dyn CleanupPass>>,
 }
 impl OptPass for DeadCodeElimination {
-    fn get_cleanup_passes(&mut self) -> &mut [Box<dyn CleanupPass>] { &mut self.cleanup_passes }
+    fn get_cleanup_passes(&self) -> &[Box<dyn CleanupPass>] { &self.cleanup_passes }
 }
 impl IrPass for DeadCodeElimination {
     fn new() -> Box<Self> { Box::new(DeadCodeElimination { cleanup_passes: vec![RemoveStaleInstIds::new()] }) }
     fn name(&self) -> &str { "DeadCodeElimination: remove unused and unreachable code" }
-    fn run(&mut self, arena: &mut IrArena, func_id: IrFuncId) -> bool {
+    fn run(&self, arena: &mut IrArena, func_id: IrFuncId) -> bool {
         let mut def_use = DefUseInfo::compute(arena, func_id);
         let mut changed = false;
         // start by marking all useless instructions

@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt::Display};
+use std::{collections::HashMap, env::args, fmt::Display};
 
 use colored::{ColoredString, Colorize, CustomColor};
 use slotmap::new_key_type;
@@ -58,7 +58,7 @@ pub struct BasicBlock {
     pub parent_function: IrFuncId,
     pub name: String,
     pub predecessors: Vec<BlockId>, // or phi node construction
-    pub successors: Vec<BlockId>, 
+    pub successors: Vec<BlockId>,
     pub instructions: Vec<InstId>,
     pub terminator: Option<TermInstId>,
 }
@@ -125,8 +125,14 @@ pub enum Instruction {
         source_info: SourceInfo,
         instructions: Vec<InstId>,
     },
-    Operation(SourceInfo, CfgOperation),
-    Literal(SourceInfo, Literal),
+    Operation {
+        source_info: SourceInfo,
+        op: IrOperation,
+    },
+    Literal {
+        source_info: SourceInfo,
+        literal: Literal,
+    },
     LoadElement {
         // load an element from a tuple (used to merge tuples into a new one)
         // useful for mapping our stack tracking into LLVM IR
@@ -138,19 +144,76 @@ pub enum Instruction {
 // Terminator instructions, separated from the others
 #[derive(Debug)]
 pub enum TerminatorInst {
-    Return(SourceInfo, InstId), // only the last block in a function should have a Terminator::Return
-    // all others that want to return should jump to the "end" block which is tracked by each function
+    Return { source_info: SourceInfo, return_tuple: InstId },
     Branch { source_info: SourceInfo, cond: InstId, true_block: BlockId, false_block: BlockId },
     // if we want to jump with nothing, just have an empty vector
-    Jump(SourceInfo, BlockId), // is a tuple
+    Jump { source_info: SourceInfo, target: BlockId }, // is a tuple
     // the jump always carries around the stack variation itself
     // for other purposes, we usually generate a phi and find the associated InstId with a pass
     // that searches for store instructions and whatnot
     Unreachable, // might be useful for you later in CFG analysis
 }
 
+impl Instruction {
+    pub fn has_side_effects(&self) -> bool {
+        match self {
+            // function calls and memory ops are considered to have side effects
+            // memory ops are only solved with something like mem2reg
+            Instruction::FunctionCall { .. } | Instruction::Store { .. } | Instruction::Alloca { .. } => true,
+            Instruction::Load { .. }
+            | Instruction::GlobalAlloca(..)
+            | Instruction::Parameter { .. }
+            | Instruction::ReturnValue { .. }
+            | Instruction::Phi { .. }
+            | Instruction::Tuple { .. }
+            | Instruction::Operation { .. }
+            | Instruction::Literal { .. }
+            | Instruction::LoadElement { .. } => false,
+        }
+    }
+    pub fn get_operands(&self) -> Vec<InstId> {
+        match self {
+            Instruction::Store { address, value, .. } => vec![*address, *value],
+            Instruction::Load { address, .. } => vec![*address],
+            Instruction::FunctionCall { args, .. } => args.clone(),
+            Instruction::Phi { incoming, .. } => incoming.clone().into_values().collect(),
+            Instruction::Tuple { instructions, .. } => instructions.clone(),
+            Instruction::LoadElement { tuple, .. } => vec![*tuple],
+            Instruction::Operation { op, .. } => match op {
+                IrOperation::Add(inst_id, inst_id1)
+                | IrOperation::Sub(inst_id, inst_id1)
+                | IrOperation::Mul(inst_id, inst_id1)
+                | IrOperation::Div(inst_id, inst_id1)
+                | IrOperation::Mod(inst_id, inst_id1)
+                | IrOperation::Equal(inst_id, inst_id1)
+                | IrOperation::NotEqual(inst_id, inst_id1)
+                | IrOperation::Less(inst_id, inst_id1)
+                | IrOperation::LessEqual(inst_id, inst_id1)
+                | IrOperation::Greater(inst_id, inst_id1)
+                | IrOperation::GreaterEqual(inst_id, inst_id1)
+                | IrOperation::Or(inst_id, inst_id1)
+                | IrOperation::And(inst_id, inst_id1) => {
+                    vec![*inst_id, *inst_id1]
+                },
+                IrOperation::Not(inst_id) => vec![*inst_id],
+            },
+            Instruction::Literal { .. }
+            | Instruction::Alloca { .. }
+            | Instruction::GlobalAlloca(_)
+            | Instruction::Parameter { .. }
+            | Instruction::ReturnValue { .. } => vec![],
+        }
+    }
+}
+impl TerminatorInst {
+    pub fn has_side_effects(&self) -> bool {
+        // terminators always have side effects
+        true
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
-pub enum CfgOperation {
+pub enum IrOperation {
     Add(InstId, InstId),
     Sub(InstId, InstId),
     Mul(InstId, InstId),
@@ -179,8 +242,8 @@ impl Instruction {
             Instruction::FunctionCall { source_info, args: _, func_id: _, is_move: _, return_values: _ } => source_info.clone(),
             Instruction::Phi { source_info, incoming: _ } => source_info.clone(),
             Instruction::Tuple { source_info, instructions: _ } => source_info.clone(),
-            Instruction::Operation(source_info, _) => source_info.clone(),
-            Instruction::Literal(source_info, _) => source_info.clone(),
+            Instruction::Operation { source_info, op: _ } => source_info.clone(),
+            Instruction::Literal { source_info, literal: _ } => source_info.clone(),
             Instruction::LoadElement { source_info, index: _, tuple: _ } => source_info.clone(),
         }
     }
@@ -224,13 +287,13 @@ impl IrFunction {
             blocks.push(curr_block);
 
             match curr_block.terminator {
-                Some(id) => match arena.get_terminator_instruction(id) {
-                    TerminatorInst::Return(_, _) => {},
+                Some(id) => match arena.get_terminator_inst(id) {
+                    TerminatorInst::Return { .. } => {},
                     TerminatorInst::Branch { source_info: _, cond: _, true_block, false_block } => {
                         worklist.push(*false_block);
                         worklist.push(*true_block);
                     },
-                    TerminatorInst::Jump(_, block_id) => {
+                    TerminatorInst::Jump { source_info: _, target: block_id } => {
                         worklist.push(*block_id);
                     },
                     TerminatorInst::Unreachable => {},
@@ -290,23 +353,23 @@ impl CfgPrintable for GlobalIrVarDeclaration {
     }
 }
 
-impl CfgPrintable for CfgOperation {
+impl CfgPrintable for IrOperation {
     fn get_repr(&self, arena: &IrArena) -> ColoredString {
         let op = match self {
-            CfgOperation::Add(a, b) => format!("{} {} {}", arena.inst_name(*a), "+".bright_blue(), arena.inst_name(*b)),
-            CfgOperation::Sub(a, b) => format!("{} {} {}", arena.inst_name(*a), "-".bright_blue(), arena.inst_name(*b)),
-            CfgOperation::Mul(a, b) => format!("{} {} {}", arena.inst_name(*a), "*".bright_blue(), arena.inst_name(*b)),
-            CfgOperation::Div(a, b) => format!("{} {} {}", arena.inst_name(*a), "/".bright_blue(), arena.inst_name(*b)),
-            CfgOperation::Mod(a, b) => format!("{} {} {}", arena.inst_name(*a), "%".bright_blue(), arena.inst_name(*b)),
-            CfgOperation::Equal(a, b) => format!("{} {} {}", arena.inst_name(*a), "==".bright_blue(), arena.inst_name(*b)),
-            CfgOperation::NotEqual(a, b) => format!("{} {} {}", arena.inst_name(*a), "!=".bright_blue(), arena.inst_name(*b)),
-            CfgOperation::Less(a, b) => format!("{} {} {}", arena.inst_name(*a), "<".bright_blue(), arena.inst_name(*b)),
-            CfgOperation::LessEqual(a, b) => format!("{} {} {}", arena.inst_name(*a), "<=".bright_blue(), arena.inst_name(*b)),
-            CfgOperation::Greater(a, b) => format!("{} {} {}", arena.inst_name(*a), ">".bright_blue(), arena.inst_name(*b)),
-            CfgOperation::GreaterEqual(a, b) => format!("{} {} {}", arena.inst_name(*a), ">=".bright_blue(), arena.inst_name(*b)),
-            CfgOperation::Or(a, b) => format!("{} {} {}", arena.inst_name(*a), "||".bright_blue(), arena.inst_name(*b)),
-            CfgOperation::And(a, b) => format!("{} {} {}", arena.inst_name(*a), "&&".bright_blue(), arena.inst_name(*b)),
-            CfgOperation::Not(a) => format!("{}{}", "!".bright_blue(), arena.inst_name(*a)),
+            IrOperation::Add(a, b) => format!("{} {} {}", arena.inst_name(*a), "+".bright_blue(), arena.inst_name(*b)),
+            IrOperation::Sub(a, b) => format!("{} {} {}", arena.inst_name(*a), "-".bright_blue(), arena.inst_name(*b)),
+            IrOperation::Mul(a, b) => format!("{} {} {}", arena.inst_name(*a), "*".bright_blue(), arena.inst_name(*b)),
+            IrOperation::Div(a, b) => format!("{} {} {}", arena.inst_name(*a), "/".bright_blue(), arena.inst_name(*b)),
+            IrOperation::Mod(a, b) => format!("{} {} {}", arena.inst_name(*a), "%".bright_blue(), arena.inst_name(*b)),
+            IrOperation::Equal(a, b) => format!("{} {} {}", arena.inst_name(*a), "==".bright_blue(), arena.inst_name(*b)),
+            IrOperation::NotEqual(a, b) => format!("{} {} {}", arena.inst_name(*a), "!=".bright_blue(), arena.inst_name(*b)),
+            IrOperation::Less(a, b) => format!("{} {} {}", arena.inst_name(*a), "<".bright_blue(), arena.inst_name(*b)),
+            IrOperation::LessEqual(a, b) => format!("{} {} {}", arena.inst_name(*a), "<=".bright_blue(), arena.inst_name(*b)),
+            IrOperation::Greater(a, b) => format!("{} {} {}", arena.inst_name(*a), ">".bright_blue(), arena.inst_name(*b)),
+            IrOperation::GreaterEqual(a, b) => format!("{} {} {}", arena.inst_name(*a), ">=".bright_blue(), arena.inst_name(*b)),
+            IrOperation::Or(a, b) => format!("{} {} {}", arena.inst_name(*a), "||".bright_blue(), arena.inst_name(*b)),
+            IrOperation::And(a, b) => format!("{} {} {}", arena.inst_name(*a), "&&".bright_blue(), arena.inst_name(*b)),
+            IrOperation::Not(a) => format!("{}{}", "!".bright_blue(), arena.inst_name(*a)),
         };
         op.into()
     }
@@ -315,7 +378,7 @@ impl CfgPrintable for CfgOperation {
 impl CfgPrintable for TerminatorInst {
     fn get_repr(&self, arena: &IrArena) -> ColoredString {
         match self {
-            TerminatorInst::Return(_, inst_id) =>
+            TerminatorInst::Return { source_info: _, return_tuple: inst_id } =>
                 format!("{} {}", "return".custom_color(CustomColor::new(202, 167, 244)), arena.inst_name(*inst_id)).into(),
             TerminatorInst::Branch { cond, true_block, false_block, .. } => format!(
                 "{} {}, {}, {}",
@@ -325,7 +388,7 @@ impl CfgPrintable for TerminatorInst {
                 arena.get_block(*false_block).name
             )
             .into(),
-            TerminatorInst::Jump(_, block_id) =>
+            TerminatorInst::Jump { source_info: _, target: block_id } =>
                 format!("{} {}", "jump".custom_color(CustomColor::new(202, 167, 244)), arena.get_block(*block_id).name).into(),
             TerminatorInst::Unreachable => format!("{}", "unreachable".custom_color(CustomColor::new(202, 167, 244))).into(),
         }
@@ -360,8 +423,8 @@ impl CfgPrintable for Instruction {
                 )
                 .into()
             },
-            Instruction::Operation(_, op) => op.get_repr(arena),
-            Instruction::Literal(_, literal) => match literal {
+            Instruction::Operation { source_info: _, op } => op.get_repr(arena),
+            Instruction::Literal { source_info: _, literal } => match literal {
                 Literal::Integer(lit) => lit.to_string().custom_color(CustomColor::new(250, 180, 134)),
                 Literal::Float(lit) => lit.to_string().custom_color(CustomColor::new(250, 180, 134)),
                 Literal::String(lit) => format!("\"{}\"", lit).custom_color(CustomColor::new(250, 180, 134)),
@@ -402,11 +465,11 @@ impl CfgPrintable for BasicBlock {
         let non_term_inst_repr = self
             .instructions
             .iter()
-            .map(|id| format!("    {} = {}", arena.inst_name(*id), arena.get_instruction(*id).get_repr(arena)))
+            .map(|id| format!("    {} = {}", arena.inst_name(*id), arena.get_inst(*id).get_repr(arena)))
             .collect::<Vec<String>>()
             .join("\n");
         let terminator_repr = match self.terminator {
-            Some(id) => format!("    {}", arena.get_terminator_instruction(id).get_repr(arena)),
+            Some(id) => format!("    {}", arena.get_terminator_inst(id).get_repr(arena)),
             None => String::from("    <no terminator>"),
         };
         let mut parts = vec![format!("  {}:", self.name.red().bold())];
@@ -455,12 +518,12 @@ impl IrArena {
                 let mut label_lines = vec![format!("{}:", block.name)];
 
                 for inst_id in &block.instructions {
-                    let inst = self.get_instruction(*inst_id);
+                    let inst = self.get_inst(*inst_id);
                     label_lines.push(format!("%{} = {}", inst_id, strip_ansi(&inst.get_repr(self).to_string())));
                 }
 
                 if let Some(term_id) = block.terminator {
-                    label_lines.push(strip_ansi(&self.get_terminator_instruction(term_id).get_repr(self).to_string()));
+                    label_lines.push(strip_ansi(&self.get_terminator_inst(term_id).get_repr(self).to_string()));
                 }
 
                 let label = label_lines.join("\\l");
@@ -473,7 +536,7 @@ impl IrArena {
                     continue;
                 };
 
-                match self.get_terminator_instruction(term_id) {
+                match self.get_terminator_inst(term_id) {
                     TerminatorInst::Branch { true_block, false_block, .. } => {
                         let t = self.get_block(*true_block);
                         let f = self.get_block(*false_block);
@@ -486,11 +549,11 @@ impl IrArena {
                             func.name, block.name, func.name, f.name
                         ));
                     },
-                    TerminatorInst::Jump(_, target) => {
+                    TerminatorInst::Jump { source_info: _, target } => {
                         let t = self.get_block(*target);
                         out.push_str(&format!("        {}_{} -> {}_{};\n", func.name, block.name, func.name, t.name));
                     },
-                    TerminatorInst::Return(..) | TerminatorInst::Unreachable => {},
+                    TerminatorInst::Return { .. } | TerminatorInst::Unreachable => {},
                 }
             }
 

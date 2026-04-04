@@ -1,21 +1,13 @@
-use crate::hfs::{ast::*, error::CompileError, token::*, CfgOperation, GlobalIrVarId, InstId, Instruction, IrArena, IrFuncId};
+use crate::hfs::{IrOperation, GlobalIrVarId, InstId, Instruction, IrArena, IrFuncId, ast::*, error::CompileError, token::*};
 
 pub const PRIMITIVE_TYPE_COUNT: usize = 4;
 
 impl AstArena {
     // Convenience methods for common types
-    pub fn int_type(&self) -> TypeId {
-        TypeId(0)
-    }
-    pub fn float_type(&self) -> TypeId {
-        TypeId(1)
-    }
-    pub fn bool_type(&self) -> TypeId {
-        TypeId(2)
-    }
-    pub fn string_type(&self) -> TypeId {
-        TypeId(3)
-    }
+    pub fn int_type(&self) -> TypeId { TypeId(0) }
+    pub fn float_type(&self) -> TypeId { TypeId(1) }
+    pub fn bool_type(&self) -> TypeId { TypeId(2) }
+    pub fn string_type(&self) -> TypeId { TypeId(3) }
 
     // Only expressions have types!
     pub fn get_type_of_operation(&mut self, op: &Operation) -> Result<TypeId, Box<dyn CompileError>> {
@@ -79,12 +71,8 @@ impl AstArena {
             Expression::ReturnValue(type_id) => Ok(type_id),
         }
     }
-    pub fn get_type_of_var(&self, var_id: VarId) -> &Type {
-        self.get_type(self.get_var(var_id).hfs_type)
-    }
-    pub fn get_type_of_func(&self, func_id: FuncId) -> &Type {
-        self.get_type(self.get_func(func_id).return_type)
-    }
+    pub fn get_type_of_var(&self, var_id: VarId) -> &Type { self.get_type(self.get_var(var_id).hfs_type) }
+    pub fn get_type_of_func(&self, func_id: FuncId) -> &Type { self.get_type(self.get_func(func_id).return_type) }
 
     pub fn get_type_of_expr(&mut self, expr_id: ExprId) -> Result<&Type, Box<dyn CompileError>> {
         let type_id = self.get_type_id_of_expr(expr_id)?;
@@ -94,49 +82,41 @@ impl AstArena {
 
 impl IrArena {
     // Convenience methods for common types
-    pub fn int_type(&self) -> TypeId {
-        TypeId(0)
-    }
-    pub fn float_type(&self) -> TypeId {
-        TypeId(1)
-    }
-    pub fn bool_type(&self) -> TypeId {
-        TypeId(2)
-    }
-    pub fn string_type(&self) -> TypeId {
-        TypeId(3)
-    }
+    pub fn int_type(&self) -> TypeId { TypeId(0) }
+    pub fn float_type(&self) -> TypeId { TypeId(1) }
+    pub fn bool_type(&self) -> TypeId { TypeId(2) }
+    pub fn string_type(&self) -> TypeId { TypeId(3) }
 
     // Only expressions have types!
-    pub fn get_type_of_operation(&mut self, op: &CfgOperation) -> Result<TypeId, Box<dyn CompileError>> {
+    pub fn get_type_of_operation(&mut self, op: &IrOperation) -> Result<TypeId, Box<dyn CompileError>> {
         match op {
             // Arithmetic operations: return the operand type
-            CfgOperation::Add(lhs, rhs)
-            | CfgOperation::Sub(lhs, rhs)
-            | CfgOperation::Mul(lhs, rhs)
-            | CfgOperation::Div(lhs, rhs)
-            | CfgOperation::Mod(lhs, rhs) => {
+            IrOperation::Add(lhs, rhs)
+            | IrOperation::Sub(lhs, rhs)
+            | IrOperation::Mul(lhs, rhs)
+            | IrOperation::Div(lhs, rhs)
+            | IrOperation::Mod(lhs, rhs) => {
                 let lhs_type = self.get_type_id_of_inst(*lhs)?;
                 let rhs_type = self.get_type_id_of_inst(*rhs)?;
-                self.compare_types(lhs_type, rhs_type, vec![self.get_instruction(*lhs).get_source_info().clone()])?;
+                self.compare_types(lhs_type, rhs_type, vec![self.get_inst(*lhs).get_source_info().clone()])?;
                 Ok(lhs_type)
             },
-            CfgOperation::Or(_, _)
-            | CfgOperation::And(_, _)
-            | CfgOperation::Not(_)
-            | CfgOperation::Equal(_, _)
-            | CfgOperation::NotEqual(_, _)
-            | CfgOperation::Less(_, _)
-            | CfgOperation::LessEqual(_, _)
-            | CfgOperation::Greater(_, _)
-            | CfgOperation::GreaterEqual(_, _) => Ok(self.bool_type()),
+            IrOperation::Or(_, _)
+            | IrOperation::And(_, _)
+            | IrOperation::Not(_)
+            | IrOperation::Equal(_, _)
+            | IrOperation::NotEqual(_, _)
+            | IrOperation::Less(_, _)
+            | IrOperation::LessEqual(_, _)
+            | IrOperation::Greater(_, _)
+            | IrOperation::GreaterEqual(_, _) => Ok(self.bool_type()),
         }
     }
 
     pub fn get_type_id_of_inst(&mut self, inst_id: InstId) -> Result<TypeId, Box<dyn CompileError>> {
-        match self.get_instruction(inst_id).clone() {
-            Instruction::Operation(_, operation) => Ok(self.get_type_of_operation(&operation)?),
-            Instruction::Literal(_, literal) => match literal {
+        match self.get_inst(inst_id).clone() {
+            Instruction::Operation { source_info: _, op } => Ok(self.get_type_of_operation(&op)?),
+            Instruction::Literal { source_info: _, literal } => match literal {
                 Literal::Integer(_) => Ok(self.int_type()),
                 Literal::Float(_) => Ok(self.float_type()),
                 Literal::String(_) => Ok(self.string_type()),
@@ -154,9 +134,8 @@ impl IrArena {
                 Ok(self.alloc_type(tuple_type, source_info.clone()))
             },
             Instruction::Parameter { source_info: _, index: _, type_id } => Ok(type_id),
-            Instruction::FunctionCall { source_info: _, args: _, func_id, is_move: _, return_values: _ } => {
-                Ok(self.get_func(func_id).return_type)
-            },
+            Instruction::FunctionCall { source_info: _, args: _, func_id, is_move: _, return_values: _ } =>
+                Ok(self.get_func(func_id).return_type),
             Instruction::Phi { source_info: _, incoming } => Ok(self.get_type_id_of_inst(
                 *incoming.values().next().expect("[internal error] found phi with no elements in type checking"),
             )?),
@@ -171,12 +150,8 @@ impl IrArena {
             Instruction::GlobalAlloca(_) => todo!(),
         }
     }
-    pub fn get_type_of_var(&self, var_id: GlobalIrVarId) -> &Type {
-        self.get_type(self.get_var(var_id).hfs_type)
-    }
-    pub fn get_type_of_func(&self, func_id: IrFuncId) -> &Type {
-        self.get_type(self.get_func(func_id).return_type)
-    }
+    pub fn get_type_of_var(&self, var_id: GlobalIrVarId) -> &Type { self.get_type(self.get_var(var_id).hfs_type) }
+    pub fn get_type_of_func(&self, func_id: IrFuncId) -> &Type { self.get_type(self.get_func(func_id).return_type) }
 
     pub fn get_type_of_inst(&mut self, inst_id: InstId) -> Result<&Type, Box<dyn CompileError>> {
         let type_id = self.get_type_id_of_inst(inst_id)?;

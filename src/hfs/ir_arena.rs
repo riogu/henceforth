@@ -162,11 +162,11 @@ impl IrArena {
                 self.get_block_mut(true_block).predecessors.push(block_id);
                 self.get_block_mut(false_block).predecessors.push(block_id);
             },
-            TerminatorInst::Jump(_, jump_to_id) => {
+            TerminatorInst::Jump { source_info: _, target: jump_to_id } => {
                 self.get_block_mut(block_id).successors.push(jump_to_id);
                 self.get_block_mut(jump_to_id).predecessors.push(block_id);
             },
-            TerminatorInst::Return(..) | TerminatorInst::Unreachable => {}, // no successors, nothing to update
+            TerminatorInst::Return{..} | TerminatorInst::Unreachable => {}, // no successors, nothing to update
         }
         let id = self.terminators.insert(terminator);
         self.get_block_mut(block_id).terminator = Some(id);
@@ -197,17 +197,17 @@ impl IrArena {
     pub fn get_var(&self, id: GlobalIrVarId) -> &GlobalIrVarDeclaration { &self.global_vars[id] }
     pub fn get_func(&self, id: IrFuncId) -> &IrFunction { &self.functions[id] }
     pub fn get_type(&self, id: TypeId) -> &Type { &self.types[id.0] }
-    pub fn get_instruction_mut(&mut self, id: InstId) -> &mut Instruction { &mut self.instructions[id] }
-    pub fn get_instruction(&self, id: InstId) -> &Instruction { &self.instructions[id] }
-    pub fn try_get_instruction(&self, id: InstId) -> Option<&Instruction> {
+    pub fn get_inst_mut(&mut self, id: InstId) -> &mut Instruction { &mut self.instructions[id] }
+    pub fn get_inst(&self, id: InstId) -> &Instruction { &self.instructions[id] }
+    pub fn try_get_inst(&self, id: InstId) -> Option<&Instruction> {
         // this is used by optimization passes and other analyses that don't know if we might've
         // deleted a held InstId, and will crash if there wasn't
         // therefore we simply skip over these if we receive a None
         self.instructions.get(id)
     }
-    pub fn remove_instruction(&mut self, id: InstId) -> Option<Instruction> { self.instructions.remove(id) }
+    pub fn remove_inst(&mut self, id: InstId) -> Option<Instruction> { self.instructions.remove(id) }
 
-    pub fn get_terminator_instruction(&self, id: TermInstId) -> &TerminatorInst { &self.terminators[id] }
+    pub fn get_terminator_inst(&self, id: TermInstId) -> &TerminatorInst { &self.terminators[id] }
     pub fn get_block(&self, id: BlockId) -> &BasicBlock { &self.blocks[id] }
     pub fn get_block_mut(&mut self, id: BlockId) -> &mut BasicBlock { &mut self.blocks[id] }
     pub fn try_get_block(&self, id: BlockId) -> Option<&BasicBlock> { self.blocks.get(id) }
@@ -297,7 +297,7 @@ pub struct DefUseInfo {
 }
 impl IrArena {
     // link a definition to all its uses
-    pub fn compute(&self) { todo!() }
-    pub fn users_of(&self, id: InstId) -> &[InstId] { todo!() }
+    pub fn compute_users(&mut self) {}
+    pub fn users_of(&self, id: InstId) -> &mut [InstId] { todo!() }
     pub fn replace_all_uses_with(&mut self, old_id: InstId, new_id: InstId) {}
 }

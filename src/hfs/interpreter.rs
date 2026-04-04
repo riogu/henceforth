@@ -167,7 +167,7 @@ impl Interpreter {
             for inst_id in block.instructions.clone() {
                 // Invalidate cached values for this block's instructions
                 // so that loads and operations are re-evaluated on each visit.
-                if !matches!(self.arena.get_instruction(inst_id), Instruction::Parameter { .. }) {
+                if !matches!(self.arena.get_inst(inst_id), Instruction::Parameter { .. }) {
                     // parameters should only be interpreted once at the start of a block
                     self.curr_call_frame_mut().inst_values.remove(&inst_id);
                 }
@@ -195,7 +195,7 @@ impl Interpreter {
             return self.curr_call_frame().inst_values[&inst_id].clone();
         }
 
-        match self.arena.get_instruction(inst_id) {
+        match self.arena.get_inst(inst_id) {
             Instruction::Parameter { source_info: _, index: _, type_id: _ } => {
                 // parameters should always hit the cache (because they are bound at the start of
                 // the function
@@ -242,8 +242,8 @@ impl Interpreter {
                 }
                 RuntimeValue::Tuple(runtime_values)
             },
-            Instruction::Operation(_, cfg_operation) => self.interpret_operation(*cfg_operation),
-            Instruction::Literal(_, literal) => match literal {
+            Instruction::Operation { source_info: _, op } => self.interpret_operation(*op),
+            Instruction::Literal { source_info: _, literal } => match literal {
                 // NOTE: we are not interning strings or literals at all right now
                 // it might be a good idea to do this later for performance
                 Literal::Integer(val) => RuntimeValue::Integer(*val),
@@ -282,9 +282,9 @@ impl Interpreter {
             },
         }
     }
-    pub fn interpret_operation(&mut self, op: CfgOperation) -> RuntimeValue {
+    pub fn interpret_operation(&mut self, op: IrOperation) -> RuntimeValue {
         match op {
-            CfgOperation::Add(l, r) => {
+            IrOperation::Add(l, r) => {
                 let left = self.interpret_instruction(l);
                 let right = self.interpret_instruction(r);
                 match (left, right) {
@@ -296,7 +296,7 @@ impl Interpreter {
                     _ => panic!("invalid operands for addition"),
                 }
             },
-            CfgOperation::Sub(l, r) => {
+            IrOperation::Sub(l, r) => {
                 let left = self.interpret_instruction(l);
                 let right = self.interpret_instruction(r);
                 match (left, right) {
@@ -307,7 +307,7 @@ impl Interpreter {
                     _ => panic!("invalid operands for subtraction"),
                 }
             },
-            CfgOperation::Mul(l, r) => {
+            IrOperation::Mul(l, r) => {
                 let left = self.interpret_instruction(l);
                 let right = self.interpret_instruction(r);
                 match (left, right) {
@@ -318,7 +318,7 @@ impl Interpreter {
                     _ => panic!("invalid operands for multiplication"),
                 }
             },
-            CfgOperation::Div(l, r) => {
+            IrOperation::Div(l, r) => {
                 let left = self.interpret_instruction(l);
                 let right = self.interpret_instruction(r);
                 match (left, right) {
@@ -349,7 +349,7 @@ impl Interpreter {
                     _ => panic!("invalid operands for division"),
                 }
             },
-            CfgOperation::Mod(l, r) => {
+            IrOperation::Mod(l, r) => {
                 let left = self.interpret_instruction(l);
                 let right = self.interpret_instruction(r);
                 match (left, right) {
@@ -380,17 +380,17 @@ impl Interpreter {
                     _ => panic!("invalid operands for modulo"),
                 }
             },
-            CfgOperation::Equal(l, r) => {
+            IrOperation::Equal(l, r) => {
                 let left = self.interpret_instruction(l);
                 let right = self.interpret_instruction(r);
                 RuntimeValue::Bool(left == right)
             },
-            CfgOperation::NotEqual(l, r) => {
+            IrOperation::NotEqual(l, r) => {
                 let left = self.interpret_instruction(l);
                 let right = self.interpret_instruction(r);
                 RuntimeValue::Bool(left != right)
             },
-            CfgOperation::Less(l, r) => {
+            IrOperation::Less(l, r) => {
                 let left = self.interpret_instruction(l);
                 let right = self.interpret_instruction(r);
                 match (left, right) {
@@ -401,7 +401,7 @@ impl Interpreter {
                     _ => panic!("invalid operands for less than comparison"),
                 }
             },
-            CfgOperation::LessEqual(l, r) => {
+            IrOperation::LessEqual(l, r) => {
                 let left = self.interpret_instruction(l);
                 let right = self.interpret_instruction(r);
                 match (left, right) {
@@ -412,7 +412,7 @@ impl Interpreter {
                     _ => panic!("invalid operands for '<=' comparison"),
                 }
             },
-            CfgOperation::Greater(l, r) => {
+            IrOperation::Greater(l, r) => {
                 let left = self.interpret_instruction(l);
                 let right = self.interpret_instruction(r);
                 match (left, right) {
@@ -423,7 +423,7 @@ impl Interpreter {
                     _ => panic!("invalid operands for greater than comparison"),
                 }
             },
-            CfgOperation::GreaterEqual(l, r) => {
+            IrOperation::GreaterEqual(l, r) => {
                 let left = self.interpret_instruction(l);
                 let right = self.interpret_instruction(r);
                 match (left, right) {
@@ -434,7 +434,7 @@ impl Interpreter {
                     _ => panic!("invalid operands for greater than or equal comparison"),
                 }
             },
-            CfgOperation::Or(l, r) => {
+            IrOperation::Or(l, r) => {
                 let left = self.interpret_instruction(l);
                 let right = self.interpret_instruction(r);
                 match (left, right) {
@@ -442,7 +442,7 @@ impl Interpreter {
                     _ => panic!("invalid operands for logical OR (expected booleans)"),
                 }
             },
-            CfgOperation::And(l, r) => {
+            IrOperation::And(l, r) => {
                 let left = self.interpret_instruction(l);
                 let right = self.interpret_instruction(r);
                 match (left, right) {
@@ -450,7 +450,7 @@ impl Interpreter {
                     _ => panic!("invalid operands for logical AND (expected booleans)"),
                 }
             },
-            CfgOperation::Not(inst_id) => {
+            IrOperation::Not(inst_id) => {
                 let value = self.interpret_instruction(inst_id);
                 match value {
                     RuntimeValue::Bool(b) => RuntimeValue::Bool(!b),
@@ -461,9 +461,9 @@ impl Interpreter {
     }
     // Returns `Some(block_id)` to continue to, or `None` to stop (return)
     pub fn interpret_terminator(&mut self, term_id: TermInstId) -> Option<BlockId> {
-        match self.arena.get_terminator_instruction(term_id) {
-            TerminatorInst::Return(_, inst_id) => {
-                if let RuntimeValue::Tuple(return_stack) = self.interpret_instruction(*inst_id) {
+        match self.arena.get_terminator_inst(term_id) {
+            TerminatorInst::Return { source_info: _, return_tuple} => {
+                if let RuntimeValue::Tuple(return_stack) = self.interpret_instruction(*return_tuple) {
                     self.curr_call_frame_mut().return_stack = return_stack;
                 } else {
                     panic!("[internal error] expected a RuntimeValue::Tuple from TerminatorInst::Return")
@@ -479,7 +479,7 @@ impl Interpreter {
                     panic!("[internal error] expected 'RuntimeValue::Bool' in TerminatorInst::Branch condition value")
                 }
             },
-            TerminatorInst::Jump(_, block_id) => Some(*block_id),
+            TerminatorInst::Jump { source_info: _, target } => Some(*target),
             TerminatorInst::Unreachable => panic!("[internal error] reached 'Unreachable' instruction while interpreting"),
         }
     }

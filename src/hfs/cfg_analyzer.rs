@@ -3,8 +3,8 @@ use std::{collections::HashMap, fmt::Debug, rc::Rc};
 use crate::{
     cfg_analyzer_error,
     hfs::{
-        BlockId, IrFunction, CfgOperation, CfgPrintable, CfgTopLevelId, GlobalIrVarDeclaration, GlobalIrVarId, InstId,
-        Instruction, IrArena, IrFuncId, PRIMITIVE_TYPE_COUNT, SourceInfo, TerminatorInst,
+        BlockId, IrOperation, CfgPrintable, CfgTopLevelId, GlobalIrVarDeclaration, GlobalIrVarId, InstId, Instruction, IrArena,
+        IrFuncId, IrFunction, PRIMITIVE_TYPE_COUNT, SourceInfo, TerminatorInst,
         ast::*,
         cfg_analyzer_errors::CfgAnalyzerErrorKind,
         error::{CompileError, DiagnosticInfo},
@@ -145,7 +145,7 @@ impl CfgAnalyzer {
                 self.arena.ir_context.curr_insert_block,
             );
             let _ = self.arena.alloc_terminator_for(
-                TerminatorInst::Return(source_info.clone(), return_tuple),
+                TerminatorInst::Return { source_info: source_info.clone(), return_tuple },
                 self.arena.ir_context.curr_insert_block,
             );
         }
@@ -205,8 +205,7 @@ impl CfgAnalyzer {
                 ]),
         };
         let cond_type = self.arena.get_type_id_of_inst(cond)?;
-        self.arena
-            .compare_types(cond_type, self.arena.bool_type(), vec![self.arena.get_instruction(cond).get_source_info()])?;
+        self.arena.compare_types(cond_type, self.arena.bool_type(), vec![self.arena.get_inst(cond).get_source_info()])?;
 
         Ok((cond, block_before_if, if_body_block))
     }
@@ -227,7 +226,7 @@ impl CfgAnalyzer {
             self.arena.compare_stacks(
                 &stack_after_body,
                 &curr_block_context.prev_stack_change,
-                stack_after_body.iter().map(|inst| self.arena.get_instruction(*inst).get_source_info()).collect(),
+                stack_after_body.iter().map(|inst| self.arena.get_inst(*inst).get_source_info()).collect(),
             )?;
             curr_block_context.end_block.expect("[internal error] forgot to set exit block for the current if stmt")
         };
@@ -289,7 +288,7 @@ impl CfgAnalyzer {
 
                 if self.arena.get_block(self.arena.ir_context.curr_insert_block).terminator.is_none() {
                     self.arena.alloc_terminator_for(
-                        TerminatorInst::Jump(source_info.clone(), if_end_block),
+                        TerminatorInst::Jump { source_info: source_info.clone(), target: if_end_block },
                         self.arena.ir_context.curr_insert_block,
                     )?;
                 }
@@ -339,7 +338,7 @@ impl CfgAnalyzer {
                             && self.arena.ir_context.curr_insert_block != if_end_block
                             {
                                 self.arena.alloc_terminator_for(
-                                    TerminatorInst::Jump(source_info.clone(), if_end_block),
+                                    TerminatorInst::Jump { source_info: source_info.clone(), target: if_end_block },
                                     self.arena.ir_context.curr_insert_block,
                                 )?;
                             }
@@ -382,7 +381,7 @@ impl CfgAnalyzer {
                 let while_end_block = self.arena.alloc_block("while_end");
 
                 self.arena.alloc_terminator_for(
-                    TerminatorInst::Jump(source_info.clone(), while_cond_block),
+                    TerminatorInst::Jump { source_info: source_info.clone(), target: while_cond_block },
                     self.arena.ir_context.curr_insert_block,
                 )?; // finish the previous block with a jump
 
@@ -391,8 +390,7 @@ impl CfgAnalyzer {
                 self.arena.ir_context.curr_insert_block = while_cond_block;
                 let cond = self.lower_expr(cond)?;
                 let cond_type = self.arena.get_type_id_of_inst(cond)?;
-                self.arena
-                    .compare_types(cond_type, self.arena.bool_type(), vec![self.arena.get_instruction(cond).get_source_info()])?;
+                self.arena.compare_types(cond_type, self.arena.bool_type(), vec![self.arena.get_inst(cond).get_source_info()])?;
                 self.arena.alloc_terminator_for(
                     TerminatorInst::Branch {
                         source_info: source_info.clone(),
@@ -427,7 +425,7 @@ impl CfgAnalyzer {
                 }
                 if self.arena.get_block(self.arena.ir_context.curr_insert_block).terminator.is_none() {
                     self.arena.alloc_terminator_for(
-                        TerminatorInst::Jump(source_info, while_cond_block),
+                        TerminatorInst::Jump { source_info, target: while_cond_block },
                         self.arena.ir_context.curr_insert_block,
                     )?;
                 }
@@ -484,7 +482,7 @@ impl CfgAnalyzer {
                     self.arena.ir_context.curr_insert_block,
                 );
                 let _ = self.arena.alloc_terminator_for(
-                    TerminatorInst::Return(source_info, return_tuple),
+                    TerminatorInst::Return { source_info, return_tuple },
                     self.arena.ir_context.curr_insert_block,
                 )?;
                 Ok(())
@@ -493,10 +491,10 @@ impl CfgAnalyzer {
                 // a break always ends the current block and jumps somewhere else
                 // (the exit of the current control flow construct)
                 self.arena.alloc_terminator_for(
-                    TerminatorInst::Jump(
+                    TerminatorInst::Jump {
                         source_info,
-                        curr_block_context.break_to_block.expect("[internal error] found break outside of while context"),
-                    ),
+                        target: curr_block_context.break_to_block.expect("[internal error] found break outside of while context"),
+                    },
                     self.arena.ir_context.curr_insert_block,
                 )?;
                 Ok(())
@@ -505,10 +503,12 @@ impl CfgAnalyzer {
                 // the entry_block is meant to be the block that we came from to start this current
                 // context. its meant to allow the start of the next iteration
                 self.arena.alloc_terminator_for(
-                    TerminatorInst::Jump(
+                    TerminatorInst::Jump {
                         source_info,
-                        curr_block_context.continue_to_block.expect("[internal error] found continue outside of while context"),
-                    ),
+                        target: curr_block_context
+                            .continue_to_block
+                            .expect("[internal error] found continue outside of while context"),
+                    },
                     self.arena.ir_context.curr_insert_block,
                 )?;
                 Ok(())
@@ -560,7 +560,7 @@ impl CfgAnalyzer {
                 let other_type_id = self.arena.get_type_id_of_inst(inst_value)?;
                 self.arena.compare_types(type_id, other_type_id, vec![
                     identifier.get_source_info(&self.ast_arena),
-                    self.arena.get_instruction(inst_value).get_source_info(),
+                    self.arena.get_inst(inst_value).get_source_info(),
                 ])?;
 
                 // Chase the pointer chain: ptr^ is 1 deref, ptr^^ is 2, etc.
@@ -670,7 +670,7 @@ impl CfgAnalyzer {
                 Identifier::Function(_) => panic!("[internal error] can't have function identifiers as expressions."),
             },
             Expression::Literal(literal) =>
-                self.arena.alloc_inst_for(Instruction::Literal(source_info, literal), self.arena.ir_context.curr_insert_block),
+                self.arena.alloc_inst_for(Instruction::Literal { source_info, literal }, self.arena.ir_context.curr_insert_block),
             Expression::Tuple { expressions } => {
                 let mut instructions = Vec::<InstId>::new();
                 for expr_id in expressions {
@@ -696,25 +696,27 @@ impl CfgAnalyzer {
     }
     pub fn lower_operation(&mut self, op: Operation, source_info: SourceInfo) -> Result<InstId, Box<dyn CompileError>> {
         let cfg_op = match op {
-            Operation::Add(expr_id, expr_id1) => CfgOperation::Add(self.lower_expr(expr_id)?, self.lower_expr(expr_id1)?),
-            Operation::Sub(expr_id, expr_id1) => CfgOperation::Sub(self.lower_expr(expr_id)?, self.lower_expr(expr_id1)?),
-            Operation::Mul(expr_id, expr_id1) => CfgOperation::Mul(self.lower_expr(expr_id)?, self.lower_expr(expr_id1)?),
-            Operation::Div(expr_id, expr_id1) => CfgOperation::Div(self.lower_expr(expr_id)?, self.lower_expr(expr_id1)?),
-            Operation::Mod(expr_id, expr_id1) => CfgOperation::Mod(self.lower_expr(expr_id)?, self.lower_expr(expr_id1)?),
-            Operation::Equal(expr_id, expr_id1) => CfgOperation::Equal(self.lower_expr(expr_id)?, self.lower_expr(expr_id1)?),
+            Operation::Add(expr_id, expr_id1) => IrOperation::Add(self.lower_expr(expr_id)?, self.lower_expr(expr_id1)?),
+            Operation::Sub(expr_id, expr_id1) => IrOperation::Sub(self.lower_expr(expr_id)?, self.lower_expr(expr_id1)?),
+            Operation::Mul(expr_id, expr_id1) => IrOperation::Mul(self.lower_expr(expr_id)?, self.lower_expr(expr_id1)?),
+            Operation::Div(expr_id, expr_id1) => IrOperation::Div(self.lower_expr(expr_id)?, self.lower_expr(expr_id1)?),
+            Operation::Mod(expr_id, expr_id1) => IrOperation::Mod(self.lower_expr(expr_id)?, self.lower_expr(expr_id1)?),
+            Operation::Equal(expr_id, expr_id1) => IrOperation::Equal(self.lower_expr(expr_id)?, self.lower_expr(expr_id1)?),
             Operation::NotEqual(expr_id, expr_id1) =>
-                CfgOperation::NotEqual(self.lower_expr(expr_id)?, self.lower_expr(expr_id1)?),
-            Operation::Less(expr_id, expr_id1) => CfgOperation::Less(self.lower_expr(expr_id)?, self.lower_expr(expr_id1)?),
-            Operation::LessEqual(expr_id, expr1) => CfgOperation::LessEqual(self.lower_expr(expr_id)?, self.lower_expr(expr1)?),
-            Operation::Greater(expr_id, expr_id1) => CfgOperation::Greater(self.lower_expr(expr_id)?, self.lower_expr(expr_id1)?),
-            Operation::GreaterEqual(expr, expr1) => CfgOperation::GreaterEqual(self.lower_expr(expr)?, self.lower_expr(expr1)?),
-            Operation::Or(expr_id, expr_id1) => CfgOperation::Or(self.lower_expr(expr_id)?, self.lower_expr(expr_id1)?),
-            Operation::And(expr_id, expr_id1) => CfgOperation::And(self.lower_expr(expr_id)?, self.lower_expr(expr_id1)?),
-            Operation::Not(expr_id) => CfgOperation::Not(self.lower_expr(expr_id)?),
+                IrOperation::NotEqual(self.lower_expr(expr_id)?, self.lower_expr(expr_id1)?),
+            Operation::Less(expr_id, expr_id1) => IrOperation::Less(self.lower_expr(expr_id)?, self.lower_expr(expr_id1)?),
+            Operation::LessEqual(expr_id, expr1) => IrOperation::LessEqual(self.lower_expr(expr_id)?, self.lower_expr(expr1)?),
+            Operation::Greater(expr_id, expr_id1) => IrOperation::Greater(self.lower_expr(expr_id)?, self.lower_expr(expr_id1)?),
+            Operation::GreaterEqual(expr, expr1) => IrOperation::GreaterEqual(self.lower_expr(expr)?, self.lower_expr(expr1)?),
+            Operation::Or(expr_id, expr_id1) => IrOperation::Or(self.lower_expr(expr_id)?, self.lower_expr(expr_id1)?),
+            Operation::And(expr_id, expr_id1) => IrOperation::And(self.lower_expr(expr_id)?, self.lower_expr(expr_id1)?),
+            Operation::Not(expr_id) => IrOperation::Not(self.lower_expr(expr_id)?),
             Operation::AddressOf(_) => todo!(),
             Operation::Dereference(_) => todo!(),
         };
-        Ok(self.arena.alloc_inst_for(Instruction::Operation(source_info, cfg_op), self.arena.ir_context.curr_insert_block))
+        Ok(self
+            .arena
+            .alloc_inst_for(Instruction::Operation { source_info, op: cfg_op }, self.arena.ir_context.curr_insert_block))
     }
 }
 // impl IrArena {

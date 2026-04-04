@@ -1,4 +1,8 @@
-use std::{collections::HashMap, fmt::Debug, rc::Rc};
+use std::{
+    collections::{HashMap, HashSet, hash_map::Entry},
+    fmt::Debug,
+    rc::Rc,
+};
 
 use colored::{Colorize, CustomColor};
 use slotmap::SlotMap;
@@ -15,12 +19,6 @@ use crate::{
 };
 
 #[derive(Debug, Default)]
-pub struct IrContext {
-    pub curr_function: IrFuncId,
-    pub curr_insert_block: BlockId,
-}
-
-#[derive(Debug, Default)]
 pub struct IrArena {
     // TODO: we also need to pass metadata into this new IR
     // which includes expression provenance and etc (for optimizations and annotations)
@@ -33,6 +31,7 @@ pub struct IrArena {
     pub types: Vec<Type>,
 
     pub func_id_map: HashMap<FuncId, IrFuncId>,
+    pub func_id_to_blocks: HashMap<IrFuncId, Vec<BlockId>>, // in insertion order
     // has both local alloca and global alloca instructions
     pub var_id_to_alloca_map: HashMap<VarId, InstId>,
 
@@ -44,7 +43,6 @@ pub struct IrArena {
     // its used to keep track of each merging stack
     pub curr_block_stack: Vec<InstId>,
 
-    pub ir_context: IrContext,
     //
     // NOTE: this was used by braun et al. we will reuse it for mem2reg later
 
@@ -116,7 +114,6 @@ impl IrArena {
     pub fn alloc_function(&mut self, func: IrFunction, old_id: FuncId) -> IrFuncId {
         let id = self.functions.insert(func);
         self.func_id_map.insert(old_id, id);
-        self.ir_context.curr_function = id;
         id
     }
 
@@ -166,21 +163,23 @@ impl IrArena {
                 self.get_block_mut(block_id).successors.push(jump_to_id);
                 self.get_block_mut(jump_to_id).predecessors.push(block_id);
             },
-            TerminatorInst::Return{..} | TerminatorInst::Unreachable => {}, // no successors, nothing to update
+            TerminatorInst::Return { .. } | TerminatorInst::Unreachable => {}, // no successors, nothing to update
         }
         let id = self.terminators.insert(terminator);
         self.get_block_mut(block_id).terminator = Some(id);
         Ok(id)
     }
-    pub fn alloc_block(&mut self, name: &str) -> BlockId {
-        self.blocks.insert_with_key(|key| BasicBlock {
-            parent_function: self.ir_context.curr_function,
+    pub fn alloc_block(&mut self, name: &str, func_id: IrFuncId) -> BlockId {
+        let block_id = self.blocks.insert_with_key(|key| BasicBlock {
+            parent_function: func_id,
             name: name.to_string() + "_" + &key.to_string(),
             predecessors: Vec::new(), // always empty, filled by alloc_terminator_for
             successors: Vec::new(),   // always empty, filled by alloc_terminator_for
             instructions: Vec::new(),
             terminator: None,
-        })
+        });
+        self.func_id_to_blocks.entry(func_id).or_default().push(block_id);
+        block_id
     }
 }
 
@@ -196,6 +195,7 @@ impl IrArena {
     }
     pub fn get_var(&self, id: GlobalIrVarId) -> &GlobalIrVarDeclaration { &self.global_vars[id] }
     pub fn get_func(&self, id: IrFuncId) -> &IrFunction { &self.functions[id] }
+    pub fn get_func_mut(&mut self, id: IrFuncId) -> &mut IrFunction { &mut self.functions[id] }
     pub fn get_type(&self, id: TypeId) -> &Type { &self.types[id.0] }
     pub fn get_inst_mut(&mut self, id: InstId) -> &mut Instruction { &mut self.instructions[id] }
     pub fn get_inst(&self, id: InstId) -> &Instruction { &self.instructions[id] }
@@ -211,6 +211,9 @@ impl IrArena {
     pub fn get_block(&self, id: BlockId) -> &BasicBlock { &self.blocks[id] }
     pub fn get_block_mut(&mut self, id: BlockId) -> &mut BasicBlock { &mut self.blocks[id] }
     pub fn try_get_block(&self, id: BlockId) -> Option<&BasicBlock> { self.blocks.get(id) }
+    pub fn get_func_blocks(&self, func_id: IrFuncId) -> &[BlockId] {
+        self.func_id_to_blocks.get(&func_id).map_or(&[], |v| v.as_slice())
+    }
 
     pub fn compare_stacks(
         &mut self,
@@ -293,11 +296,35 @@ impl IrArena {
 // used by the Optimizer
 // ============================================================================
 pub struct DefUseInfo {
-    pub users: HashMap<InstId, Vec<InstId>>,
+    // where usize is the index of the operand this instruction is used in
+    // for example
+    // %6 = add %2, %5
+    // we would map %5 to (%6, 2), because it is used on the rhs of the add
+    pub users: HashMap<InstId, Vec<(InstId, usize)>>,
+}
+impl DefUseInfo {
+    pub fn compute(arena: &IrArena, func_id: IrFuncId) -> Self {
+        let mut users: HashMap<InstId, Vec<(InstId, usize)>> = HashMap::new();
+        for block_id in arena.get_func_blocks(func_id) {
+            for inst_id in arena.get_block(*block_id).instructions.clone() {
+                // iterate every instruction, check what is in its operands and add the current inst to
+                // the operand's user list (because this instruction is a user of that operand's value)
+                for (op_idx, operand_id) in arena.get_inst(inst_id).get_operands().iter().enumerate() {
+                    users.entry(*operand_id).or_default().push((inst_id, op_idx));
+                }
+            }
+        }
+        Self { users }
+    }
+    pub fn users_of(&self, inst_id: InstId) -> &[(InstId, usize)] { self.users.get(&inst_id).map_or(&[], |v| v.as_slice()) }
+
+    pub fn remove_user(&mut self, def: InstId, removed_user: InstId) {
+        // we need this often as DefUseInfo gets stale frequently when stuff is deleted or changed
+        if let Some(users) = self.users.get_mut(&def) {
+            users.retain(|(user, _)| *user != removed_user);
+        }
+    }
 }
 impl IrArena {
-    // link a definition to all its uses
-    pub fn compute_users(&mut self) {}
-    pub fn users_of(&self, id: InstId) -> &mut [InstId] { todo!() }
-    pub fn replace_all_uses_with(&mut self, old_id: InstId, new_id: InstId) {}
+    pub fn replace_all_uses_with(&mut self, old_id: InstId, new_id: InstId, def_use: &mut DefUseInfo) {}
 }

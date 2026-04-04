@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 clap = { version = "4.5.50", features = ["derive"] }
 slotmap = { version = "1.0" }
+indexmap  = { version = "2.13" }
 colored = "3.1.1"
 libtest-mimic = "0.8.2"
 

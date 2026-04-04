@@ -1,6 +1,7 @@
-use std::{collections::HashMap, env::args, fmt::Display};
+use std::fmt::Display;
 
 use colored::{ColoredString, Colorize, CustomColor};
+use indexmap::IndexMap;
 use slotmap::new_key_type;
 
 use crate::hfs::{IrArena, Literal, SourceInfo, ast::*};
@@ -50,6 +51,7 @@ pub struct IrFunction {
     pub return_type: TypeId,
 
     pub parameter_insts: Vec<InstId>,
+    // note that you can get all blocks by insertion order from the IrArena
     pub entry_block: BlockId, // CFG of blocks
 }
 
@@ -113,7 +115,7 @@ pub enum Instruction {
 
     Phi {
         source_info: SourceInfo,
-        incoming: HashMap<BlockId, InstId>, // (predecessor block, value from that block)
+        incoming: IndexMap<BlockId, InstId>, // (predecessor block, value from that block)
     },
 
     // note we basically move stack keywords outside the stack block
@@ -176,7 +178,7 @@ impl Instruction {
             Instruction::Store { address, value, .. } => vec![*address, *value],
             Instruction::Load { address, .. } => vec![*address],
             Instruction::FunctionCall { args, .. } => args.clone(),
-            Instruction::Phi { incoming, .. } => incoming.clone().into_values().collect(),
+            Instruction::Phi { incoming, .. } => incoming.values().copied().collect(),
             Instruction::Tuple { instructions, .. } => instructions.clone(),
             Instruction::LoadElement { tuple, .. } => vec![*tuple],
             Instruction::Operation { op, .. } => match op {

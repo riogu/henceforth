@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use crate::hfs::{BlockId, InstId, IrArena, IrFuncId};
+use crate::hfs::{BlockId, DefUseInfo, InstId, IrArena, IrFuncId};
 
 // these are the basic traits and APIs our passes/pipelines must meet
 //
@@ -97,31 +97,34 @@ impl IrPass for DeadCodeElimination {
     fn new() -> Box<Self> { Box::new(DeadCodeElimination { cleanup_passes: vec![RemoveStaleInstIds::new()] }) }
     fn name(&self) -> &str { "DeadCodeElimination: remove unused and unreachable code" }
     fn run(&mut self, arena: &mut IrArena, func_id: IrFuncId) -> bool {
-        /*
-        1. walk all instructions
-        2. if inst has no users AND inst has no side effects:
-             add to worklist
-        3. while worklist is not empty:
-             remove inst from worklist
-             for each operand of inst:
-               remove (inst, idx) from operand's user list
-               if operand now has no users and no side effects:
-                 add operand to worklist
-             delete inst from arena
-        4. cleanup stale IDs from blocks  */
-
+        let mut def_use = DefUseInfo::compute(arena, func_id);
         let mut worklist = Vec::new();
-        for inst_id in arena.instructions.keys() {
-            if arena.users_of(inst_id).is_empty() && !arena.get_inst(inst_id).has_side_effects() {
-                // this is marked as useless
-                worklist.push(inst_id)
+        let mut changed = false;
+        // start by marking all useless instructions
+        for block_id in arena.get_func_blocks(func_id) {
+            for inst_id in arena.get_block(*block_id).instructions.clone() {
+                if def_use.users_of(inst_id).is_empty() && !arena.get_inst(inst_id).has_side_effects() {
+                    // this is marked as useless and will be deleted later
+                    worklist.push(inst_id)
+                }
             }
         }
-        for inst_id in worklist {
-            // when an instruction is ready for deletion, we have to also consider
-            // the effect this
+        // iterate over all useless instructions and find what instructions became useless as well
+        while let Some(inst_id) = worklist.pop() {
+            for operand in arena.get_inst(inst_id).get_operands() {
+                // when an instruction is marked as useless, we want to check if it was the only
+                // user of its operands, so that we may also delete those as well
+                def_use.remove_user(operand, inst_id);
+                if def_use.users_of(operand).is_empty() && !arena.get_inst(operand).has_side_effects() {
+                    // by removing this user, there is no one else using this instruction
+                    // therefore it is now useless as well
+                    worklist.push(operand);
+                }
+            }
+            arena.remove_inst(inst_id);
+            changed = true;
         }
-        self.run_cleanup(arena, func_id)
+        changed | self.run_cleanup(arena, func_id)
     }
 }
 

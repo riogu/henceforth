@@ -53,13 +53,13 @@ impl IrPass for RemoveStaleInstIds {
             let block = &mut arena.blocks[block_id];
             let len_before = block.instructions.len();
 
+            // cleanup all the instructions that were removed
             block.instructions.retain(|id| arena.instructions.contains_key(*id));
 
             any_changed |= block.instructions.len() != len_before;
         }
         any_changed
     }
-    // SlotMap will return none if this instruction no longer exists, and we want to remove those
 }
 
 // ======================================================================================

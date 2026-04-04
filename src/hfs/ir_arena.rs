@@ -207,11 +207,9 @@ impl IrArena {
     pub fn get_block(&self, id: BlockId) -> &BasicBlock { &self.blocks[id] }
     pub fn get_block_mut(&mut self, id: BlockId) -> &mut BasicBlock { &mut self.blocks[id] }
     pub fn try_get_block(&self, id: BlockId) -> Option<&BasicBlock> { self.blocks.get(id) }
+
     pub fn get_blocks_in(&self, func_id: IrFuncId) -> Vec<BlockId> {
         self.func_id_to_blocks.get(&func_id).map_or(vec![], |v| v.clone())
-    }
-    pub fn get_blocks_in_as_slice(&self, func_id: IrFuncId) -> &[BlockId] {
-        self.func_id_to_blocks.get(&func_id).map_or(&[], |v| v)
     }
 
     pub fn compare_stacks(
@@ -322,6 +320,7 @@ impl DefUseInfo {
         def_use
     }
     pub fn users_of(&self, inst_id: InstId) -> &[(InstOrTermId, usize)] { self.users.get(&inst_id).map_or(&[], |v| v.as_slice()) }
+
     pub fn add_user(&mut self, def: InstId, user: impl Into<InstOrTermId>, operand_idx: usize) {
         self.users.entry(def).or_default().push((user.into(), operand_idx));
     }

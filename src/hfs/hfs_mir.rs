@@ -292,49 +292,15 @@ impl CfgPrintable for Type {
         }
     }
 }
-impl IrFunction {
-    fn collect_blocks<'a>(&self, arena: &'a IrArena) -> Vec<&'a BasicBlock> {
-        let mut visited = std::collections::HashSet::new();
-        let mut worklist = vec![self.entry_block];
-        let mut blocks = Vec::new();
-
-        while let Some(block_id) = worklist.pop() {
-            if !visited.insert(block_id) {
-                continue;
-            }
-
-            let curr_block = arena.get_block(block_id);
-            blocks.push(curr_block);
-
-            match curr_block.terminator {
-                Some(id) => match arena.get_term(id) {
-                    TerminatorInst::Return { .. } => {},
-                    TerminatorInst::Branch { source_info: _, cond: _, true_block, false_block } => {
-                        worklist.push(*false_block);
-                        worklist.push(*true_block);
-                    },
-                    TerminatorInst::Jump { source_info: _, target: block_id } => {
-                        worklist.push(*block_id);
-                    },
-                    TerminatorInst::Unreachable => {},
-                },
-                None => {
-                    // panic!("[internal error] tried collecting blocks with no terminator")
-                },
-            }
-        }
-
-        blocks
-    }
-}
 impl CfgPrintable for IrFunction {
     fn get_repr(&self, arena: &IrArena) -> ColoredString {
         let params = arena.get_type(self.param_type).clone();
         let returns = arena.get_type(self.return_type).clone();
-        let blocks_repr = self
-            .collect_blocks(arena)
+        let func_id = arena.functions.iter().find(|(_, func)| func.name == self.name).unwrap().0;
+        let blocks_repr = arena
+            .get_blocks_in(func_id)
             .iter()
-            .map(|block| block.get_repr(arena).to_string())
+            .map(|block| arena.get_block(*block).get_repr(arena).to_string())
             .collect::<Vec<String>>()
             .join("\n");
         format!(

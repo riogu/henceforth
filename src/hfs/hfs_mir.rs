@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::{fmt::Display, vec};
 
 use colored::{ColoredString, Colorize, CustomColor};
 use indexmap::IndexMap;
@@ -18,6 +18,18 @@ new_key_type! {
     pub struct BlockId;
     pub struct IrFuncId;
     pub struct GlobalIrVarId;
+}
+#[derive(PartialEq)]
+pub enum InstOrTermId {
+    InstId(InstId),
+    TermInstId(TermInstId),
+}
+impl From<InstId> for InstOrTermId {
+    fn from(id: InstId) -> Self { InstOrTermId::InstId(id) }
+}
+
+impl From<TermInstId> for InstOrTermId {
+    fn from(id: TermInstId) -> Self { InstOrTermId::TermInstId(id) }
 }
 impl Display for InstId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { write!(f, "{}", self.0.as_ffi() as u32) }
@@ -212,6 +224,13 @@ impl TerminatorInst {
         // terminators always have side effects
         true
     }
+    pub fn get_operands(&self) -> Vec<InstId> {
+        match self {
+            TerminatorInst::Return { return_tuple, .. } => vec![*return_tuple],
+            TerminatorInst::Branch { cond, .. } => vec![*cond],
+            TerminatorInst::Jump { .. } | TerminatorInst::Unreachable => vec![],
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -273,9 +292,8 @@ impl CfgPrintable for Type {
         }
     }
 }
-
 impl IrFunction {
-    fn collect_blocks<'a>(&'a self, arena: &'a IrArena) -> Vec<&'a BasicBlock> {
+    fn collect_blocks<'a>(&self, arena: &'a IrArena) -> Vec<&'a BasicBlock> {
         let mut visited = std::collections::HashSet::new();
         let mut worklist = vec![self.entry_block];
         let mut blocks = Vec::new();
@@ -289,7 +307,7 @@ impl IrFunction {
             blocks.push(curr_block);
 
             match curr_block.terminator {
-                Some(id) => match arena.get_terminator_inst(id) {
+                Some(id) => match arena.get_term(id) {
                     TerminatorInst::Return { .. } => {},
                     TerminatorInst::Branch { source_info: _, cond: _, true_block, false_block } => {
                         worklist.push(*false_block);
@@ -309,7 +327,6 @@ impl IrFunction {
         blocks
     }
 }
-
 impl CfgPrintable for IrFunction {
     fn get_repr(&self, arena: &IrArena) -> ColoredString {
         let params = arena.get_type(self.param_type).clone();
@@ -471,7 +488,7 @@ impl CfgPrintable for BasicBlock {
             .collect::<Vec<String>>()
             .join("\n");
         let terminator_repr = match self.terminator {
-            Some(id) => format!("    {}", arena.get_terminator_inst(id).get_repr(arena)),
+            Some(id) => format!("    {}", arena.get_term(id).get_repr(arena)),
             None => String::from("    <no terminator>"),
         };
         let mut parts = vec![format!("  {}:", self.name.red().bold())];
@@ -514,9 +531,9 @@ impl IrArena {
             out.push_str(&format!("    subgraph cluster_{} {{\n", func.name));
             out.push_str(&format!("        label=\"fn {}\";\n", func.name));
 
-            let blocks = func.collect_blocks(self);
+            let blocks: Vec<_> = self.get_blocks_in(*func_id).iter().map(|block_id| self.get_block(*block_id)).collect();
 
-            for block in &blocks {
+            for block in blocks.clone() {
                 let mut label_lines = vec![format!("{}:", block.name)];
 
                 for inst_id in &block.instructions {
@@ -525,7 +542,7 @@ impl IrArena {
                 }
 
                 if let Some(term_id) = block.terminator {
-                    label_lines.push(strip_ansi(&self.get_terminator_inst(term_id).get_repr(self).to_string()));
+                    label_lines.push(strip_ansi(&self.get_term(term_id).get_repr(self).to_string()));
                 }
 
                 let label = label_lines.join("\\l");
@@ -533,12 +550,12 @@ impl IrArena {
                 out.push_str(&format!("        {}_{} [label=\"{}\\l\"];\n", func.name, block.name, label));
             }
 
-            for block in &blocks {
+            for block in blocks {
                 let Some(term_id) = block.terminator else {
                     continue;
                 };
 
-                match self.get_terminator_inst(term_id) {
+                match self.get_term(term_id) {
                     TerminatorInst::Branch { true_block, false_block, .. } => {
                         let t = self.get_block(*true_block);
                         let f = self.get_block(*false_block);

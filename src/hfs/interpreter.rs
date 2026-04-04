@@ -32,22 +32,7 @@ pub struct CallFrame {
     inst_values: HashMap<InstId, RuntimeValue>,
     return_stack: Vec<RuntimeValue>,
 }
-// struct Sentinel<'a, T> {
-//     saved_value: T,
-//     value: &'a T,
-// }
-// // TODO: actually learn how traits work and make a Sentinel trait
-// // also probably make it require bools only for now, but maybe generalize it later
-//
-// impl<'a, T> Sentinel<'a, T>
-// where
-//     T: Clone,
-// {
-//     pub fn new(value: &'a T) -> Sentinel<'a, T> {
-//         Sentinel { saved_value: value.clone(), value }
-//     }
-// }
-//
+
 //---------------------------------------------------------------------------
 pub struct Interpreter {
     arena: IrArena,
@@ -461,7 +446,7 @@ impl Interpreter {
     }
     // Returns `Some(block_id)` to continue to, or `None` to stop (return)
     pub fn interpret_terminator(&mut self, term_id: TermInstId) -> Option<BlockId> {
-        match self.arena.get_terminator_inst(term_id) {
+        match self.arena.get_term(term_id) {
             TerminatorInst::Return { source_info: _, return_tuple} => {
                 if let RuntimeValue::Tuple(return_stack) = self.interpret_instruction(*return_tuple) {
                     self.curr_call_frame_mut().return_stack = return_stack;

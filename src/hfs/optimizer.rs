@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use crate::hfs::{BlockId, DefUseInfo, InstId, IrArena, IrFuncId};
+use crate::hfs::{BlockId, DefUseInfo, InstId, InstOrTermId, IrArena, IrFuncId};
 
 // these are the basic traits and APIs our passes/pipelines must meet
 //
@@ -46,41 +46,23 @@ pub trait OptPipeline {
 
 struct RemoveStaleInstIds {
     any_changed: bool,
-    visited: HashSet<BlockId>,
 }
 impl CleanupPass for RemoveStaleInstIds {}
 impl IrPass for RemoveStaleInstIds {
-    fn new() -> Box<Self> { Box::new(RemoveStaleInstIds { any_changed: false, visited: HashSet::new() }) }
+    fn new() -> Box<Self> { Box::new(RemoveStaleInstIds { any_changed: false }) }
     fn name(&self) -> &str { "RemoveStaleInstIds: clean all blocks that have stale InstIds" }
     fn run(&mut self, arena: &mut IrArena, func_id: IrFuncId) -> bool {
-        let entry_block_id = arena.get_func(func_id).entry_block;
-        self.clean_block(arena, entry_block_id);
+        for block_id in arena.get_blocks_in(func_id) {
+            let block = &mut arena.blocks[block_id];
+            let len_before = block.instructions.len();
+
+            block.instructions.retain(|id| arena.instructions.contains_key(*id));
+
+            self.any_changed |= block.instructions.len() != len_before;
+        }
         self.any_changed
     }
-}
-impl RemoveStaleInstIds {
-    fn clean_block(&mut self, arena: &mut IrArena, block_id: BlockId) {
-        if !self.visited.insert(block_id) {
-            return; // dont revisit blocks we've seen before
-        }
-        let insts = arena.get_block(block_id).instructions.clone();
-        let len_before = arena.get_block(block_id).instructions.len();
-
-        arena.get_block_mut(block_id).instructions = insts
-            .into_iter()
-            .filter(|inst_id: &InstId| {
-                // SlotMap will return none if this instruction no longer exists
-                // we want to remove all cases of that
-                arena.try_get_inst(*inst_id).is_some()
-            })
-            .collect();
-        // if we removed anything then this pass caused changes
-        self.any_changed |= len_before != arena.get_block_mut(block_id).instructions.len();
-
-        for successor in arena.get_block(block_id).successors.clone() {
-            self.clean_block(arena, successor);
-        }
-    }
+    // SlotMap will return none if this instruction no longer exists, and we want to remove those
 }
 
 // ======================================================================================
@@ -98,24 +80,29 @@ impl IrPass for DeadCodeElimination {
     fn name(&self) -> &str { "DeadCodeElimination: remove unused and unreachable code" }
     fn run(&mut self, arena: &mut IrArena, func_id: IrFuncId) -> bool {
         let mut def_use = DefUseInfo::compute(arena, func_id);
-        let mut worklist = Vec::new();
         let mut changed = false;
         // start by marking all useless instructions
-        for block_id in arena.get_func_blocks(func_id) {
-            for inst_id in arena.get_block(*block_id).instructions.clone() {
+        let mut worklist = Vec::new();
+        for block_id in arena.get_blocks_in(func_id) {
+            for inst_id in arena.get_block(block_id).instructions.clone() {
                 if def_use.users_of(inst_id).is_empty() && !arena.get_inst(inst_id).has_side_effects() {
-                    // this is marked as useless and will be deleted later
-                    worklist.push(inst_id)
+                    worklist.push(inst_id) // this is marked as useless and will be deleted later
                 }
             }
         }
         // iterate over all useless instructions and find what instructions became useless as well
         while let Some(inst_id) = worklist.pop() {
-            for operand in arena.get_inst(inst_id).get_operands() {
+            let Some(inst) = arena.try_get_inst(inst_id) else {
+                continue; // already deleted, don't add again
+            };
+            for operand in inst.get_operands() {
+                let Some(operand_inst) = arena.try_get_inst(operand) else {
+                    continue; // already deleted, don't add again
+                };
                 // when an instruction is marked as useless, we want to check if it was the only
                 // user of its operands, so that we may also delete those as well
                 def_use.remove_user(operand, inst_id);
-                if def_use.users_of(operand).is_empty() && !arena.get_inst(operand).has_side_effects() {
+                if def_use.users_of(operand).is_empty() && !operand_inst.has_side_effects() {
                     // by removing this user, there is no one else using this instruction
                     // therefore it is now useless as well
                     worklist.push(operand);

@@ -1,8 +1,4 @@
-use std::{
-    collections::{HashMap, HashSet, hash_map::Entry},
-    fmt::Debug,
-    rc::Rc,
-};
+use std::{collections::HashMap, fmt::Debug, rc::Rc, vec};
 
 use colored::{Colorize, CustomColor};
 use slotmap::SlotMap;
@@ -10,8 +6,8 @@ use slotmap::SlotMap;
 use crate::{
     cfg_analyzer_error,
     hfs::{
-        BasicBlock, BlockId, GlobalIrVarDeclaration, GlobalIrVarId, InstId, Instruction, IrFuncId, IrFunction, SourceInfo,
-        TermInstId, TerminatorInst,
+        BasicBlock, BlockId, GlobalIrVarDeclaration, GlobalIrVarId, InstId, InstOrTermId, Instruction, IrFuncId, IrFunction,
+        SourceInfo, TermInstId, TerminatorInst,
         ast::*,
         cfg_analyzer_errors::CfgAnalyzerErrorKind,
         error::{CompileError, DiagnosticInfo},
@@ -205,14 +201,19 @@ impl IrArena {
         // therefore we simply skip over these if we receive a None
         self.instructions.get(id)
     }
-    pub fn remove_inst(&mut self, id: InstId) -> Option<Instruction> { self.instructions.remove(id) }
+    pub fn remove_inst(&mut self, id: InstId) -> Option<Instruction> {
+        self.instructions.remove(id) 
+    }
 
-    pub fn get_terminator_inst(&self, id: TermInstId) -> &TerminatorInst { &self.terminators[id] }
+    pub fn get_term(&self, id: TermInstId) -> &TerminatorInst { &self.terminators[id] }
     pub fn get_block(&self, id: BlockId) -> &BasicBlock { &self.blocks[id] }
     pub fn get_block_mut(&mut self, id: BlockId) -> &mut BasicBlock { &mut self.blocks[id] }
     pub fn try_get_block(&self, id: BlockId) -> Option<&BasicBlock> { self.blocks.get(id) }
-    pub fn get_func_blocks(&self, func_id: IrFuncId) -> &[BlockId] {
-        self.func_id_to_blocks.get(&func_id).map_or(&[], |v| v.as_slice())
+    pub fn get_blocks_in(&self, func_id: IrFuncId) -> Vec<BlockId> {
+        self.func_id_to_blocks.get(&func_id).map_or(vec![], |v| v.clone())
+    }
+    pub fn get_blocks_in_as_slice(&self, func_id: IrFuncId) -> &[BlockId] {
+        self.func_id_to_blocks.get(&func_id).map_or(&[], |v| v)
     }
 
     pub fn compare_stacks(
@@ -300,26 +301,34 @@ pub struct DefUseInfo {
     // for example
     // %6 = add %2, %5
     // we would map %5 to (%6, 2), because it is used on the rhs of the add
-    pub users: HashMap<InstId, Vec<(InstId, usize)>>,
+    pub users: HashMap<InstId, Vec<(InstOrTermId, usize)>>,
 }
 impl DefUseInfo {
     pub fn compute(arena: &IrArena, func_id: IrFuncId) -> Self {
-        let mut users: HashMap<InstId, Vec<(InstId, usize)>> = HashMap::new();
-        for block_id in arena.get_func_blocks(func_id) {
-            for inst_id in arena.get_block(*block_id).instructions.clone() {
+        let mut users: HashMap<InstId, Vec<(InstOrTermId, usize)>> = HashMap::new();
+        for block_id in arena.get_blocks_in(func_id) {
+            let block = arena.get_block(block_id);
+            for inst_id in block.instructions.clone() {
                 // iterate every instruction, check what is in its operands and add the current inst to
                 // the operand's user list (because this instruction is a user of that operand's value)
                 for (op_idx, operand_id) in arena.get_inst(inst_id).get_operands().iter().enumerate() {
-                    users.entry(*operand_id).or_default().push((inst_id, op_idx));
+                    users.entry(*operand_id).or_default().push((InstOrTermId::InstId(inst_id), op_idx));
+                }
+                let terminator = arena.get_term(
+                    block.terminator.expect("[internal error] found block with no terminator while computing DefUseInfo"),
+                );
+                for (op_idx, operand_id) in terminator.get_operands().iter().enumerate() {
+                    users.entry(*operand_id).or_default().push((InstOrTermId::InstId(inst_id), op_idx));
                 }
             }
         }
         Self { users }
     }
-    pub fn users_of(&self, inst_id: InstId) -> &[(InstId, usize)] { self.users.get(&inst_id).map_or(&[], |v| v.as_slice()) }
+    pub fn users_of(&self, inst_id: InstId) -> &[(InstOrTermId, usize)] { self.users.get(&inst_id).map_or(&[], |v| v.as_slice()) }
 
-    pub fn remove_user(&mut self, def: InstId, removed_user: InstId) {
+    pub fn remove_user(&mut self, def: InstId, removed_user: impl Into<InstOrTermId>) {
         // we need this often as DefUseInfo gets stale frequently when stuff is deleted or changed
+        let removed_user = removed_user.into();
         if let Some(users) = self.users.get_mut(&def) {
             users.retain(|(user, _)| *user != removed_user);
         }

@@ -204,6 +204,7 @@ impl IrArena {
     pub fn remove_inst(&mut self, id: InstId) -> Option<Instruction> { self.instructions.remove(id) }
 
     pub fn get_term(&self, id: TermInstId) -> &TerminatorInst { &self.terminators[id] }
+    pub fn get_term_mut(&mut self, id: TermInstId) -> &mut TerminatorInst { &mut self.terminators[id] }
     pub fn get_block(&self, id: BlockId) -> &BasicBlock { &self.blocks[id] }
     pub fn get_block_mut(&mut self, id: BlockId) -> &mut BasicBlock { &mut self.blocks[id] }
     pub fn try_get_block(&self, id: BlockId) -> Option<&BasicBlock> { self.blocks.get(id) }
@@ -331,7 +332,20 @@ impl DefUseInfo {
             users.retain(|(user, _)| *user != removed_user);
         }
     }
+    pub fn replace_all_uses(&mut self, old_id: InstId, new_id: InstId) {
+        if let Some(users) = self.users.remove(&old_id) {
+            self.users.entry(new_id).or_default().extend(users);
+        }
+    }
 }
 impl IrArena {
-    pub fn replace_all_uses_with(&mut self, _old_id: InstId, _new_id: InstId, _def_use: &mut DefUseInfo) {}
+    pub fn replace_all_uses_with(&mut self, old_id: InstId, new_id: InstId, def_use: &mut DefUseInfo) {
+        for (user, op_idx) in def_use.users_of(old_id) {
+            match user {
+                InstOrTermId::InstId(inst_id) => self.get_inst_mut(*inst_id).replace_operands(new_id, *op_idx),
+                InstOrTermId::TermInstId(term_inst_id) => self.get_term_mut(*term_inst_id).replace_operand(new_id),
+            }
+        }
+        def_use.replace_all_uses(old_id, new_id);
+    }
 }

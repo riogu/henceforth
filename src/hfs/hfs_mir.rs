@@ -185,6 +185,51 @@ impl Instruction {
             | Instruction::LoadElement { .. } => false,
         }
     }
+    pub fn replace_operands(&mut self, new_id: InstId, operand_idx: usize) {
+        match self {
+            Instruction::Store { address, value, .. } =>
+                if operand_idx == 0 {
+                    *address = new_id
+                } else if operand_idx == 1 {
+                    *value = new_id
+                } else {
+                    panic!("[internal error] passed wrong index to binary instruction")
+                },
+            Instruction::Load { address, .. } => *address = new_id,
+            Instruction::FunctionCall { args, .. } => args[operand_idx] = new_id,
+            Instruction::Phi { incoming, .. } => incoming[operand_idx] = new_id,
+            Instruction::Tuple { instructions, .. } => instructions[operand_idx] = new_id,
+            Instruction::LoadElement { tuple, .. } => *tuple = new_id,
+            Instruction::Operation { op, .. } => match op {
+                IrOperation::Add(inst_id, inst_id1)
+                | IrOperation::Sub(inst_id, inst_id1)
+                | IrOperation::Mul(inst_id, inst_id1)
+                | IrOperation::Div(inst_id, inst_id1)
+                | IrOperation::Mod(inst_id, inst_id1)
+                | IrOperation::Equal(inst_id, inst_id1)
+                | IrOperation::NotEqual(inst_id, inst_id1)
+                | IrOperation::Less(inst_id, inst_id1)
+                | IrOperation::LessEqual(inst_id, inst_id1)
+                | IrOperation::Greater(inst_id, inst_id1)
+                | IrOperation::GreaterEqual(inst_id, inst_id1)
+                | IrOperation::Or(inst_id, inst_id1)
+                | IrOperation::And(inst_id, inst_id1) =>
+                    if operand_idx == 0 {
+                        *inst_id = new_id
+                    } else if operand_idx == 1 {
+                        *inst_id1 = new_id
+                    } else {
+                        panic!("[internal error] passed wrong index to binary instruction")
+                    },
+                IrOperation::Not(inst_id) => *inst_id = new_id,
+            },
+            Instruction::Literal { .. }
+            | Instruction::Alloca { .. }
+            | Instruction::GlobalAlloca(_)
+            | Instruction::Parameter { .. }
+            | Instruction::ReturnValue { .. } => panic!("[internal error] can't replace operand of instruction with no operands"),
+        }
+    }
     pub fn get_operands(&self) -> Vec<InstId> {
         match self {
             Instruction::Store { address, value, .. } => vec![*address, *value],
@@ -229,6 +274,14 @@ impl TerminatorInst {
             TerminatorInst::Return { return_tuple, .. } => vec![*return_tuple],
             TerminatorInst::Branch { cond, .. } => vec![*cond],
             TerminatorInst::Jump { .. } | TerminatorInst::Unreachable => vec![],
+        }
+    }
+    pub fn replace_operand(&mut self, new_id: InstId) {
+        match self {
+            TerminatorInst::Return { return_tuple, .. } => *return_tuple = new_id,
+            TerminatorInst::Branch { cond, .. } => *cond = new_id,
+            TerminatorInst::Jump { .. } | TerminatorInst::Unreachable =>
+                panic!("[internal error] can't replace operand of terminator with no operands"),
         }
     }
 }

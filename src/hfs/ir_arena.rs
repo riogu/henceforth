@@ -1,4 +1,9 @@
-use std::{collections::HashMap, fmt::Debug, rc::Rc, vec};
+use std::{
+    collections::{HashMap, HashSet},
+    fmt::Debug,
+    rc::Rc,
+    vec,
+};
 
 use colored::{Colorize, CustomColor};
 use slotmap::SlotMap;
@@ -347,5 +352,49 @@ impl IrArena {
             }
         }
         def_use.replace_all_uses(old_id, new_id);
+    }
+    fn postorder(&self, func_id: IrFuncId) -> Vec<BlockId> {
+        /* Only record a block after all its successors have been recorded. So leaves of the CFG
+           (blocks with no successors, or whose successors were already visited) get recorded
+           first, and the entry block gets recorded last.
+              entry
+              /   \
+             A     B
+             |     |
+             C     D
+              \   /
+                E
+            postorder = [E, C, A, D, B, entry]
+        */
+        let mut worklist = Vec::new();
+        let mut visited = HashSet::new();
+        let entry = self.get_func(func_id).entry_block;
+        fn visit_block(block_id: BlockId, arena: &IrArena, worklist: &mut Vec<BlockId>, visited: &mut HashSet<BlockId>) {
+            if !visited.insert(block_id) {
+                return; // don't visit blocks twice
+            }
+            for successor in arena.get_block(block_id).successors.clone() {
+                visit_block(successor, arena, worklist, visited);
+            }
+            worklist.push(block_id);
+        }
+        visit_block(entry, self, &mut worklist, &mut visited);
+        worklist
+    }
+    fn reverse_postorder(&self, func_id: IrFuncId) -> Vec<BlockId> {
+        /* In reverse-postorder iteration, a node is visited before any of its successor nodes has
+           been visited, except when the successor is reached by a back edge.
+              entry
+              /   \
+             A     B
+             |     |
+             C     D
+              \   /
+                E
+           reverse_postorder = [entry, B, D, A, C, E]
+        */
+        let mut postorder = self.postorder(func_id);
+        postorder.reverse();
+        postorder
     }
 }

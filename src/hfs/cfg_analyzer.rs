@@ -6,7 +6,7 @@ use slotmap::Key;
 use crate::{
     cfg_analyzer_error,
     hfs::{
-        BlockId, CfgPrintable, CfgTopLevelId, GlobalIrVarDeclaration, GlobalIrVarId, InstId, Instruction, IrArena, IrFuncId,
+        BlockId, CfgPrintable, IrTopLevelId, GlobalIrVarDeclaration, GlobalIrVarId, InstId, Instruction, IrArena, IrFuncId,
         IrFunction, IrOperation, PRIMITIVE_TYPE_COUNT, SourceInfo, TerminatorInst,
         ast::*,
         cfg_analyzer_errors::CfgAnalyzerErrorKind,
@@ -53,19 +53,19 @@ impl CfgAnalyzer {
         top_level: Vec<TopLevelId>,
         ast_arena: AstArena,
         diagnostic_info: Rc<DiagnosticInfo>,
-    ) -> Result<(Vec<CfgTopLevelId>, IrArena), Box<dyn CompileError>> {
+    ) -> Result<(Vec<IrTopLevelId>, IrArena), Box<dyn CompileError>> {
         let mut cfg_analyzer = CfgAnalyzer::new(ast_arena, diagnostic_info);
         let analyzed_top_level = cfg_analyzer.lower_top_level(top_level)?;
         // cfg_analyzer.print_hfs_mir(analyzed_top_level);
         Ok((analyzed_top_level, cfg_analyzer.arena))
     }
 
-    pub fn lower_top_level(&mut self, top_level: Vec<TopLevelId>) -> Result<Vec<CfgTopLevelId>, Box<dyn CompileError>> {
-        let mut analyzed_nodes = Vec::<CfgTopLevelId>::new();
+    pub fn lower_top_level(&mut self, top_level: Vec<TopLevelId>) -> Result<Vec<IrTopLevelId>, Box<dyn CompileError>> {
+        let mut analyzed_nodes = Vec::<IrTopLevelId>::new();
         for node in top_level.clone() {
             let new_node = match node {
-                TopLevelId::VariableDecl(id) => CfgTopLevelId::GlobalVarDecl(self.lower_global_variable_declaration(id)),
-                TopLevelId::FunctionDecl(id) => CfgTopLevelId::FunctionDecl(self.lower_function_declaration(id)?),
+                TopLevelId::VariableDecl(id) => IrTopLevelId::GlobalVarDecl(self.lower_global_variable_declaration(id)),
+                TopLevelId::FunctionDecl(id) => IrTopLevelId::FunctionDecl(self.lower_function_declaration(id)?),
                 TopLevelId::Statement(id) =>
                     return cfg_analyzer_error!(
                         CfgAnalyzerErrorKind::NoStatementsInGlobalScope,
@@ -805,14 +805,14 @@ impl CfgAnalyzer {
 
 // Debug printing functions (using the MIR syntax)
 impl CfgAnalyzer {
-    pub fn print_hfs_mir(&self, top_level_nodes: Vec<CfgTopLevelId>) {
+    pub fn print_hfs_mir(&self, top_level_nodes: Vec<IrTopLevelId>) {
         for id in top_level_nodes {
             match id {
-                CfgTopLevelId::GlobalVarDecl(var_id) => {
+                IrTopLevelId::GlobalVarDecl(var_id) => {
                     let var = self.arena.get_var(var_id);
                     println!("{}", var.get_repr(&self.arena));
                 },
-                CfgTopLevelId::FunctionDecl(func_id) => {
+                IrTopLevelId::FunctionDecl(func_id) => {
                     let func = self.arena.get_func(func_id);
                     println!("{}", func.get_repr(&self.arena));
                 },

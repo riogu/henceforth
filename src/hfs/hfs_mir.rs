@@ -48,7 +48,7 @@ impl Display for GlobalIrVarId {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum CfgTopLevelId {
+pub enum IrTopLevelId {
     GlobalVarDecl(GlobalIrVarId),
     FunctionDecl(IrFuncId),
 }
@@ -537,12 +537,12 @@ fn strip_ansi(s: &str) -> String {
 }
 
 impl IrArena {
-    pub fn generate_dot(&self, top_level: &Vec<CfgTopLevelId>) -> String {
+    pub fn generate_dot(&self, top_level: &Vec<IrTopLevelId>) -> String {
         let mut out = String::from("digraph CFG {\n");
         out.push_str("    node [shape=box fontname=\"Monospace\"]\n");
 
         for node in top_level {
-            let CfgTopLevelId::FunctionDecl(func_id) = node else {
+            let IrTopLevelId::FunctionDecl(func_id) = node else {
                 continue;
             };
             let func = self.get_func(*func_id);
@@ -601,7 +601,7 @@ impl IrArena {
         out.push_str("}\n");
         out
     }
-    pub fn dump(&self, top_level: &Vec<CfgTopLevelId>) {
+    pub fn dump(&self, top_level: &Vec<IrTopLevelId>) {
         eprintln!("total blocks: {}", self.blocks.len());
         for (i, block) in self.blocks.values().enumerate() {
             eprintln!(
@@ -614,8 +614,8 @@ impl IrArena {
         }
         for node in top_level {
             match node {
-                CfgTopLevelId::GlobalVarDecl(id) => println!("{}", self.get_var(*id).get_repr(self)),
-                CfgTopLevelId::FunctionDecl(id) => println!("{}", self.get_func(*id).get_repr(self)),
+                IrTopLevelId::GlobalVarDecl(id) => println!("{}", self.get_var(*id).get_repr(self)),
+                IrTopLevelId::FunctionDecl(id) => println!("{}", self.get_func(*id).get_repr(self)),
             }
         }
         let dot = self.generate_dot(top_level);

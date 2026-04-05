@@ -63,15 +63,15 @@ impl Interpreter {
         }
     }
 
-    pub fn interpret(arena: IrArena, top_level_insts: Vec<CfgTopLevelId>, scope_stack: ScopeStack) {
+    pub fn interpret(arena: IrArena, top_level_insts: Vec<IrTopLevelId>, scope_stack: ScopeStack) {
         let mut interpreter = Interpreter::new(arena);
         for inst_id in top_level_insts {
             match inst_id {
-                CfgTopLevelId::GlobalVarDecl(ir_var_id) => {
+                IrTopLevelId::GlobalVarDecl(ir_var_id) => {
                     let default_val = RuntimeValue::default(interpreter.arena.get_type_of_var(ir_var_id));
                     interpreter.globals.insert(ir_var_id, default_val);
                 },
-                CfgTopLevelId::FunctionDecl(_) => { /* do nothing, declarations dont matter for interpreting */ },
+                IrTopLevelId::FunctionDecl(_) => { /* do nothing, declarations dont matter for interpreting */ },
             }
         }
 

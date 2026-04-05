@@ -543,26 +543,36 @@ impl DominatorTree {
 
     // Does block1 dominate block2?
     pub fn dominates(&self, block1: BlockId, block2: BlockId) -> bool {
-        // walk up from b via idom until we hit a or entry
-        let mut curr_block = block2;
-        loop {
-            if curr_block == block1 {
-                return true;
-            }
-            let parent = self.immediate_dominators[&curr_block];
-            if parent == curr_block {
-                // the entry block is the only block that has itself as its immediate dominator
-                return false; // reached entry without finding an immediate dominator
-            }
-            curr_block = parent;
-        }
+        // walk up from block2 via idom until we hit block1 or entry
+        self.iter_idom(block2).any(|idom| idom == block1)
     }
-
     /// The immediate dominator of a block
     pub fn idom(&self, block: BlockId) -> BlockId { self.immediate_dominators[&block] }
-
     /// The dominance frontier of a block
     pub fn dom_frontier(&self, block: BlockId) -> &[BlockId] {
         self.dominance_frontiers.get(&block).map_or(&[], |v| v.as_slice())
     }
+}
+pub struct IdomIter<'a> {
+    tree: &'a DominatorTree,
+    curr: Option<BlockId>,
+}
+impl<'a> Iterator for IdomIter<'a> {
+    type Item = BlockId;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let curr = self.curr?;
+        let parent = self.tree.immediate_dominators[&curr];
+        if parent == curr {
+            // reached entry, stop
+            // entry is the only block with itself as an immediate dominator
+            self.curr = None;
+        } else {
+            self.curr = Some(parent);
+        }
+        Some(curr)
+    }
+}
+impl DominatorTree {
+    pub fn iter_idom(&self, block: BlockId) -> IdomIter<'_> { IdomIter { tree: self, curr: Some(block) } }
 }

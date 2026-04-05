@@ -403,6 +403,9 @@ pub struct DominatorTree {
 
 impl DominatorTree {
     /*
+     This is an implemention of Cooper-Harvey-Kennedy (A Simple, Fast Dominance Algorithm, 2006)
+     It can be read at: https://www.researchgate.net/publication/2569680_A_Simple_Fast_Dominance_Algorithm
+
      Below is a table that exemplifies the expected result of the dominance calculation
      ──────────────────────────────────────────────────────────────────────────────────
          B0          n   │ DOM       │ IDOM │  DF

@@ -1,6 +1,6 @@
 
 // builtin function
-fn print: (()) -> (()) {}
+fn print: (str) -> (str) {}
 
 fn fizz_buzz: (i32) -> (str) {
 	if @(15 % 0 ==) {

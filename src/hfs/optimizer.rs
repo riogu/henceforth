@@ -1,4 +1,4 @@
-use crate::hfs::{DefUseInfo, IrArena, IrFuncId};
+use crate::hfs::{DefUseInfo, DominatorTree, IrArena, IrFuncId};
 
 // these are the basic traits and APIs our passes/pipelines must meet
 //
@@ -33,6 +33,11 @@ pub trait OptPipeline {
         for func_id in arena.functions.clone().keys() {
             for opt_pass in self.get_opt_passes() {
                 any_changed |= opt_pass.run(arena, func_id)
+            }
+            if arena.get_func(func_id).name == "foo" {
+                let dom = DominatorTree::compute(arena, func_id);
+                dbg!(dom.immediate_dominators);
+                dbg!(dom.dominance_frontiers);
             }
         }
         any_changed

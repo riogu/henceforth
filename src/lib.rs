@@ -12,6 +12,7 @@ pub mod hfs {
     pub mod hfs_mir;
     pub mod interpreter;
     pub mod ir_arena;
+    pub mod ir_syntax;
     pub mod lexer;
     pub mod optimizer;
     pub mod parser;
@@ -27,6 +28,7 @@ pub mod hfs {
     pub use hfs_mir::*;
     pub use interpreter::*;
     pub use ir_arena::*;
+    pub use ir_syntax::*;
     pub use lexer::*;
     pub use optimizer::*;
     pub use parser::*;

@@ -19,7 +19,7 @@ new_key_type! {
     pub struct IrFuncId;
     pub struct GlobalIrVarId;
 }
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone)]
 pub enum InstOrTermId {
     InstId(InstId),
     TermInstId(TermInstId),

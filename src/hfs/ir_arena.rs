@@ -114,8 +114,7 @@ impl IrArena {
     }
 
     pub fn alloc_inst_for(&mut self, inst: Instruction, block_id: BlockId) -> InstId {
-        if matches!(inst, Instruction::Alloca { .. }) {
-        } else if matches!(inst, Instruction::GlobalAlloca(..)) {
+        if matches!(inst, Instruction::Alloca { .. }) || matches!(inst, Instruction::GlobalAlloca(..)) {
             panic!(
                 "[internal error] please use alloc_global_var and alloc_local_var instead of alloca_inst_for when creating \
                  alloca instructions"
@@ -123,6 +122,17 @@ impl IrArena {
         }
         let id = self.instructions.insert(inst);
         self.get_block_mut(block_id).instructions.push(id);
+        id
+    }
+    pub fn alloc_inst_at_start_for(&mut self, inst: Instruction, block_id: BlockId) -> InstId {
+        if matches!(inst, Instruction::Alloca { .. }) || matches!(inst, Instruction::GlobalAlloca(..)) {
+            panic!(
+                "[internal error] please use alloc_global_var and alloc_local_var instead of alloca_inst_for when creating \
+                 alloca instructions"
+            )
+        }
+        let id = self.instructions.insert(inst);
+        self.get_block_mut(block_id).instructions.insert(0, id);
         id
     }
 
@@ -201,13 +211,11 @@ impl IrArena {
         // therefore we simply skip over these if we receive a None
         self.instructions.get(id)
     }
-    pub fn remove_inst(&mut self, id: InstId) -> Option<Instruction> { self.instructions.remove(id) }
-
     pub fn get_term(&self, id: TermInstId) -> &TerminatorInst { &self.terminators[id] }
     pub fn get_term_mut(&mut self, id: TermInstId) -> &mut TerminatorInst { &mut self.terminators[id] }
-    pub fn get_block(&self, id: BlockId) -> &BasicBlock { &self.blocks[id] }
-    pub fn get_block_mut(&mut self, id: BlockId) -> &mut BasicBlock { &mut self.blocks[id] }
-    pub fn try_get_block(&self, id: BlockId) -> Option<&BasicBlock> { self.blocks.get(id) }
+    pub fn get_block(&self, block_id: BlockId) -> &BasicBlock { &self.blocks[block_id] }
+    pub fn get_block_mut(&mut self, block_id: BlockId) -> &mut BasicBlock { &mut self.blocks[block_id] }
+    pub fn try_get_block(&self, block_id: BlockId) -> Option<&BasicBlock> { self.blocks.get(block_id) }
 
     pub fn get_blocks_in(&self, func_id: IrFuncId) -> Vec<BlockId> {
         self.func_id_to_blocks.get(&func_id).map_or(vec![], |v| v.clone())

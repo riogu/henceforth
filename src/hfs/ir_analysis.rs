@@ -1,8 +1,9 @@
+use core::panic;
 use std::collections::{HashMap, HashSet};
 
 use slotmap::Key;
 
-use crate::hfs::{BlockId, InstId, InstOrTermId, IrArena, IrFuncId};
+use crate::hfs::{BlockId, InstId, InstOrTermId, Instruction, IrArena, IrFuncId, TermInstId};
 
 // ============================================================================
 // Optimizer related code, Dominance frontiers, DefUseInfo, etc
@@ -58,7 +59,35 @@ impl DefUseInfo {
             self.users.entry(new_id).or_default().extend(users);
         }
     }
+    pub fn remove_phi_operand(&mut self, arena: &mut IrArena, phi: InstId, remove_block_id: BlockId) {
+        let Instruction::Phi { incoming, .. } = arena.get_inst_mut(phi) else {
+            panic!("[internal error] expected phi in remove_phi_operand")
+        };
+        if incoming.shift_remove(&remove_block_id).is_none() {
+            panic!("[internal error] tried removing block from phi that wasn't an operand")
+        }
+        // we have to update the operand index for the phi operands because when we remove one
+        // operand, the indexes might have changed
+        let phi_id: InstOrTermId = phi.into();
+        for (new_op_idx, (_, inst_id)) in incoming.iter().enumerate() {
+            let users = self.users.get_mut(inst_id).expect("[internal error] expected phi operand to have at least 1 user");
+            for (user, op_idx) in users.iter_mut() {
+                if *user == phi_id {
+                    *op_idx = new_op_idx;
+                }
+            }
+        }
+    }
 }
+impl IrArena {
+    // used to signal cleanup is needed later
+    pub fn invalidate_inst(&mut self, inst_id: InstId) -> Option<Instruction> { self.instructions.remove(inst_id) }
+    pub fn inst_is_valid(&self, inst_id: InstId) -> bool { self.instructions.contains_key(inst_id) }
+}
+
+// ============================================================================
+// DominatorTree
+// ============================================================================
 impl IrArena {
     pub fn postorder(&self, func_id: IrFuncId) -> Vec<BlockId> {
         /* Only record a block after all its successors have been recorded. So leaves of the CFG
@@ -107,8 +136,9 @@ impl IrArena {
 }
 #[derive(Default)]
 pub struct DominatorTree {
-    pub immediate_dominators: HashMap<BlockId, BlockId>,
-    pub dominance_frontiers: HashMap<BlockId, Vec<BlockId>>,
+    immediate_dominators: HashMap<BlockId, BlockId>,
+    dominance_frontiers: HashMap<BlockId, Vec<BlockId>>,
+    idom_successors: HashMap<BlockId, Vec<BlockId>>,
 }
 
 impl DominatorTree {
@@ -143,10 +173,17 @@ impl DominatorTree {
         // 2. compute immediate dominators
         // 3. compute dominance frontiers
         let immediate_dominators = DominatorTree::compute_immediate_dominators(arena, func_id);
+        // build a map of successors for easier traversal later
+        let mut idom_successors = HashMap::<BlockId, Vec<BlockId>>::new();
+        for (block, idom) in &immediate_dominators {
+            if block != idom {
+                idom_successors.entry(*idom).or_default().push(*block);
+            } // skip entry which is its own idom
+        }
         let dominance_frontiers = DominatorTree::compute_dominance_frontiers(arena, func_id, &immediate_dominators);
-        Self { immediate_dominators, dominance_frontiers }
+        Self { immediate_dominators, dominance_frontiers, idom_successors }
     }
-    pub fn compute_immediate_dominators(arena: &IrArena, func_id: IrFuncId) -> HashMap<BlockId, BlockId> {
+    fn compute_immediate_dominators(arena: &IrArena, func_id: IrFuncId) -> HashMap<BlockId, BlockId> {
         let mut immediate_dominators = HashMap::<BlockId, BlockId>::new();
         let mut po_indexes = HashMap::<BlockId, usize>::new();
         let mut postorder = arena.postorder(func_id);
@@ -155,10 +192,10 @@ impl DominatorTree {
         immediate_dominators.insert(start_block, start_block);
         po_indexes.insert(start_block, postorder.len());
 
-        for (rpo_idx, block) in postorder.iter().enumerate() {
+        for (po_idx, block) in postorder.iter().enumerate() {
             // initialize the immediate_dominators array
             immediate_dominators.insert(*block, BlockId::null());
-            po_indexes.insert(*block, rpo_idx /* because entry was popped */);
+            po_indexes.insert(*block, po_idx);
         }
         postorder.reverse(); // turn it into reverse_postorder
 
@@ -261,6 +298,9 @@ impl DominatorTree {
     /// The dominance frontier of a block
     pub fn dom_frontier(&self, block: BlockId) -> &[BlockId] {
         self.dominance_frontiers.get(&block).map_or(&[], |v| v.as_slice())
+    }
+    pub fn successors(&self, block_id: BlockId) -> &[BlockId] {
+        self.idom_successors.get(&block_id).map_or(&[], |v| v.as_slice())
     }
 }
 // dom tree iterators

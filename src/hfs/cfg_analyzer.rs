@@ -6,8 +6,8 @@ use slotmap::Key;
 use crate::{
     cfg_analyzer_error,
     hfs::{
-        BlockId, CfgPrintable, IrTopLevelId, GlobalIrVarDeclaration, GlobalIrVarId, InstId, Instruction, IrArena, IrFuncId,
-        IrFunction, IrOperation, PRIMITIVE_TYPE_COUNT, SourceInfo, TerminatorInst,
+        BlockId, CfgPrintable, GlobalIrVarDeclaration, GlobalIrVarId, InstId, Instruction, IrArena, IrFuncId, IrFunction,
+        IrOperation, IrTopLevelId, PRIMITIVE_TYPE_COUNT, SourceInfo, TerminatorInst,
         ast::*,
         cfg_analyzer_errors::CfgAnalyzerErrorKind,
         error::{CompileError, DiagnosticInfo},
@@ -728,6 +728,25 @@ impl CfgAnalyzer {
         Ok(self.arena.alloc_inst_for(Instruction::Operation { source_info, op: cfg_op }, self.ir_context.curr_insert_block))
     }
 }
+
+// Debug printing functions (using the MIR syntax)
+impl CfgAnalyzer {
+    pub fn print_hfs_mir(&self, top_level_nodes: Vec<IrTopLevelId>) {
+        for id in top_level_nodes {
+            match id {
+                IrTopLevelId::GlobalVarDecl(var_id) => {
+                    let var = self.arena.get_var(var_id);
+                    println!("{}", var.get_repr(&self.arena));
+                },
+                IrTopLevelId::FunctionDecl(func_id) => {
+                    let func = self.arena.get_func(func_id);
+                    println!("{}", func.get_repr(&self.arena));
+                },
+            }
+        }
+    }
+}
+
 // impl IrArena {
 // ---------------------------------------------------------------------------------
 // Simple and Efficient Construction of Static Single Assignment Form (Braun et. al)
@@ -802,21 +821,3 @@ impl CfgAnalyzer {
 //     phi_id
 // }
 // }
-
-// Debug printing functions (using the MIR syntax)
-impl CfgAnalyzer {
-    pub fn print_hfs_mir(&self, top_level_nodes: Vec<IrTopLevelId>) {
-        for id in top_level_nodes {
-            match id {
-                IrTopLevelId::GlobalVarDecl(var_id) => {
-                    let var = self.arena.get_var(var_id);
-                    println!("{}", var.get_repr(&self.arena));
-                },
-                IrTopLevelId::FunctionDecl(func_id) => {
-                    let func = self.arena.get_func(func_id);
-                    println!("{}", func.get_repr(&self.arena));
-                },
-            }
-        }
-    }
-}

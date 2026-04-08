@@ -1,0 +1,35 @@
+fn main: () -> () {
+
+    let foo: i32;
+    @(321) &= foo;
+    if @(true) {
+        @(69) &= foo;
+    }
+    else {
+        @(420) &= foo;
+    }
+    let bar: i32;
+    @(foo) &= bar;
+    @(bar) @pop
+}
+
+
+// entry:
+//     %alloca = alloca i32
+//     jump someblock
+// someblock:
+//     store %alloca, %5      // stack for %alloca: [%5]
+//     branch %cond, left, right
+// left:
+//     store %alloca, %10     // stack for %alloca: [%5, %10]
+//     jump merge
+// right:
+//     store %alloca, %20     // stack for %alloca: [%5, %20]
+//     jump merge
+// merge:
+//     %phi = phi [left: %10], [right: %20] //  must push this onto the alloca's stack
+//     %load = load %alloca // all uses of %load now use %phi (RAUW)
+//     jump cont
+// cont:
+//     %x = %load + 4234 // will be RAUW'd to the earlier %phi definition
+

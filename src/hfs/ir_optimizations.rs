@@ -43,7 +43,7 @@ pub struct O0 {
     opt_passes: Vec<Box<dyn IrPass>>,
 }
 impl OptPipeline for O0 {
-    fn new() -> Self { O0 { opt_passes: passes!(DeadCodeElimination) } }
+    fn new() -> Self { O0 { opt_passes: passes!(Mem2Reg, DeadCodeElimination) } }
     fn name(&self) -> &str { "-O0: Basic Optimizations" }
     fn run_on_function(&mut self, arena: &mut IrArena, func_id: IrFuncId) -> bool {
         let mut any_changed: bool = false;
@@ -126,13 +126,15 @@ impl IrPass for DeadCodeElimination {
 
 // ======================================================================================
 // Mem2Reg implementation (SSA construction for alloca instruction replacement)
+// Algorithm is based on Engineering a Compiler (Chap 9.3.3 and 9.3.4), although
+// it has some changes to focus on removing alloca/load/store pairs specifically
 // ======================================================================================
 pub struct Mem2Reg;
 impl IrPass for Mem2Reg {
     fn new() -> Box<Self> { Box::new(Self) }
     fn name(&self) -> &str { "Mem2Reg: replace alloca/load/store with ssa values and phis" }
     fn run(&self, arena: &mut IrArena, func_id: IrFuncId) -> bool {
-        let def_use = DefUseInfo::compute(arena, func_id);
+        let mut def_use = DefUseInfo::compute(arena, func_id);
         let dom_tree = DominatorTree::compute(arena, func_id);
         // 1. find all promotable allocas
         let promotable_allocas = Mem2Reg::find_promotable_allocas(arena, &def_use, func_id);
@@ -149,35 +151,22 @@ impl IrPass for Mem2Reg {
         // 3. walk dominator tree once, renaming all allocas simultaneously:
         //    - maintain a stack of current values per alloca
         //    - replace loads, delete stores, fill in phi operands
-        Mem2Reg::variable_renaming(arena, &phi_to_alloca, &promotable_allocas, &dom_tree, func_id);
-        // 4. delete all the allocas
-        false
-    }
-}
-// phase 2 of SSA construction algorithm
-impl Mem2Reg {
-    // the idea is to walk the dominator tree top-down,
-    // maintaining a stack of what is the current SSA value for each alloca.
-    // its like interpreting the code but we rewrite the IR instead
-    fn variable_renaming(
-        arena: &IrArena,
-        phi_to_alloca: &HashMap<InstId, InstId>,
-        promotable_allocas: &Vec<InstId>,
-        dom_tree: &DominatorTree,
-        func_id: IrFuncId,
-    ) {
-        // // this maps allocas to a stack of the current SSA value for it
-        // // its called "reachingDef" in the reference paper
-        // let mut alloca_stacks = HashMap::<InstId, Vec<InstId>>::new();
-        // for block in dom_tree.successors(arena.get_func(func_id).entry_block) {
-        //     for inst_id in &arena.get_block(*block).instructions {
-        //         // if this block has a phi, then it represents the value
-        //         // that the associated alloca has now
-        //         if let Some(alloca) = phi_to_alloca.get(inst_id) {
-        //             alloca_stacks.entry(*alloca).or_default().push(*inst_id);
-        //         }
-        //     }
-        // }
+        Mem2Reg::rename_variables(
+            arena,
+            &phi_to_alloca,
+            &promotable_allocas,
+            &dom_tree,
+            &mut def_use,
+            &mut HashMap::<InstId, Vec<InstId>>::new(),
+            arena.get_func(func_id).entry_block,
+        );
+        for alloca in promotable_allocas {
+            arena.invalidate_inst(alloca); // invalidate allocas for cleanup after
+        }
+        // 4. delete all the dead allocas, stores, loads
+        RemoveStaleInstIds::new().run(arena, func_id)
+        // if this pass does anything, then RemoveStaleInstIds will have stuff to cleanup
+        // therefore checking if it did anything is enough to know if this pass did work
     }
 }
 // phase 1 of SSA construction algorithm (also known as Mem2Reg)
@@ -195,6 +184,11 @@ impl Mem2Reg {
                 }
             }
         }
+        // for every store to an alloca address, we need to place a phi on the dominance frontier
+        // of that store's block.
+        // in turn, these blocks now also need phis, which from the algorithm's perspective is the
+        // same as a new definition of the variable. this means we also need a phi at the dominance
+        // frontier of these blocks.
         let mut needs_phi = HashSet::<BlockId>::new();
         while let Some(curr_block) = worklist.pop() {
             for df_block in dom_tree.dom_frontier(curr_block) {
@@ -216,12 +210,12 @@ impl Mem2Reg {
         inserted_phis
     }
 
-    fn find_promotable_allocas(arena: &IrArena, def_use: &DefUseInfo, func_id: IrFuncId) -> Vec<InstId> {
-        let mut promotable_allocas = Vec::new();
+    fn find_promotable_allocas(arena: &IrArena, def_use: &DefUseInfo, func_id: IrFuncId) -> HashSet<InstId> {
+        let mut promotable_allocas = HashSet::new();
         for block_id in arena.get_blocks_in(func_id) {
             for inst_id in &arena.get_block(block_id).instructions {
                 if Mem2Reg::is_promotable_alloca(arena, &def_use, *inst_id) {
-                    promotable_allocas.push(*inst_id);
+                    promotable_allocas.insert(*inst_id);
                 }
             }
         }
@@ -247,5 +241,73 @@ impl Mem2Reg {
             }
         }
         true
+    }
+}
+
+// phase 2 of SSA construction algorithm
+impl Mem2Reg {
+    // the idea is to walk the dominator tree top-down,
+    // maintaining a stack of what is the current SSA value for each alloca.
+    // its like interpreting the code but we rewrite the IR instead
+    fn rename_variables(
+        arena: &mut IrArena,
+        phi_to_alloca: &HashMap<InstId, InstId>,
+        promotable_allocas: &HashSet<InstId>,
+        dom_tree: &DominatorTree,
+        def_use: &mut DefUseInfo,
+        alloca_stacks: &mut HashMap<InstId, Vec<InstId>>,
+        block_id: BlockId,
+    ) {
+        // // this maps allocas to a stack of the current SSA value for it
+        for inst_id in arena.get_block(block_id).instructions.clone() {
+            match arena.get_inst(inst_id) {
+                Instruction::Phi { .. } =>
+                    if let Some(alloca) = phi_to_alloca.get(&inst_id) {
+                        // this means we found a phi meant to replace our alloca
+                        // this phi represents what the value of that alloca is at this point.
+                        alloca_stacks.entry(*alloca).or_default().push(inst_id)
+                    },
+                Instruction::Load { address, .. } =>
+                    if promotable_allocas.contains(address) {
+                        // we found a load from one of the allocas we are replacing.
+                        // all uses of this loaded value should be replaced with the latest value in
+                        // our alloca value tracking stack
+                        let latest_def = *alloca_stacks[address].last().expect("[internal error] found no value for alloca");
+                        def_use.replace_all_uses_with(inst_id, latest_def, arena);
+                        arena.invalidate_inst(inst_id); // invalidate to cleanup later
+                    },
+                Instruction::Store { address, value, .. } =>
+                    if let Some(alloca) = promotable_allocas.get(address) {
+                        // we found a store targeting a promotable alloca.
+                        // this means we want to "interpret" this store by adding the value to our
+                        // alloca stack, and then using that later.
+                        alloca_stacks.entry(*alloca).or_default().push(*value);
+                        arena.invalidate_inst(inst_id); // invalidate to cleanup later
+                    },
+                _ => {},
+            }
+        }
+        for successor in arena.get_block(block_id).successors.clone() {
+            for inst_id in arena.get_block(successor).instructions.clone() {
+                // For each successor block, if it has a phi for one of our allocas,
+                // fill in the phi operand for the current block's edge with the top of the alloca's stack.
+                if let Some(alloca) = phi_to_alloca.get(&inst_id) {
+                    if let Instruction::Phi { incoming, .. } = arena.get_inst_mut(inst_id) {
+                        let latest_def = *alloca_stacks[alloca].last().expect("[internal error] found no value for alloca");
+                        incoming.entry(block_id).insert_entry(latest_def);
+                    }
+                }
+            }
+        }
+        // recursively continue renaming in dominator tree successor order
+        for dom_successor in dom_tree.successors(block_id) {
+            // store the state the stack had before we went into a successor block
+            let snapshot: HashMap<InstId, usize> = alloca_stacks.iter().map(|(k, v)| (*k, v.len())).collect();
+            Mem2Reg::rename_variables(arena, phi_to_alloca, promotable_allocas, dom_tree, def_use, alloca_stacks, *dom_successor);
+            // restore the alloca_stacks back to how it was before the successor changed it
+            for (alloca, len) in snapshot {
+                alloca_stacks.get_mut(&alloca).unwrap().truncate(len);
+            }
+        }
     }
 }

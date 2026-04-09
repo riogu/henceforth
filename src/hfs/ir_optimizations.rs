@@ -138,8 +138,8 @@ impl IrPass for Mem2Reg {
         let dom_tree = DominatorTree::compute(arena, func_id);
         // 1. find all promotable allocas
         let promotable_allocas = Mem2Reg::find_promotable_allocas(arena, &def_use, func_id);
-        // 2. for each alloca: compute iterated dominance frontier, insert phis
 
+        // 2. for each alloca: compute iterated dominance frontier, insert phis
         // The rename phase uses this to know which alloca's stack it pushes the curr phi to
         let mut phi_to_alloca = HashMap::<InstId, InstId>::new();
         for alloca in &promotable_allocas {

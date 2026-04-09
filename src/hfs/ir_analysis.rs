@@ -13,7 +13,7 @@ pub struct DefUseInfo {
     // for example
     // %6 = add %2, %5
     // we would map %5 to (%6, 2), because it is used on the rhs of the add
-    pub users: HashMap<InstId, Vec<(InstOrTermId, usize)>>,
+    users: HashMap<InstId, Vec<(InstOrTermId, usize)>>,
 }
 impl DefUseInfo {
     pub fn compute(arena: &IrArena, func_id: IrFuncId) -> Self {
@@ -148,25 +148,25 @@ impl DominatorTree {
 
      Below is a table that exemplifies the expected result of the dominance calculation
      ──────────────────────────────────────────────────────────────────────────────────
-         B0          n   │ DOM       │ IDOM │  DF
-         │           B0  │ {0}       │  —   │  —
-         v           B1  │ {0,1}     │  0   │  1
-         B1 <─────┐  B2  │ {0,1,2}   │  1   │  3
-        ╱  ╲      │  B3  │ {0,1,3}   │  1   │  1
-       v    v     │  B4  │ {0,1,3,4} │  3   │  —
-      B2    B5    │  B5  │ {0,1,5}   │  1   │  3
-       │   ╱  ╲   │  B6  │ {0,1,5,6} │  5   │  7
-       │  v    v  │  B7  │ {0,1,5,7} │  5   │  3
-       │ B6    B8 │  B8  │ {0,1,5,8} │  5   │  7
-       │  │    │  │
-       │  v    │  │  Dom(n) = {n} ∪ ( ∩ [m ∈ preds(n)] Dom(m) )
-       │  B7 <─┘  │  reverse_postorder = [B0, B1, B5, B8, B6, B7, B2, B3, B4]
-       v  │       │
-      B3 <┘       │
-       │          │
-       v          │
-      B4 ─────────┘
-     ──────────────────────────────────────────────────────────────────────────────────
+          B0          n   │ DOM       │ IDOM │  DF
+          │           B0  │ {0}       │  —   │  —
+          v           B1  │ {0,1}     │  0   │  1
+          B1 <─────┐  B2  │ {0,1,2}   │  1   │  3
+         ╱  ╲      │  B3  │ {0,1,3}   │  1   │  1
+        v    v     │  B4  │ {0,1,3,4} │  3   │  —
+       B2    B5    │  B5  │ {0,1,5}   │  1   │  3
+        │   ╱  ╲   │  B6  │ {0,1,5,6} │  5   │  7
+        │  v    v  │  B7  │ {0,1,5,7} │  5   │  3
+        │ B6    B8 │  B8  │ {0,1,5,8} │  5   │  7
+        │  ╲    ╱  │
+        │   v  v   │  Dom(n) = {n} ∪ ( ∩ [m ∈ preds(n)] Dom(m) )
+        │    B7    │  reverse_postorder = [B0, B1, B5, B8, B6, B7, B2, B3, B4]
+        v    │     │  
+       B3 <──┘     │ 
+       │└──────────┘      
+       v          
+       B4 
+     ─────────────────────────────────────────────────────────────────────────────────
     */
     pub fn compute(arena: &IrArena, func_id: IrFuncId) -> Self {
         // 1. compute reverse postorder

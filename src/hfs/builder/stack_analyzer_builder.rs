@@ -7,6 +7,7 @@ use crate::hfs::{
     SourceInfo, Statement, StmtId, Token, TokenKind, TopLevelId, Type, TypeId, VarDeclaration, VarId,
 };
 
+#[deprecated]
 pub struct StackAnalyzerBuilder {
     arena: AstArena,
     current_function: Option<FunctionContext>,
@@ -62,17 +63,20 @@ impl StackAnalyzerBuilder {
     }
 }
 
+#[deprecated]
 pub enum StmtOrExpr {
     Expr(Expression),
     Stmt(Statement),
 }
 
+#[deprecated]
 struct FunctionContext {
     name: String,
     param_type: TypeId,
     return_type: TypeId,
 }
 
+#[deprecated]
 enum BuilderContext {
     WhileLoop,
     IfStatement,

@@ -7,6 +7,7 @@ use crate::hfs::{
     UnresolvedFunctionDeclaration, UnresolvedStatement, UnresolvedStmtId, UnresolvedTopLevelId, UnresolvedVarDeclaration,
 };
 
+#[deprecated]
 pub struct ParserBuilder {
     arena: UnresolvedAstArena,
     current_function: Option<FunctionContext>,
@@ -14,17 +15,20 @@ pub struct ParserBuilder {
     context_stack: Vec<BuilderContext>,
 }
 
+#[deprecated]
 pub enum UnresolvedStmtOrExpr {
     Expr(UnresolvedExpression),
     Stmt(UnresolvedStatement),
 }
 
+#[deprecated]
 struct FunctionContext {
     name: String,
     param_type: TypeId,
     return_type: TypeId,
 }
 
+#[deprecated]
 enum BuilderContext {
     WhileLoop,
     IfStatement,

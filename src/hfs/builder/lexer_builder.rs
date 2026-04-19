@@ -3,9 +3,11 @@ use crate::hfs::{
     Literal, TokenKind, Type,
 };
 
+#[deprecated]
 pub struct TokenSequence {
     tokens: Vec<TokenKind>,
 }
+
 impl ControlFlowOps for TokenSequence {
     fn if_statement(self) -> Self {
         self.push(TokenKind::If)

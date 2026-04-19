@@ -1,5 +1,6 @@
 use crate::hfs::{token::Literal, Type, UnresolvedOperation};
 
+#[deprecated]
 pub enum BuilderOperation {
     Add,
     Subtract,
@@ -16,6 +17,8 @@ pub enum BuilderOperation {
     LessThan,
     LessThanEq,
 }
+
+#[deprecated]
 impl BuilderOperation {
     pub fn to_unresolved_op(&self) -> UnresolvedOperation {
         match self {
@@ -37,11 +40,13 @@ impl BuilderOperation {
     }
 }
 
+#[deprecated]
 pub enum PassMode {
     Copy,
     Move,
 }
 
+#[deprecated]
 pub trait Builder<T>: FunctionOps + StackOps + VariableOps + LoopOps + ControlFlowOps {
     type Built;
     fn new() -> Self;
@@ -50,6 +55,7 @@ pub trait Builder<T>: FunctionOps + StackOps + VariableOps + LoopOps + ControlFl
     fn build(self) -> Self::Built;
 }
 
+#[deprecated]
 pub trait FunctionOps {
     fn args(self, args: Option<Vec<Type>>) -> Self;
     fn return_types(self, return_types: Option<Vec<Type>>) -> Self;
@@ -60,6 +66,7 @@ pub trait FunctionOps {
     fn return_statement(self) -> Self;
 }
 
+#[deprecated]
 pub trait StackOps {
     fn stack_block(self) -> Self;
     fn end_stack_block(self, semicolon: bool) -> Self;
@@ -69,15 +76,18 @@ pub trait StackOps {
     fn push_variable(self, name: &str) -> Self;
 }
 
+#[deprecated]
 pub trait VariableOps {
     fn variable(self, name: &str, typename: Type) -> Self;
     fn assign_to(self, name: &str, mode: PassMode) -> Self;
 }
 
+#[deprecated]
 pub trait LoopOps {
     fn while_loop(self) -> Self;
 }
 
+#[deprecated]
 pub trait ControlFlowOps {
     fn if_statement(self) -> Self;
     fn elif_statement(self) -> Self;

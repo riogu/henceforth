@@ -1,4 +1,4 @@
-use std::{fmt::Display, vec};
+use std::{collections::HashSet, fmt::Display, vec};
 
 use colored::{ColoredString, Colorize, CustomColor};
 use indexmap::IndexMap;
@@ -81,12 +81,12 @@ pub struct IrFunction {
     pub entry_block: BlockId, // CFG of blocks
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct BasicBlock {
     pub parent_function: IrFuncId,
     pub name: String,
-    pub predecessors: Vec<BlockId>, // or phi node construction
-    pub successors: Vec<BlockId>,
+    pub predecessors: HashSet<BlockId>, // for phi node construction
+    pub successors: HashSet<BlockId>,
     pub instructions: Vec<InstId>,
     pub terminator: Option<TermInstId>,
 }
@@ -170,7 +170,7 @@ pub enum Instruction {
     },
 }
 // Terminator instructions, separated from the others
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum TerminatorInst {
     Return { source_info: SourceInfo, return_tuple: InstId },
     Branch { source_info: SourceInfo, cond: InstId, true_block: BlockId, false_block: BlockId },
@@ -365,7 +365,7 @@ impl CfgPrintable for IrFunction {
         let returns = arena.get_type(self.return_type).clone();
         let func_id = arena.functions.iter().find(|(_, func)| func.name == self.name).unwrap().0;
         let blocks_repr = arena
-            .get_blocks_in(func_id)
+            .compute_reverse_postorder(func_id)
             .iter()
             .map(|block| arena.get_block(*block).get_repr(arena).to_string())
             .collect::<Vec<String>>()

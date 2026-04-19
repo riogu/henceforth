@@ -36,7 +36,7 @@ fn run() -> Result<(), Box<dyn CompileError>> {
 
 
     println!("\nIR before optimizations:{}", CfgAnalyzerError::dump_ast_and_ir(None, &ir_arena));
-    hfs::OptPipeline::run(&mut hfs::O0::new(), &mut ir_arena);
+    hfs::OptPipeline::run_iteratively(&mut hfs::O0::new(), &mut ir_arena);
     println!("IR after optimizations:{}", CfgAnalyzerError::dump_ast_and_ir(None, &ir_arena));
 
     hfs::Interpreter::interpret(ir_arena, top_level_insts, scope_stack);

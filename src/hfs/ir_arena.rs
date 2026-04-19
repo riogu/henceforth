@@ -1,4 +1,10 @@
-use std::{collections::HashMap, fmt::Debug, rc::Rc, vec};
+use core::panic;
+use std::{
+    collections::{HashMap, HashSet},
+    fmt::Debug,
+    rc::Rc,
+    vec,
+};
 
 use colored::{Colorize, CustomColor};
 use slotmap::SlotMap;
@@ -113,6 +119,10 @@ impl IrArena {
         id
     }
 
+    // used to signal cleanup is needed later
+    pub fn invalidate_inst(&mut self, inst_id: InstId) -> Option<Instruction> { self.instructions.remove(inst_id) }
+    pub fn inst_is_valid(&self, inst_id: InstId) -> bool { self.instructions.contains_key(inst_id) }
+
     pub fn alloc_inst_for(&mut self, inst: Instruction, block_id: BlockId) -> InstId {
         if matches!(inst, Instruction::Alloca { .. }) || matches!(inst, Instruction::GlobalAlloca(..)) {
             panic!(
@@ -152,41 +162,82 @@ impl IrArena {
         global_var_id
     }
 
-    pub fn alloc_terminator_for(
-        &mut self,
-        terminator: TerminatorInst,
-        block_id: BlockId,
-    ) -> Result<TermInstId, Box<dyn CompileError>> {
+    pub fn alloc_terminator_for(&mut self, terminator: TerminatorInst, block_id: BlockId) -> TermInstId {
+        if self.get_block(block_id).terminator.is_some() {
+            // to find bugs in the frontend, this method panics if a terminator existed
+            panic!("[internal error] block already had terminator")
+        }
+        self.alloc_term_impl_unchecked(terminator, block_id)
+    }
+    pub fn replace_terminator_for(&mut self, terminator: TerminatorInst, block_id: BlockId) -> TermInstId {
+        self.remove_terminator_for(block_id);
+        self.alloc_term_impl_unchecked(terminator, block_id)
+    }
+    fn alloc_term_impl_unchecked(&mut self, terminator: TerminatorInst, block_id: BlockId) -> TermInstId {
         // add predecessors whenever we jump or branch somewhere
         match terminator {
             TerminatorInst::Branch { source_info: _, cond: _, true_block, false_block } => {
-                self.get_block_mut(block_id).successors.push(true_block);
-                self.get_block_mut(block_id).successors.push(false_block);
-                self.get_block_mut(true_block).predecessors.push(block_id);
-                self.get_block_mut(false_block).predecessors.push(block_id);
+                self.get_block_mut(block_id).successors.insert(true_block);
+                self.get_block_mut(block_id).successors.insert(false_block);
+                self.get_block_mut(true_block).predecessors.insert(block_id);
+                self.get_block_mut(false_block).predecessors.insert(block_id);
             },
-            TerminatorInst::Jump { source_info: _, target: jump_to_id } => {
-                self.get_block_mut(block_id).successors.push(jump_to_id);
-                self.get_block_mut(jump_to_id).predecessors.push(block_id);
+            TerminatorInst::Jump { source_info: _, target } => {
+                self.get_block_mut(block_id).successors.insert(target);
+                self.get_block_mut(target).predecessors.insert(block_id);
             },
             TerminatorInst::Return { .. } | TerminatorInst::Unreachable => {}, // no successors, nothing to update
         }
         let id = self.terminators.insert(terminator);
         self.get_block_mut(block_id).terminator = Some(id);
-        Ok(id)
+        id
+    }
+    // this is usually only used by other methods of IrArena, not directly by any pass
+    // it shouldn't ever become a public method (usually you need to replace a terminator)
+    fn remove_terminator_for(&mut self, block_id: BlockId) {
+        if let Some(block) = self.try_get_block_mut(block_id) {
+            if let Some(old_term_id) = block.terminator {
+                // reset successors in case we are overwriting an old terminator
+                block.successors.clear();
+                // we also make sure we keep track of predecessors correctly
+                match *self.get_term(old_term_id) {
+                    TerminatorInst::Branch { true_block, false_block, .. } => {
+                        self.get_block_mut(true_block).predecessors.remove(&block_id);
+                        self.get_block_mut(false_block).predecessors.remove(&block_id);
+                    },
+                    TerminatorInst::Jump { target, .. } => {
+                        self.get_block_mut(target).predecessors.remove(&block_id);
+                    },
+                    TerminatorInst::Return { .. } | TerminatorInst::Unreachable => {},
+                }
+                // in case we already had a terminator, this method is gonna overwrite the old one.
+                // knowing that, its better to just remove that terminator, since it will be completely dead.
+                self.terminators.remove(old_term_id);
+            }
+        }
     }
     pub fn alloc_block(&mut self, name: &str, func_id: IrFuncId) -> BlockId {
         let block_id = self.blocks.insert_with_key(|key| BasicBlock {
             parent_function: func_id,
             name: name.to_string() + "_" + &key.to_string(),
-            predecessors: Vec::new(), // always empty, filled by alloc_terminator_for
-            successors: Vec::new(),   // always empty, filled by alloc_terminator_for
+            predecessors: HashSet::new(), // always empty, filled by alloc_terminator_for
+            successors: HashSet::new(),   // always empty, filled by alloc_terminator_for
             instructions: Vec::new(),
             terminator: None,
         });
         self.func_id_to_blocks.entry(func_id).or_default().push(block_id);
         block_id
     }
+    pub fn invalidate_block(&mut self, block_id: BlockId) {
+        self.remove_terminator_for(block_id);
+        if let Some(block) = self.blocks.remove(block_id) {
+            // invalidating a block also invalidates all the instructions in that block
+            for inst_id in block.instructions {
+                self.invalidate_inst(inst_id);
+            }
+        }
+    }
+    pub fn block_is_valid(&self, block_id: BlockId) -> bool { self.blocks.contains_key(block_id) }
 }
 
 impl IrArena {
@@ -201,21 +252,25 @@ impl IrArena {
     }
     pub fn get_var(&self, id: GlobalIrVarId) -> &GlobalIrVarDeclaration { &self.global_vars[id] }
     pub fn get_func(&self, func_id: IrFuncId) -> &IrFunction { &self.functions[func_id] }
-    pub fn get_func_mut(&mut self, id: IrFuncId) -> &mut IrFunction { &mut self.functions[id] }
+    pub fn get_func_mut(&mut self, func_id: IrFuncId) -> &mut IrFunction { &mut self.functions[func_id] }
     pub fn get_type(&self, id: TypeId) -> &Type { &self.types[id.0] }
-    pub fn get_inst_mut(&mut self, id: InstId) -> &mut Instruction { &mut self.instructions[id] }
-    pub fn get_inst(&self, id: InstId) -> &Instruction { &self.instructions[id] }
-    pub fn try_get_inst(&self, id: InstId) -> Option<&Instruction> {
+    pub fn get_inst_mut(&mut self, inst_id: InstId) -> &mut Instruction { &mut self.instructions[inst_id] }
+    pub fn get_inst(&self, inst_id: InstId) -> &Instruction { &self.instructions[inst_id] }
+    pub fn try_get_inst(&self, inst_id: InstId) -> Option<&Instruction> {
         // this is used by optimization passes and other analyses that don't know if we might've
         // deleted a held InstId, and will crash if there wasn't
         // therefore we simply skip over these if we receive a None
-        self.instructions.get(id)
+        self.instructions.get(inst_id)
     }
-    pub fn get_term(&self, id: TermInstId) -> &TerminatorInst { &self.terminators[id] }
-    pub fn get_term_mut(&mut self, id: TermInstId) -> &mut TerminatorInst { &mut self.terminators[id] }
+    pub fn get_term(&self, term_id: TermInstId) -> &TerminatorInst { &self.terminators[term_id] }
+    pub fn get_block_term(&self, block_id: BlockId) -> &TerminatorInst {
+        &self.terminators[self.blocks[block_id].terminator.expect("[internal error] found block with no terminator")]
+    }
+    pub fn get_term_mut(&mut self, term_id: TermInstId) -> &mut TerminatorInst { &mut self.terminators[term_id] }
     pub fn get_block(&self, block_id: BlockId) -> &BasicBlock { &self.blocks[block_id] }
     pub fn get_block_mut(&mut self, block_id: BlockId) -> &mut BasicBlock { &mut self.blocks[block_id] }
     pub fn try_get_block(&self, block_id: BlockId) -> Option<&BasicBlock> { self.blocks.get(block_id) }
+    pub fn try_get_block_mut(&mut self, block_id: BlockId) -> Option<&mut BasicBlock> { self.blocks.get_mut(block_id) }
 
     pub fn get_blocks_in(&self, func_id: IrFuncId) -> Vec<BlockId> {
         self.func_id_to_blocks.get(&func_id).map_or(vec![], |v| v.clone())

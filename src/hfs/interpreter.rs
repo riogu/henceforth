@@ -447,7 +447,7 @@ impl Interpreter {
     // Returns `Some(block_id)` to continue to, or `None` to stop (return)
     pub fn interpret_terminator(&mut self, term_id: TermInstId) -> Option<BlockId> {
         match self.arena.get_term(term_id) {
-            TerminatorInst::Return { source_info: _, return_tuple} => {
+            TerminatorInst::Return { source_info: _, return_tuple } => {
                 if let RuntimeValue::Tuple(return_stack) = self.interpret_instruction(*return_tuple) {
                     self.curr_call_frame_mut().return_stack = return_stack;
                 } else {

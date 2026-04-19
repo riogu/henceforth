@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use indexmap::IndexMap;
 use slotmap::Key;
 
-use crate::hfs::{BlockId, DefUseInfo, DominatorTree, InstId, InstOrTermId, Instruction, IrArena, IrFuncId};
+use crate::hfs::{BlockId, DefUseInfo, DominatorTree, InstId, InstOrTermId, Instruction, IrArena, IrFuncId, TerminatorInst};
 
 // these are the basic traits and APIs our passes/pipelines must meet
 pub trait IrPass {
@@ -26,11 +26,14 @@ pub trait OptPipeline {
             for opt_pass in self.get_opt_passes() {
                 any_changed |= opt_pass.run(arena, func_id)
             }
-            // if arena.get_func(func_id).name == "foo" {
-            //     let dom = DominatorTree::compute(arena, func_id);
-            //     dbg!(dom.immediate_dominators);
-            //     dbg!(dom.dominance_frontiers);
-            // }
+        }
+        any_changed
+    }
+    fn run_iteratively(&mut self, arena: &mut IrArena) -> bool {
+        // run until no changes occur
+        let mut any_changed: bool = false;
+        while self.run(arena) {
+            any_changed = true;
         }
         any_changed
     }
@@ -46,7 +49,7 @@ impl OptPipeline for O0 {
     fn new() -> Self { O0 { opt_passes: passes!(Mem2Reg, DeadCodeElimination) } }
     fn name(&self) -> &str { "-O0: Basic Optimizations" }
     fn run_on_function(&mut self, arena: &mut IrArena, func_id: IrFuncId) -> bool {
-        let mut any_changed: bool = false;
+        let mut any_changed = false;
         for pass in self.opt_passes.iter_mut() {
             any_changed |= pass.run(arena, func_id);
         }
@@ -54,24 +57,44 @@ impl OptPipeline for O0 {
     }
     fn get_opt_passes(&mut self) -> &mut [Box<dyn IrPass>] { &mut self.opt_passes }
 }
+
 // ======================================================================================
 // Cleanup passes
 // ======================================================================================
 
-pub struct RemoveStaleInstIds;
-impl IrPass for RemoveStaleInstIds {
+pub struct CommonCleanupPipeline;
+impl IrPass for CommonCleanupPipeline {
+    fn new() -> Box<Self> { Box::new(CommonCleanupPipeline) }
+    fn name(&self) -> &str { "CommonCleanupPipeline: runs RemoveStaleIR and CleanCFG iteratively" }
+    fn run(&self, arena: &mut IrArena, func_id: IrFuncId) -> bool {
+        let mut any_changed = false;
+        any_changed |= RemoveStaleIR::new().run(arena, func_id);
+        any_changed |= CleanCFG::new().run(arena, func_id);
+        any_changed |= RemoveStaleIR::new().run(arena, func_id);
+        any_changed
+    }
+}
+fn retain_changed<T>(vec: &mut Vec<T>, pred: impl Fn(&T) -> bool) -> bool {
+    let len_before = vec.len();
+    vec.retain(pred);
+    vec.len() != len_before
+}
+pub struct RemoveStaleIR;
+impl IrPass for RemoveStaleIR {
     fn new() -> Box<Self> { Box::new(Self) }
     fn name(&self) -> &str { "RemoveStaleInstIds: clean all blocks that have stale InstIds" }
     fn run(&self, arena: &mut IrArena, func_id: IrFuncId) -> bool {
         let mut any_changed = false;
-        for block_id in arena.get_blocks_in(func_id) {
+
+        let mut blocks = arena.get_blocks_in(func_id);
+        // cleanup dead blocks
+        any_changed |= retain_changed(&mut blocks, |&block_id| arena.block_is_valid(block_id));
+        arena.func_id_to_blocks.insert(func_id, blocks.clone());
+
+        for block_id in blocks {
             let mut instructions = arena.get_block(block_id).instructions.clone();
-            let len_before = instructions.len();
-
             // cleanup all the instructions that were removed
-            instructions.retain(|inst_id| arena.inst_is_valid(*inst_id));
-
-            any_changed |= instructions.len() != len_before;
+            any_changed |= retain_changed(&mut instructions, |&inst_id| arena.inst_is_valid(inst_id));
             arena.get_block_mut(block_id).instructions = instructions;
         }
         any_changed
@@ -83,7 +106,6 @@ impl IrPass for RemoveStaleInstIds {
 // ======================================================================================
 
 pub struct DeadCodeElimination;
-
 impl IrPass for DeadCodeElimination {
     fn new() -> Box<Self> { Box::new(Self) }
     fn name(&self) -> &str { "DeadCodeElimination: remove unused and unreachable code" }
@@ -120,7 +142,7 @@ impl IrPass for DeadCodeElimination {
             arena.invalidate_inst(inst_id);
             changed = true;
         } // run RemoveStaleInstIds for cleanup
-        changed | RemoveStaleInstIds::new().run(arena, func_id)
+        changed | CommonCleanupPipeline::new().run(arena, func_id)
     }
 }
 
@@ -164,7 +186,7 @@ impl IrPass for Mem2Reg {
             arena.invalidate_inst(alloca); // invalidate allocas for cleanup after
         }
         // 4. delete all the dead allocas, stores, loads
-        RemoveStaleInstIds::new().run(arena, func_id)
+        CommonCleanupPipeline::new().run(arena, func_id)
         // if this pass does anything, then RemoveStaleInstIds will have stuff to cleanup
         // therefore checking if it did anything is enough to know if this pass did work
     }
@@ -244,8 +266,10 @@ impl Mem2Reg {
     }
 }
 
-// phase 2 of SSA construction algorithm
 impl Mem2Reg {
+    // ======================================================================================
+    // phase 2 of SSA construction algorithm
+    // ======================================================================================
     // the idea is to walk the dominator tree top-down,
     // maintaining a stack of what is the current SSA value for each alloca.
     // its like interpreting the code but we rewrite the IR instead
@@ -309,5 +333,117 @@ impl Mem2Reg {
                 alloca_stacks.get_mut(&alloca).unwrap().truncate(len);
             }
         }
+    }
+}
+
+// ======================================================================================
+// CleanCFG implementation
+// Algorithm is based on Engineering a Compiler (Chap 10.2.2)
+// compliments DCE to help eliminate code further by also eliminating useless control flow
+// ======================================================================================
+pub struct CleanCFG;
+impl IrPass for CleanCFG {
+    fn new() -> Box<Self> { Box::new(Self) }
+    fn name(&self) -> &str { "CleanCFG: Remove useless control flow from the CFG" }
+    fn run(&self, arena: &mut IrArena, func_id: IrFuncId) -> bool {
+        let mut any_changed = false;
+        while CleanCFG::run_iteration(arena, func_id) {
+            any_changed = true;
+        }
+        any_changed
+    }
+}
+impl CleanCFG {
+    fn run_iteration(arena: &mut IrArena, func_id: IrFuncId) -> bool {
+        let mut any_changed = false;
+        for block_id in arena.compute_postorder(func_id) {
+            if !arena.block_is_valid(block_id) {
+                continue; // skip blocks that we invalidate during the algorithm
+            };
+            match *arena.get_block_term(block_id) {
+                TerminatorInst::Branch { true_block, false_block, source_info, .. } =>
+                    if true_block == false_block {
+                        // 1. Fold a Redundant Branch => branch %cond, %block1, %block1 -> jump %block1
+                        arena.replace_terminator_for(TerminatorInst::Jump { source_info, target: true_block }, block_id);
+                        any_changed = true;
+                    },
+                TerminatorInst::Jump { target, .. } => {
+                    let (target_term, target_block) = if let Some(target_block) = arena.try_get_block(target).cloned() {
+                        (arena.get_block_term(target).clone(), target_block)
+                    } else {
+                        continue;
+                    };
+                    // 2. Remove an Empty Block
+                    // Replace predecessor jumps to block with jumps to block's target
+                    if CleanCFG::remove_empty_block_with_jump(arena, block_id, target) {
+                        any_changed = true;
+                    }
+                    // 3. Combine Blocks
+                    // We can combine this block with the jump's target if the target only has one predecessor
+                    else if target_block.predecessors.len() == 1 {
+                        let mut insts = std::mem::take(&mut arena.get_block_mut(target).instructions);
+                        arena.get_block_mut(block_id).instructions.append(&mut insts);
+                        arena.replace_terminator_for(target_term, block_id);
+                        arena.invalidate_block(target);
+                        any_changed = true;
+                    }
+                    // 4. Hoist a Branch
+                    // Skip going to target if target is empty and ends in a branch
+                    // Instead, just hoist the branch instruction to the current block
+                    else if target_block.instructions.is_empty() && matches!(target_term, TerminatorInst::Branch { .. }) {
+                        arena.replace_terminator_for(target_term, block_id);
+                        any_changed = true;
+                    }
+                },
+                TerminatorInst::Return { .. } | TerminatorInst::Unreachable => {},
+            }
+        }
+        any_changed
+    }
+    fn remove_empty_block_with_jump(arena: &mut IrArena, block_id: BlockId, target: BlockId) -> bool {
+        let Some(block) = arena.try_get_block(block_id) else {
+            return false; // skip blocks that we invalidate during the algorithm
+        };
+        let preds = block.predecessors.clone();
+        if !block.instructions.is_empty() || preds.is_empty() {
+            // block needs to be empty.
+            // additionally, if there are no predecessors, this is the entry block, and we don't want to
+            // delete that block. at best, stuff is hoisted into it, but its inconvenient to remove
+            // the entry block specifically.
+            return false;
+        }
+        for pred in preds {
+            let &term = if let Some(pred_block) = arena.try_get_block(pred) {
+                arena.get_term(pred_block.terminator.expect("[internal error] found block with no terminator"))
+            } else {
+                continue; // skip blocks that we invalidate during the algorithm
+            };
+            match term {
+                TerminatorInst::Branch { source_info, cond, true_block, false_block, .. } => {
+                    if true_block == block_id && false_block == block_id {
+                        // weird case where both blocks are the same,
+                        // need this otherwise logic will be wrong for the other 2 if statements below
+                        arena.replace_terminator_for(TerminatorInst::Jump { source_info, target }, pred);
+                    } else if true_block == block_id {
+                        arena.replace_terminator_for(
+                            TerminatorInst::Branch { source_info, cond, true_block: target, false_block },
+                            pred,
+                        );
+                    } else if false_block == block_id {
+                        arena.replace_terminator_for(
+                            TerminatorInst::Branch { source_info, cond, true_block, false_block: target },
+                            pred,
+                        );
+                    }
+                },
+                TerminatorInst::Jump { source_info, .. } => {
+                    arena.replace_terminator_for(TerminatorInst::Jump { source_info, target }, pred);
+                },
+                TerminatorInst::Return { .. } | TerminatorInst::Unreachable =>
+                    panic!("[internal error] predecessor block ended with return/unreachable terminator"),
+            }
+        }
+        arena.invalidate_block(block_id);
+        true
     }
 }

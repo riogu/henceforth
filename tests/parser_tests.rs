@@ -1,14 +1,13 @@
 #[cfg(test)]
 mod tests {
 
-    use pretty_assertions::assert_eq;
-
     use henceforth::hfs::{
+        Type, UnresolvedAstArena,
         builder::builder::{Builder, BuilderOperation, ControlFlowOps, FunctionOps, LoopOps, PassMode, StackOps, VariableOps},
         parser_builder::ParserBuilder,
-        utils::{run_until, Phase},
-        Type, UnresolvedAstArena,
+        utils::{Phase, run_until},
     };
+    use pretty_assertions::assert_eq;
 
     fn parse_file(name: &str) -> UnresolvedAstArena {
         run_until(name, Phase::Parser)

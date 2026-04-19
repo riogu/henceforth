@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 
 use slotmap::Key;
 
-use crate::hfs::{BlockId, InstId, InstOrTermId, Instruction, IrArena, IrFuncId, TermInstId};
+use crate::hfs::{BlockId, InstId, InstOrTermId, Instruction, IrArena, IrFuncId};
 
 // ============================================================================
 // Optimizer related code, Dominance frontiers, DefUseInfo, etc
@@ -19,7 +19,9 @@ impl DefUseInfo {
     pub fn compute(arena: &IrArena, func_id: IrFuncId) -> Self {
         let mut def_use = Self { users: HashMap::new() };
         for block_id in arena.get_blocks_in(func_id) {
-            let block = arena.get_block(block_id);
+            let Some(block) = arena.try_get_block(block_id) else {
+                continue; // skip blocks that we invalidate during opt passes
+            };
             for inst_id in block.instructions.clone() {
                 // iterate every instruction, check what is in its operands and add the current inst to
                 // the operand's user list (because this instruction is a user of that operand's value)
@@ -79,17 +81,12 @@ impl DefUseInfo {
         }
     }
 }
-impl IrArena {
-    // used to signal cleanup is needed later
-    pub fn invalidate_inst(&mut self, inst_id: InstId) -> Option<Instruction> { self.instructions.remove(inst_id) }
-    pub fn inst_is_valid(&self, inst_id: InstId) -> bool { self.instructions.contains_key(inst_id) }
-}
 
 // ============================================================================
 // DominatorTree
 // ============================================================================
 impl IrArena {
-    pub fn postorder(&self, func_id: IrFuncId) -> Vec<BlockId> {
+    pub fn compute_postorder(&self, func_id: IrFuncId) -> Vec<BlockId> {
         /* Only record a block after all its successors have been recorded. So leaves of the CFG
            (blocks with no successors, or whose successors were already visited) get recorded
            first, and the entry block gets recorded last.
@@ -109,7 +106,12 @@ impl IrArena {
             if !visited.insert(block_id) {
                 return; // don't visit blocks twice
             }
-            for successor in arena.get_block(block_id).successors.clone() {
+            let successors = if let Some(block) = arena.try_get_block(block_id) {
+                block.successors.clone()
+            } else {
+                return; // skip blocks that we invalidate during opt passes
+            };
+            for successor in successors {
                 visit_block(successor, arena, worklist, visited);
             }
             worklist.push(block_id);
@@ -117,7 +119,7 @@ impl IrArena {
         visit_block(entry, self, &mut worklist, &mut visited);
         worklist
     }
-    pub fn reverse_postorder(&self, func_id: IrFuncId) -> Vec<BlockId> {
+    pub fn compute_reverse_postorder(&self, func_id: IrFuncId) -> Vec<BlockId> {
         /* In reverse-postorder iteration, a node is visited before any of its successor nodes has
            been visited, except when the successor is reached by a back edge.
               entry
@@ -129,7 +131,7 @@ impl IrArena {
                 E
            reverse_postorder = [entry, B, D, A, C, E]
         */
-        let mut postorder = self.postorder(func_id);
+        let mut postorder = self.compute_postorder(func_id);
         postorder.reverse();
         postorder
     }
@@ -161,11 +163,11 @@ impl DominatorTree {
         │  ╲    ╱  │
         │   v  v   │  Dom(n) = {n} ∪ ( ∩ [m ∈ preds(n)] Dom(m) )
         │    B7    │  reverse_postorder = [B0, B1, B5, B8, B6, B7, B2, B3, B4]
-        v    │     │  
-       B3 <──┘     │ 
-       │└──────────┘      
-       v          
-       B4 
+        v    │     │
+       B3 <──┘     │
+       │└──────────┘
+       v
+       B4
      ─────────────────────────────────────────────────────────────────────────────────
     */
     pub fn compute(arena: &IrArena, func_id: IrFuncId) -> Self {
@@ -186,7 +188,7 @@ impl DominatorTree {
     fn compute_immediate_dominators(arena: &IrArena, func_id: IrFuncId) -> HashMap<BlockId, BlockId> {
         let mut immediate_dominators = HashMap::<BlockId, BlockId>::new();
         let mut po_indexes = HashMap::<BlockId, usize>::new();
-        let mut postorder = arena.postorder(func_id);
+        let mut postorder = arena.compute_postorder(func_id);
 
         let start_block = postorder.pop().expect("[internal error] computed dominance for empty set of blocks");
         immediate_dominators.insert(start_block, start_block);
@@ -197,8 +199,8 @@ impl DominatorTree {
             immediate_dominators.insert(*block, BlockId::null());
             po_indexes.insert(*block, po_idx);
         }
-        postorder.reverse(); // turn it into reverse_postorder
 
+        postorder.reverse(); // turn it into reverse_postorder
         let mut changed = true;
         while changed {
             changed = false; // note that start node isnt in the postorder array

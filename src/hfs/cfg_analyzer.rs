@@ -307,7 +307,7 @@ impl CfgAnalyzer {
                     self.arena.alloc_terminator_for(
                         TerminatorInst::Jump { source_info: source_info.clone(), target: if_end_block },
                         self.ir_context.curr_insert_block,
-                    )?;
+                    );
                 }
 
                 if let Some(else_id) = else_stmt {
@@ -357,7 +357,7 @@ impl CfgAnalyzer {
                                 self.arena.alloc_terminator_for(
                                     TerminatorInst::Jump { source_info: source_info.clone(), target: if_end_block },
                                     self.ir_context.curr_insert_block,
-                                )?;
+                                );
                             }
                             if is_else {
                                 self.generate_merge_phis(if_end_block, &stack_snapshots, &source_info);
@@ -377,7 +377,7 @@ impl CfgAnalyzer {
                     self.arena.alloc_terminator_for(
                         TerminatorInst::Branch { source_info, cond, true_block: if_body_block, false_block: if_end_block },
                         block_before_if,
-                    )?;
+                    );
                 }
                 self.ir_context.curr_insert_block = if_end_block;
                 Ok(())
@@ -400,7 +400,7 @@ impl CfgAnalyzer {
                 self.arena.alloc_terminator_for(
                     TerminatorInst::Jump { source_info: source_info.clone(), target: while_cond_block },
                     self.ir_context.curr_insert_block,
-                )?; // finish the previous block with a jump
+                ); // finish the previous block with a jump
 
                 //--------------------------------------------------------------------------
                 // set up the context for lowering the while body
@@ -416,7 +416,7 @@ impl CfgAnalyzer {
                         false_block: while_end_block,
                     },
                     while_cond_block,
-                )?;
+                );
 
                 let curr_block_context = BlockContext {
                     continue_to_block: Some(while_cond_block),
@@ -444,7 +444,7 @@ impl CfgAnalyzer {
                     self.arena.alloc_terminator_for(
                         TerminatorInst::Jump { source_info, target: while_cond_block },
                         self.ir_context.curr_insert_block,
-                    )?;
+                    );
                 }
                 // dont forget to put the context where it should be after we are done with the while loop
                 self.ir_context.curr_insert_block = while_end_block;
@@ -501,7 +501,7 @@ impl CfgAnalyzer {
                 let _ = self.arena.alloc_terminator_for(
                     TerminatorInst::Return { source_info, return_tuple },
                     self.ir_context.curr_insert_block,
-                )?;
+                );
                 Ok(())
             },
             Statement::Break => {
@@ -513,7 +513,7 @@ impl CfgAnalyzer {
                         target: curr_block_context.break_to_block.expect("[internal error] found break outside of while context"),
                     },
                     self.ir_context.curr_insert_block,
-                )?;
+                );
                 Ok(())
             },
             Statement::Continue => {
@@ -527,7 +527,7 @@ impl CfgAnalyzer {
                             .expect("[internal error] found continue outside of while context"),
                     },
                     self.ir_context.curr_insert_block,
-                )?;
+                );
                 Ok(())
             },
             Statement::Empty => {

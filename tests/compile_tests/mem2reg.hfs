@@ -1,5 +1,4 @@
 fn main: () -> () {
-
     let foo: i32;
     @(321) &= foo;
     if @(true) {

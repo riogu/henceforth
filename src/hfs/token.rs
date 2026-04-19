@@ -215,7 +215,7 @@ impl fmt::Display for TokenKind {
 
 pub const UNKNOWN_SOURCE: SourceInfo = SourceInfo { line_number: 0, line_offset: 0, token_width: 0 };
 
-#[derive(Debug, Clone, PartialEq, Hash, Eq, Default, Ord, PartialOrd)]
+#[derive(Debug, Clone, PartialEq, Hash, Eq, Default, Ord, PartialOrd, Copy)]
 pub struct SourceInfo {
     pub line_number: usize,
     pub line_offset: usize,

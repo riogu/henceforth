@@ -10,7 +10,7 @@ pub struct FuncId(pub usize);
 pub struct ExprId(pub usize);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct StmtId(pub usize);
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct TypeId(pub usize);
 
 // ============================================================================

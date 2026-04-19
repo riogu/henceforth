@@ -4,6 +4,21 @@
 // the source of truth, and are simultaneously a printer and a parser
 //
 // Paper: https://dl.acm.org/doi/10.1145/2088456.1863525
+//
+// This implementation solves the problem of having a separate parser and printer, which can become out of sync.
+//
+// We think of parsers and printers as inverse functions of each other, going from concrete to abstract syntax, and vice-versa. We can then define a trait (Syntax trait) which both the parser and the printer implement, which defines their specific behavior.
+// However, just this isn't enough, since if we were to compose two parsers (e.g. load and store), they would return different ASTs, with no common structure, making it hard to compose them.
+// To fix this problem, we add two extra layers, flat representation and ADT, and define functions (Isos) that transform between them (we have to specify both sides, but since these correspond to the internal representation, it doesn't compromise the invertibility as much).
+// Now, instead of composing the parsers themselves, we compose the Isos
+//
+// Our pipeline looks like this now:
+//
+// Text -> Flat representation -> ADT -> AST
+//
+// Using those Isos and the Syntax trait, we define syntax descriptors, which define the specifics of both the textual representation and the AST at the same time, by being generic over a Syntax. Note that we never specify if we are applying or unapplying the Isos in the descriptors, that is handled by the Syntax
+//
+// Additionally, since this IR can have forward references to registers and blocks, we need a pass that collects names
 
 // Partial isomorphisms (Iso)
 // Represents a partial invertible function, that is:
@@ -13,13 +28,15 @@
 
 use std::collections::HashMap;
 
-use crate::hfs::{BlockId, InstId};
+use crate::hfs::{BlockId, InstId, TypeId};
 
 pub struct NameMap {
     pub inst_to_name: HashMap<InstId, String>,
     pub name_to_inst: HashMap<String, InstId>,
     pub block_to_name: HashMap<BlockId, String>,
     pub name_to_block: HashMap<String, BlockId>,
+    pub type_to_name: HashMap<TypeId, String>,
+    pub name_to_type: HashMap<String, TypeId>,
 }
 
 pub struct Iso<A, B> {
@@ -112,7 +129,9 @@ impl Syntax for Printer {
         }))
     }
 
-    fn token(&self) -> PrinterSyntax<char> { PrinterSyntax(Box::new(|c| Some(c.to_string()))) }
+    fn token(&self) -> PrinterSyntax<char> {
+        PrinterSyntax(Box::new(|c| Some(c.to_string())))
+    }
 
     fn product<A, B>(&self, left: Self::Output<A>, right: Self::Output<B>) -> Self::Output<(A, B)> {
         PrinterSyntax(Box::new(move |(a, b)| {
@@ -126,11 +145,17 @@ impl Syntax for Printer {
         PrinterSyntax(Box::new(move |a: A| (left.0)(a.clone()).or_else(|| right.0(a))))
     }
 
-    fn empty<A>(&self) -> Self::Output<A> { PrinterSyntax(Box::new(|_| None)) }
+    fn empty<A>(&self) -> Self::Output<A> {
+        PrinterSyntax(Box::new(|_| None))
+    }
 
-    fn keyword(&self, s: &'static str) -> Self::Output<()> { self.literal_str(s) }
+    fn keyword(&self, s: &'static str) -> Self::Output<()> {
+        self.literal_str(s)
+    }
 
-    fn literal_str(&self, s: &'static str) -> PrinterSyntax<()> { PrinterSyntax(Box::new(move |()| Some(s.to_string()))) }
+    fn literal_str(&self, s: &'static str) -> PrinterSyntax<()> {
+        PrinterSyntax(Box::new(move |()| Some(s.to_string())))
+    }
 
     fn many<A>(&self, item: Self::Output<A>) -> Self::Output<Vec<A>> {
         PrinterSyntax(Box::new(move |xs: Vec<A>| {
@@ -149,11 +174,19 @@ impl Syntax for Printer {
         }))
     }
 
-    fn whitespace(&self) -> PrinterSyntax<()> { PrinterSyntax(Box::new(|()| Some(" ".into()))) }
-    fn opt_whitespace(&self) -> PrinterSyntax<()> { PrinterSyntax(Box::new(|()| Some("".into()))) }
-    fn newline(&self) -> PrinterSyntax<()> { PrinterSyntax(Box::new(|()| Some("\n".into()))) }
+    fn whitespace(&self) -> PrinterSyntax<()> {
+        PrinterSyntax(Box::new(|()| Some(" ".into())))
+    }
+    fn opt_whitespace(&self) -> PrinterSyntax<()> {
+        PrinterSyntax(Box::new(|()| Some("".into())))
+    }
+    fn newline(&self) -> PrinterSyntax<()> {
+        PrinterSyntax(Box::new(|()| Some("\n".into())))
+    }
 
-    fn uint(&self) -> PrinterSyntax<usize> { PrinterSyntax(Box::new(|n| Some(n.to_string()))) }
+    fn uint(&self) -> PrinterSyntax<usize> {
+        PrinterSyntax(Box::new(|n| Some(n.to_string())))
+    }
 }
 
 // Parser implementation
@@ -188,7 +221,9 @@ impl Syntax for IrParser {
         IrParserSyntax(Box::new(move |input| (left.0)(input).or_else(|| (right.0)(input))))
     }
 
-    fn empty<A: 'static>(&self) -> Self::Output<A> { IrParserSyntax(Box::new(|_| None)) }
+    fn empty<A: 'static>(&self) -> Self::Output<A> {
+        IrParserSyntax(Box::new(|_| None))
+    }
 
     fn literal_str(&self, s: &'static str) -> Self::Output<()> {
         IrParserSyntax(Box::new(move |input| input.strip_prefix(s).map(|rest| ((), rest))))
@@ -261,18 +296,20 @@ impl Syntax for IrParser {
         }))
     }
 
-    fn keyword(&self, s: &'static str) -> Self::Output<()> { self.literal_str(s) }
+    fn keyword(&self, s: &'static str) -> Self::Output<()> {
+        self.literal_str(s)
+    }
 }
 
 // Isos for IR types
 //
 // These isomorphisms are bijections between algebraic data types and their "flat" representations. Note that these don't go from String to IrArena
-
 mod isos {
-    use super::*;
-    use crate::hfs::{BlockId, InstId, IrOperation, Literal, TerminatorInst};
+    use indexmap::IndexMap;
 
-    // Literal ---
+    use super::*;
+    use crate::hfs::{BlockId, InstId, Instruction, IrFuncId, IrOperation, Literal, SourceInfo, TerminatorInst, TypeId};
+
     pub fn literal_integer() -> Iso<i32, Literal> {
         Iso::new(|n| Some(Literal::Integer(n)), |lit| if let Literal::Integer(n) = lit { Some(n) } else { None })
     }
@@ -513,4 +550,168 @@ mod isos {
             },
         )
     }
+
+    pub fn inst_load() -> Iso<InstId, Instruction> {
+        Iso::new(
+            |address| Some(Instruction::Load { source_info: SourceInfo::default(), address, type_id: TypeId::default() }),
+            |inst| {
+                if let Instruction::Load { address, .. } = inst {
+                    Some(address)
+                } else {
+                    None
+                }
+            },
+        )
+    }
+
+    pub fn inst_store() -> Iso<(InstId, InstId), Instruction> {
+        Iso::new(
+            |(value, address)| Some(Instruction::Store { source_info: SourceInfo::default(), address, value }),
+            |inst| {
+                if let Instruction::Store { address, value, .. } = inst {
+                    Some((value, address))
+                } else {
+                    None
+                }
+            },
+        )
+    }
+    pub fn inst_alloca() -> Iso<TypeId, Instruction> {
+        Iso::new(
+            |type_id| Some(Instruction::Alloca { source_info: SourceInfo::default(), type_id }),
+            |inst| {
+                if let Instruction::Alloca { type_id, .. } = inst {
+                    Some(type_id)
+                } else {
+                    None
+                }
+            },
+        )
+    }
+    pub fn inst_parameter() -> Iso<(usize, TypeId), Instruction> {
+        Iso::new(
+            |(index, type_id)| Some(Instruction::Parameter { source_info: SourceInfo::default(), index, type_id }),
+            |inst| {
+                if let Instruction::Parameter { index, type_id, .. } = inst {
+                    Some((index, type_id))
+                } else {
+                    None
+                }
+            },
+        )
+    }
+
+    pub fn inst_return_value() -> Iso<TypeId, Instruction> {
+        Iso::new(
+            |type_id| Some(Instruction::ReturnValue { source_info: SourceInfo::default(), type_id }),
+            |inst| {
+                if let Instruction::ReturnValue { type_id, .. } = inst {
+                    Some(type_id)
+                } else {
+                    None
+                }
+            },
+        )
+    }
+
+    pub fn inst_function_call() -> Iso<(IrFuncId, Vec<InstId>), Instruction> {
+        Iso::new(
+            |(func_id, args)| {
+                Some(Instruction::FunctionCall {
+                    source_info: SourceInfo::default(),
+                    func_id,
+                    args,
+                    // NOTE: ignoring is_move and return_values should be fine as long as we don't test the stack directly at the IR level (if we do this we are stupid)
+                    is_move: false,
+                    return_values: vec![],
+                })
+            },
+            |inst| {
+                if let Instruction::FunctionCall { func_id, args, .. } = inst {
+                    Some((func_id, args))
+                } else {
+                    None
+                }
+            },
+        )
+    }
+
+    pub fn inst_phi() -> Iso<Vec<(BlockId, InstId)>, Instruction> {
+        Iso::new(
+            |pairs: Vec<(BlockId, InstId)>| {
+                Some(Instruction::Phi {
+                    source_info: SourceInfo::default(),
+                    incoming: pairs.into_iter().collect::<IndexMap<_, _>>(),
+                })
+            },
+            |inst| {
+                if let Instruction::Phi { incoming, .. } = inst {
+                    Some(incoming.into_iter().collect())
+                } else {
+                    None
+                }
+            },
+        )
+    }
+
+    pub fn inst_tuple() -> Iso<Vec<InstId>, Instruction> {
+        Iso::new(
+            |instructions| Some(Instruction::Tuple { source_info: SourceInfo::default(), instructions }),
+            |inst| {
+                if let Instruction::Tuple { instructions, .. } = inst {
+                    Some(instructions)
+                } else {
+                    None
+                }
+            },
+        )
+    }
+
+    pub fn inst_operation() -> Iso<IrOperation, Instruction> {
+        Iso::new(
+            |op| Some(Instruction::Operation { source_info: SourceInfo::default(), op }),
+            |inst| {
+                if let Instruction::Operation { op, .. } = inst {
+                    Some(op)
+                } else {
+                    None
+                }
+            },
+        )
+    }
+
+    pub fn inst_literal() -> Iso<Literal, Instruction> {
+        Iso::new(
+            |literal| Some(Instruction::Literal { source_info: SourceInfo::default(), literal }),
+            |inst| {
+                if let Instruction::Literal { literal, .. } = inst {
+                    Some(literal)
+                } else {
+                    None
+                }
+            },
+        )
+    }
+    pub fn inst_load_element() -> Iso<(usize, InstId), Instruction> {
+        Iso::new(
+            |(index, tuple)| Some(Instruction::LoadElement { source_info: SourceInfo::default(), index, tuple }),
+            |inst| {
+                if let Instruction::LoadElement { index, tuple, .. } = inst {
+                    Some((index, tuple))
+                } else {
+                    None
+                }
+            },
+        )
+    }
+
+    pub fn type_id(names: &NameMap) -> Iso<String, TypeId> {
+        let name_to_type = names.name_to_type.clone();
+        let type_to_name = names.type_to_name.clone();
+        Iso::new(move |name| name_to_type.get(&name).copied(), move |id| type_to_name.get(&id).cloned())
+    }
 }
+
+// Syntax descriptors
+//
+// This is the part that bridges text and AST, in an abstract way that doesn't require knowledge about the printer or parser, with help of the Isos

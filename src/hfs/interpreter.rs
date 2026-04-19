@@ -152,8 +152,10 @@ impl Interpreter {
             for inst_id in block.instructions.clone() {
                 // Invalidate cached values for this block's instructions
                 // so that loads and operations are re-evaluated on each visit.
-                if !matches!(self.arena.get_inst(inst_id), Instruction::Parameter { .. }) {
+                if !matches!(self.arena.get_inst(inst_id), Instruction::Parameter { .. } | Instruction::ReturnValue { .. }) {
                     // parameters should only be interpreted once at the start of a block
+                    // return values are bound by function calls which means we never wanna invalidate them from the cache
+                    // as each function call overwrites them correctly
                     self.curr_call_frame_mut().inst_values.remove(&inst_id);
                 }
 
@@ -181,7 +183,7 @@ impl Interpreter {
         }
 
         match self.arena.get_inst(inst_id) {
-            Instruction::Parameter { source_info: _, index: _, type_id: _ } => {
+            Instruction::Parameter { .. } => {
                 // parameters should always hit the cache (because they are bound at the start of
                 // the function
                 panic!(
@@ -190,12 +192,11 @@ impl Interpreter {
                     self.arena.get_func(self.curr_call_frame().func_id).get_repr(&self.arena)
                 )
             },
-            Instruction::ReturnValue { source_info: _, type_id } => {
-                RuntimeValue::default(self.arena.get_type(*type_id))
-                // panic!(
-                //     "[internal error] found unbound 'Instruction::ReturnValue'. a ReturnValue should be bound to a value before \
-                //      being interpreted"
-                // )
+            Instruction::ReturnValue { .. } => {
+                panic!(
+                    "[internal error] found unbound 'Instruction::ReturnValue'. a ReturnValue should be bound to a value before \
+                     being interpreted"
+                )
             },
             Instruction::FunctionCall { source_info: _, args, func_id, is_move: _, return_values } => {
                 let mut arg_values = Vec::new();

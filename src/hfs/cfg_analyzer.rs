@@ -623,23 +623,20 @@ impl CfgAnalyzer {
                     Some(func_id) => *func_id,
                     None => panic!("[internal error] tried making a function call before creating the associated IrFuncId"),
                 };
-                let mut new_return_vals = Vec::new();
-                for val in return_values {
-                    let source_info = self.ast_arena.get_expr_token(val).source_info.clone();
-                    let Expression::ReturnValue(type_id) = self.ast_arena.get_expr(val) else {
-                        panic!("[internal error] expected Expression::ReturnValue in return_values")
-                    };
-                    let retval = self.arena.alloc_inst_for(
-                        Instruction::ReturnValue { source_info, type_id: *type_id },
-                        self.ir_context.curr_insert_block,
-                    );
-                    self.arena.push_to_hfs_stack(retval); // keep the stack state correct
-                    new_return_vals.push(retval);
-                }
-                self.arena.alloc_inst_for(
-                    Instruction::FunctionCall { source_info, args: inst_args, func_id, is_move, return_values: new_return_vals },
+
+                let func_call = self.arena.alloc_inst_for(
+                    Instruction::FunctionCall { source_info, args: inst_args, func_id, is_move, return_values: vec![] },
                     self.ir_context.curr_insert_block,
                 );
+                let mut new_return_vals = Vec::new();
+                for val in return_values {
+                    let retval = self.lower_expr(val)?;
+                    new_return_vals.push(retval);
+                    self.arena.push_to_hfs_stack(retval); // keep the stack state correct
+                }
+                if let Instruction::FunctionCall { return_values, .. } = self.arena.get_inst_mut(func_call) {
+                    *return_values = new_return_vals;
+                }
                 Ok(())
             },
         }

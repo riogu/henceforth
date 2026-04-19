@@ -13,10 +13,7 @@
 
 use std::collections::HashMap;
 
-use crate::hfs::{
-    BlockId, GlobalIrVarDeclaration, GlobalIrVarId, InstId, Instruction, IrArena, IrFuncId, IrFunction, IrOperation,
-    IrTopLevelId, Literal, SourceInfo, TermInstId, TerminatorInst, Type, TypeId, VarId,
-};
+use crate::hfs::{BlockId, InstId};
 
 pub struct NameMap {
     pub inst_to_name: HashMap<InstId, String>,
@@ -115,9 +112,7 @@ impl Syntax for Printer {
         }))
     }
 
-    fn token(&self) -> PrinterSyntax<char> {
-        PrinterSyntax(Box::new(|c| Some(c.to_string())))
-    }
+    fn token(&self) -> PrinterSyntax<char> { PrinterSyntax(Box::new(|c| Some(c.to_string()))) }
 
     fn product<A, B>(&self, left: Self::Output<A>, right: Self::Output<B>) -> Self::Output<(A, B)> {
         PrinterSyntax(Box::new(move |(a, b)| {
@@ -131,17 +126,11 @@ impl Syntax for Printer {
         PrinterSyntax(Box::new(move |a: A| (left.0)(a.clone()).or_else(|| right.0(a))))
     }
 
-    fn empty<A>(&self) -> Self::Output<A> {
-        PrinterSyntax(Box::new(|_| None))
-    }
+    fn empty<A>(&self) -> Self::Output<A> { PrinterSyntax(Box::new(|_| None)) }
 
-    fn keyword(&self, s: &'static str) -> Self::Output<()> {
-        self.literal_str(s)
-    }
+    fn keyword(&self, s: &'static str) -> Self::Output<()> { self.literal_str(s) }
 
-    fn literal_str(&self, s: &'static str) -> PrinterSyntax<()> {
-        PrinterSyntax(Box::new(move |()| Some(s.to_string())))
-    }
+    fn literal_str(&self, s: &'static str) -> PrinterSyntax<()> { PrinterSyntax(Box::new(move |()| Some(s.to_string()))) }
 
     fn many<A>(&self, item: Self::Output<A>) -> Self::Output<Vec<A>> {
         PrinterSyntax(Box::new(move |xs: Vec<A>| {
@@ -160,19 +149,11 @@ impl Syntax for Printer {
         }))
     }
 
-    fn whitespace(&self) -> PrinterSyntax<()> {
-        PrinterSyntax(Box::new(|()| Some(" ".into())))
-    }
-    fn opt_whitespace(&self) -> PrinterSyntax<()> {
-        PrinterSyntax(Box::new(|()| Some("".into())))
-    }
-    fn newline(&self) -> PrinterSyntax<()> {
-        PrinterSyntax(Box::new(|()| Some("\n".into())))
-    }
+    fn whitespace(&self) -> PrinterSyntax<()> { PrinterSyntax(Box::new(|()| Some(" ".into()))) }
+    fn opt_whitespace(&self) -> PrinterSyntax<()> { PrinterSyntax(Box::new(|()| Some("".into()))) }
+    fn newline(&self) -> PrinterSyntax<()> { PrinterSyntax(Box::new(|()| Some("\n".into()))) }
 
-    fn uint(&self) -> PrinterSyntax<usize> {
-        PrinterSyntax(Box::new(|n| Some(n.to_string())))
-    }
+    fn uint(&self) -> PrinterSyntax<usize> { PrinterSyntax(Box::new(|n| Some(n.to_string()))) }
 }
 
 // Parser implementation
@@ -207,9 +188,7 @@ impl Syntax for IrParser {
         IrParserSyntax(Box::new(move |input| (left.0)(input).or_else(|| (right.0)(input))))
     }
 
-    fn empty<A: 'static>(&self) -> Self::Output<A> {
-        IrParserSyntax(Box::new(|_| None))
-    }
+    fn empty<A: 'static>(&self) -> Self::Output<A> { IrParserSyntax(Box::new(|_| None)) }
 
     fn literal_str(&self, s: &'static str) -> Self::Output<()> {
         IrParserSyntax(Box::new(move |input| input.strip_prefix(s).map(|rest| ((), rest))))
@@ -282,9 +261,7 @@ impl Syntax for IrParser {
         }))
     }
 
-    fn keyword(&self, s: &'static str) -> Self::Output<()> {
-        self.literal_str(s)
-    }
+    fn keyword(&self, s: &'static str) -> Self::Output<()> { self.literal_str(s) }
 }
 
 // Isos for IR types
@@ -292,9 +269,8 @@ impl Syntax for IrParser {
 // These isomorphisms are bijections between algebraic data types and their "flat" representations. Note that these don't go from String to IrArena
 
 mod isos {
-    use crate::hfs::{BlockId, InstId, IrOperation, Literal, TerminatorInst};
-
     use super::*;
+    use crate::hfs::{BlockId, InstId, IrOperation, Literal, TerminatorInst};
 
     // Literal ---
     pub fn literal_integer() -> Iso<i32, Literal> {

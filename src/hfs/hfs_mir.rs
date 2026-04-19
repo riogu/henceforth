@@ -4,7 +4,7 @@ use colored::{ColoredString, Colorize, CustomColor};
 use indexmap::IndexMap;
 use slotmap::new_key_type;
 
-use crate::hfs::{ast::*, IrArena, Literal, SourceInfo};
+use crate::hfs::{IrArena, Literal, SourceInfo, ast::*};
 /*
 =================================================================================================
 Control Flow Graph IR Pass (HFS MIR - Medium-level IR)
@@ -25,40 +25,26 @@ pub enum InstOrTermId {
     TermInstId(TermInstId),
 }
 impl From<InstId> for InstOrTermId {
-    fn from(id: InstId) -> Self {
-        InstOrTermId::InstId(id)
-    }
+    fn from(id: InstId) -> Self { InstOrTermId::InstId(id) }
 }
 
 impl From<TermInstId> for InstOrTermId {
-    fn from(id: TermInstId) -> Self {
-        InstOrTermId::TermInstId(id)
-    }
+    fn from(id: TermInstId) -> Self { InstOrTermId::TermInstId(id) }
 }
 impl Display for InstId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0.as_ffi() as u32)
-    }
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { write!(f, "{}", self.0.as_ffi() as u32) }
 }
 impl Display for TermInstId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0.as_ffi() as u32)
-    }
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { write!(f, "{}", self.0.as_ffi() as u32) }
 }
 impl Display for BlockId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0.as_ffi() as u32)
-    }
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { write!(f, "{}", self.0.as_ffi() as u32) }
 }
 impl Display for IrFuncId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0.as_ffi() as u32)
-    }
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { write!(f, "{}", self.0.as_ffi() as u32) }
 }
 impl Display for GlobalIrVarId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0.as_ffi() as u32)
-    }
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { write!(f, "{}", self.0.as_ffi() as u32) }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -430,9 +416,8 @@ impl CfgPrintable for IrOperation {
 impl CfgPrintable for TerminatorInst {
     fn get_repr(&self, arena: &IrArena) -> ColoredString {
         match self {
-            TerminatorInst::Return { source_info: _, return_tuple: inst_id } => {
-                format!("{} {}", "return".custom_color(CustomColor::new(202, 167, 244)), arena.inst_name(*inst_id)).into()
-            },
+            TerminatorInst::Return { source_info: _, return_tuple: inst_id } =>
+                format!("{} {}", "return".custom_color(CustomColor::new(202, 167, 244)), arena.inst_name(*inst_id)).into(),
             TerminatorInst::Branch { cond, true_block, false_block, .. } => format!(
                 "{} {}, {}, {}",
                 "branch".custom_color(CustomColor::new(202, 167, 244)),
@@ -441,9 +426,8 @@ impl CfgPrintable for TerminatorInst {
                 arena.get_block(*false_block).name
             )
             .into(),
-            TerminatorInst::Jump { source_info: _, target: block_id } => {
-                format!("{} {}", "jump".custom_color(CustomColor::new(202, 167, 244)), arena.get_block(*block_id).name).into()
-            },
+            TerminatorInst::Jump { source_info: _, target: block_id } =>
+                format!("{} {}", "jump".custom_color(CustomColor::new(202, 167, 244)), arena.get_block(*block_id).name).into(),
             TerminatorInst::Unreachable => format!("{}", "unreachable".custom_color(CustomColor::new(202, 167, 244))).into(),
         }
     }
@@ -452,14 +436,22 @@ impl CfgPrintable for TerminatorInst {
 impl CfgPrintable for Instruction {
     fn get_repr(&self, arena: &IrArena) -> ColoredString {
         match self {
-            Instruction::Parameter { source_info: _, index, type_id } => {
-                format!("{} %arg{}", arena.get_type(*type_id).get_repr(arena), index).into()
-            },
+            Instruction::Parameter { source_info: _, index, type_id } =>
+                format!("{} %arg{}", arena.get_type(*type_id).get_repr(arena), index).into(),
             Instruction::FunctionCall { source_info: _, args, func_id, is_move: _, return_values: _ } => {
                 let func = arena.get_func(*func_id);
-                let args_repr: Vec<String> = args.iter().map(|id| arena.inst_name(*id)).collect();
-                format!("{} {}, {}", "call".custom_color(CustomColor::new(202, 167, 244)), func.name.blue(), args_repr.join(", "))
+                if args.is_empty() {
+                    format!("{} {}", "call".custom_color(CustomColor::new(202, 167, 244)), func.name.blue()).into()
+                } else {
+                    let args_repr: Vec<String> = args.iter().map(|id| arena.inst_name(*id)).collect();
+                    format!(
+                        "{} {}({})",
+                        "call".custom_color(CustomColor::new(202, 167, 244)),
+                        func.name.blue(),
+                        args_repr.join(", ")
+                    )
                     .into()
+                }
             },
             Instruction::Phi { source_info: _, incoming } => {
                 let incoming: Vec<String> = incoming
@@ -492,13 +484,11 @@ impl CfgPrintable for Instruction {
                 arena.inst_name(*tuple)
             )
             .into(),
-            Instruction::ReturnValue { source_info: _, type_id } => {
+            Instruction::ReturnValue { source_info: _, type_id } =>
                 format!("{} {}", "retval".custom_color(CustomColor::new(202, 167, 244)), arena.get_type(*type_id).get_repr(arena))
-                    .into()
-            },
-            Instruction::Load { source_info: _, address, type_id: _ } => {
-                format!("{} {}", "load".custom_color(CustomColor::new(202, 167, 244)), arena.inst_name(*address)).into()
-            },
+                    .into(),
+            Instruction::Load { source_info: _, address, type_id: _ } =>
+                format!("{} {}", "load".custom_color(CustomColor::new(202, 167, 244)), arena.inst_name(*address)).into(),
             Instruction::Store { source_info: _, address, value } => format!(
                 "{} {}, {}",
                 "store".custom_color(CustomColor::new(202, 167, 244)),
@@ -522,7 +512,18 @@ impl CfgPrintable for BasicBlock {
         let non_term_inst_repr = self
             .instructions
             .iter()
-            .map(|id| format!("    {} = {}", arena.inst_name(*id), arena.get_inst(*id).get_repr(arena)))
+            .map(|id| {
+                let inst = arena.get_inst(*id);
+                if matches!(inst, Instruction::FunctionCall { .. }) {
+                    // TODO: this is hardcoded for functions but there will be other instructions
+                    // that don't really produce any "output", and so we don't wanna print their IR
+                    // numbers in the IR representation for clarity.
+                    // For now though its really just functions and terminators
+                    format!("    {}", inst.get_repr(arena))
+                } else {
+                    format!("    {} = {}", arena.inst_name(*id), inst.get_repr(arena))
+                }
+            })
             .collect::<Vec<String>>()
             .join("\n");
         let terminator_repr = match self.terminator {

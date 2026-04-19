@@ -345,15 +345,12 @@ impl StackAnalyzer {
                                 let mut if_body_source_infos = Vec::new();
                                 for stmt in stmts {
                                     match stmt {
-                                        TopLevelId::VariableDecl(var_id) => {
-                                            if_body_source_infos.push(self.arena.get_var_token(*var_id).source_info.clone())
-                                        },
-                                        TopLevelId::FunctionDecl(func_id) => {
-                                            if_body_source_infos.push(self.arena.get_function_token(*func_id).source_info.clone())
-                                        },
-                                        TopLevelId::Statement(stmt_id) => {
-                                            if_body_source_infos.push(self.arena.get_stmt_token(*stmt_id).source_info.clone())
-                                        },
+                                        TopLevelId::VariableDecl(var_id) =>
+                                            if_body_source_infos.push(self.arena.get_var_token(*var_id).source_info.clone()),
+                                        TopLevelId::FunctionDecl(func_id) =>
+                                            if_body_source_infos.push(self.arena.get_function_token(*func_id).source_info.clone()),
+                                        TopLevelId::Statement(stmt_id) =>
+                                            if_body_source_infos.push(self.arena.get_stmt_token(*stmt_id).source_info.clone()),
                                     }
                                 }
                                 return stack_analyzer_error!(
@@ -395,15 +392,12 @@ impl StackAnalyzer {
                         let mut while_body_source_infos = Vec::new();
                         for stmt in stmts {
                             match stmt {
-                                TopLevelId::VariableDecl(var_id) => {
-                                    while_body_source_infos.push(self.arena.get_var_token(*var_id).source_info.clone())
-                                },
-                                TopLevelId::FunctionDecl(func_id) => {
-                                    while_body_source_infos.push(self.arena.get_function_token(*func_id).source_info.clone())
-                                },
-                                TopLevelId::Statement(stmt_id) => {
-                                    while_body_source_infos.push(self.arena.get_stmt_token(*stmt_id).source_info.clone())
-                                },
+                                TopLevelId::VariableDecl(var_id) =>
+                                    while_body_source_infos.push(self.arena.get_var_token(*var_id).source_info.clone()),
+                                TopLevelId::FunctionDecl(func_id) =>
+                                    while_body_source_infos.push(self.arena.get_function_token(*func_id).source_info.clone()),
+                                TopLevelId::Statement(stmt_id) =>
+                                    while_body_source_infos.push(self.arena.get_stmt_token(*stmt_id).source_info.clone()),
                             }
                         }
                         return stack_analyzer_error!(
@@ -539,10 +533,10 @@ impl StackAnalyzer {
                 // from what the type was written as (this is the language semantics of a "stack view")
                 arg_types.reverse();
                 arg_expr_tokens.reverse();
-                let arg_type_id = self.arena.alloc_type(
-                    Type::Tuple { type_ids: arg_types, ptr_count: 0 },
-                    Token { kind: TokenKind::LeftParen, source_info: SourceInfo::new(0, 0, 0) },
-                );
+                let arg_type_id = self.arena.alloc_type(Type::Tuple { type_ids: arg_types, ptr_count: 0 }, Token {
+                    kind: TokenKind::LeftParen,
+                    source_info: SourceInfo::new(0, 0, 0),
+                });
 
                 if !is_move {
                     // restore the stack
@@ -601,13 +595,11 @@ impl StackAnalyzer {
                         }
                         Ok(identifier)
                     },
-                    Identifier::Function(_) => {
-                        return stack_analyzer_error!(
-                            StackAnalyzerErrorKind::AssignValueToFunction,
-                            &self.arena,
-                            vec![assign_tkn.source_info, token.source_info]
-                        )
-                    },
+                    Identifier::Function(_) =>
+                        return stack_analyzer_error!(StackAnalyzerErrorKind::AssignValueToFunction, &self.arena, vec![
+                            assign_tkn.source_info,
+                            token.source_info
+                        ]),
                 }
             },
             _ => unreachable!("[internal error] you're assigning to something that isn't an identifier"),
@@ -622,13 +614,11 @@ impl StackAnalyzer {
         };
         let identifier = self.scope_resolution_stack.find_identifier(&identifier, token, &self.arena)?;
         match identifier {
-            Identifier::GlobalVar(_) | Identifier::Variable(_) => {
-                return stack_analyzer_error!(
-                    StackAnalyzerErrorKind::CallVariableAsFunction,
-                    &self.arena,
-                    vec![assign_tkn.source_info, self.unresolved_arena.get_unresolved_expr_token(id).source_info]
-                )
-            },
+            Identifier::GlobalVar(_) | Identifier::Variable(_) =>
+                return stack_analyzer_error!(StackAnalyzerErrorKind::CallVariableAsFunction, &self.arena, vec![
+                    assign_tkn.source_info,
+                    self.unresolved_arena.get_unresolved_expr_token(id).source_info
+                ]),
             Identifier::Function(func_id) => {
                 self.arena.curr_func_call_provenances[func_id.0] = ExprProvenance::RuntimeValue;
                 // doing it this way because we dont really care about evaluating functions at
@@ -656,9 +646,8 @@ impl StackAnalyzer {
                     token,
                 ))
             },
-            UnresolvedExpression::Literal(literal) => {
-                Ok(self.arena.alloc_and_push_to_hfs_stack(Expression::Literal(literal), ExprProvenance::CompiletimeValue, token))
-            },
+            UnresolvedExpression::Literal(literal) =>
+                Ok(self.arena.alloc_and_push_to_hfs_stack(Expression::Literal(literal), ExprProvenance::CompiletimeValue, token)),
             UnresolvedExpression::Tuple { expressions } => {
                 // the tuple's type is formed recursively whenever someone wants it
                 // by calling arena.get_type_of_expr(tuple_expr_id); (dont create it here)
@@ -795,75 +784,60 @@ impl StackAnalyzer {
             },
             "@dup" => {
                 let id = self.arena.last_or_error(vec![token.clone()])?;
-                let expr = self.arena.get_expr(id).clone();
-                self.arena.alloc_and_push_to_hfs_stack(expr, ExprProvenance::RuntimeValue, token);
+                self.arena.hfs_stack.push(id);
                 Ok(())
             },
             "@swap" => {
                 let b_id = self.arena.pop_or_error(vec![token.clone()])?;
                 let a_id = self.arena.pop_or_error(vec![token.clone()])?;
-                let a_expr = self.arena.get_expr(a_id).clone();
-                let b_expr = self.arena.get_expr(b_id).clone();
-                self.arena.alloc_and_push_to_hfs_stack(b_expr, ExprProvenance::RuntimeValue, token.clone());
-                self.arena.alloc_and_push_to_hfs_stack(a_expr, ExprProvenance::RuntimeValue, token);
+                self.arena.hfs_stack.push(b_id);
+                self.arena.hfs_stack.push(a_id);
                 Ok(())
             },
             "@over" => {
                 let b_id = self.arena.pop_or_error(vec![token.clone()])?;
                 let a_id = self.arena.pop_or_error(vec![token.clone()])?;
-                let a_expr = self.arena.get_expr(a_id).clone();
-                let b_expr = self.arena.get_expr(b_id).clone();
-                self.arena.alloc_and_push_to_hfs_stack(a_expr.clone(), ExprProvenance::RuntimeValue, token.clone());
-                self.arena.alloc_and_push_to_hfs_stack(b_expr, ExprProvenance::RuntimeValue, token.clone());
-                self.arena.alloc_and_push_to_hfs_stack(a_expr, ExprProvenance::RuntimeValue, token);
+                self.arena.hfs_stack.push(a_id);
+                self.arena.hfs_stack.push(b_id);
+                self.arena.hfs_stack.push(a_id);
                 Ok(())
             },
             "@rot" => {
                 let c_id = self.arena.pop_or_error(vec![token.clone()])?;
                 let b_id = self.arena.pop_or_error(vec![token.clone()])?;
                 let a_id = self.arena.pop_or_error(vec![token.clone()])?;
-                let a_expr = self.arena.get_expr(a_id).clone();
-                let b_expr = self.arena.get_expr(b_id).clone();
-                let c_expr = self.arena.get_expr(c_id).clone();
-                self.arena.alloc_and_push_to_hfs_stack(b_expr, ExprProvenance::RuntimeValue, token.clone());
-                self.arena.alloc_and_push_to_hfs_stack(c_expr, ExprProvenance::RuntimeValue, token.clone());
-                self.arena.alloc_and_push_to_hfs_stack(a_expr, ExprProvenance::RuntimeValue, token);
+                self.arena.hfs_stack.push(b_id);
+                self.arena.hfs_stack.push(c_id);
+                self.arena.hfs_stack.push(a_id);
                 Ok(())
             },
             "@rrot" => {
                 let c_id = self.arena.pop_or_error(vec![token.clone()])?;
                 let b_id = self.arena.pop_or_error(vec![token.clone()])?;
                 let a_id = self.arena.pop_or_error(vec![token.clone()])?;
-                let a_expr = self.arena.get_expr(a_id).clone();
-                let b_expr = self.arena.get_expr(b_id).clone();
-                let c_expr = self.arena.get_expr(c_id).clone();
-                self.arena.alloc_and_push_to_hfs_stack(c_expr, ExprProvenance::RuntimeValue, token.clone());
-                self.arena.alloc_and_push_to_hfs_stack(a_expr, ExprProvenance::RuntimeValue, token.clone());
-                self.arena.alloc_and_push_to_hfs_stack(b_expr, ExprProvenance::RuntimeValue, token);
+                self.arena.hfs_stack.push(c_id);
+                self.arena.hfs_stack.push(a_id);
+                self.arena.hfs_stack.push(b_id);
                 Ok(())
             },
             "@nip" => {
                 let b_id = self.arena.pop_or_error(vec![token.clone()])?;
                 let _ = self.arena.pop_or_error(vec![token.clone()])?;
-                let b_expr = self.arena.get_expr(b_id).clone();
-                self.arena.alloc_and_push_to_hfs_stack(b_expr, ExprProvenance::RuntimeValue, token);
+                self.arena.hfs_stack.push(b_id);
                 Ok(())
             },
             "@tuck" => {
                 let b_id = self.arena.pop_or_error(vec![token.clone()])?;
                 let a_id = self.arena.pop_or_error(vec![token.clone()])?;
-                let a_expr = self.arena.get_expr(a_id).clone();
-                let b_expr = self.arena.get_expr(b_id).clone();
-                self.arena.alloc_and_push_to_hfs_stack(b_expr.clone(), ExprProvenance::RuntimeValue, token.clone());
-                self.arena.alloc_and_push_to_hfs_stack(a_expr, ExprProvenance::RuntimeValue, token.clone());
-                self.arena.alloc_and_push_to_hfs_stack(b_expr, ExprProvenance::RuntimeValue, token);
+                self.arena.hfs_stack.push(b_id);
+                self.arena.hfs_stack.push(a_id);
+                self.arena.hfs_stack.push(b_id);
                 Ok(())
             },
             "@rev" => {
                 while !self.arena.hfs_stack.is_empty() {
                     let id = self.arena.pop_or_error(vec![token.clone()])?;
-                    let expr = self.arena.get_expr(id).clone();
-                    self.arena.alloc_and_push_to_hfs_stack(expr, ExprProvenance::RuntimeValue, token.clone());
+                    self.arena.hfs_stack.push(id);
                 }
                 Ok(())
             },

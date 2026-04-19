@@ -5,6 +5,7 @@ A statically-typed stack-based programming language exploring middle-end compile
 ## Example
 
 ```rust
+fn print: (str) -> () { @pop } // this is an intrinsic (satisify the compiler for now)
 fn factorial: (i32) -> (i32) {
     let n: i32;
     let result: i32;
@@ -19,7 +20,10 @@ fn factorial: (i32) -> (i32) {
 
 fn main: () -> () {
     @(5) &> factorial;
-    @(120 ==);
+    if @(@dup 120 ==) {
+        @("factorial example\n") &> print;
+    }
+    @pop
 }
 ```
 

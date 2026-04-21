@@ -226,8 +226,7 @@ impl Mem2Reg {
             let predecessors = arena.get_block(block_id).predecessors.clone();
             let incoming: IndexMap<BlockId, InstId> =
                 predecessors.into_iter().map(|pred| (pred, InstId::null() /* placeholder to be filled in later */)).collect();
-            inserted_phis
-                .push(arena.alloc_inst_at_start_for(Instruction::Phi { source_info: source_info.clone(), incoming }, block_id));
+            inserted_phis.push(arena.alloc_inst_at_start_for(Instruction::Phi { source_info, incoming }, block_id));
         }
         inserted_phis
     }
@@ -236,7 +235,7 @@ impl Mem2Reg {
         let mut promotable_allocas = HashSet::new();
         for block_id in arena.get_blocks_in(func_id) {
             for inst_id in &arena.get_block(block_id).instructions {
-                if Mem2Reg::is_promotable_alloca(arena, &def_use, *inst_id) {
+                if Mem2Reg::is_promotable_alloca(arena, def_use, *inst_id) {
                     promotable_allocas.insert(*inst_id);
                 }
             }
@@ -266,13 +265,13 @@ impl Mem2Reg {
     }
 }
 
+// ======================================================================================
+// phase 2 of SSA construction algorithm
+// ======================================================================================
+// the idea is to walk the dominator tree top-down,
+// maintaining a stack of what is the current SSA value for each alloca.
+// its like interpreting the code but we rewrite the IR instead
 impl Mem2Reg {
-    // ======================================================================================
-    // phase 2 of SSA construction algorithm
-    // ======================================================================================
-    // the idea is to walk the dominator tree top-down,
-    // maintaining a stack of what is the current SSA value for each alloca.
-    // its like interpreting the code but we rewrite the IR instead
     fn rename_variables(
         arena: &mut IrArena,
         phi_to_alloca: &HashMap<InstId, InstId>,
@@ -315,18 +314,18 @@ impl Mem2Reg {
             for inst_id in arena.get_block(successor).instructions.clone() {
                 // For each successor block, if it has a phi for one of our allocas,
                 // fill in the phi operand for the current block's edge with the top of the alloca's stack.
-                if let Some(alloca) = phi_to_alloca.get(&inst_id) {
-                    if let Instruction::Phi { incoming, .. } = arena.get_inst_mut(inst_id) {
-                        let latest_def = *alloca_stacks[alloca].last().expect("[internal error] found no value for alloca");
-                        incoming.entry(block_id).insert_entry(latest_def);
-                    }
+                if let Some(alloca) = phi_to_alloca.get(&inst_id)
+                    && let Instruction::Phi { incoming, .. } = arena.get_inst_mut(inst_id)
+                {
+                    let latest_def = *alloca_stacks[alloca].last().expect("[internal error] found no value for alloca");
+                    incoming.entry(block_id).insert_entry(latest_def);
                 }
             }
         }
         // recursively continue renaming in dominator tree successor order
         for dom_successor in dom_tree.successors(block_id) {
             // store the state the stack had before we went into a successor block
-            let snapshot: HashMap<InstId, usize> = alloca_stacks.iter().map(|(k, v)| (*k, v.len())).collect();
+            let snapshot: Vec<(InstId, usize)> = alloca_stacks.iter().map(|(k, v)| (*k, v.len())).collect();
             Mem2Reg::rename_variables(arena, phi_to_alloca, promotable_allocas, dom_tree, def_use, alloca_stacks, *dom_successor);
             // restore the alloca_stacks back to how it was before the successor changed it
             for (alloca, len) in snapshot {
@@ -369,7 +368,7 @@ impl CleanCFG {
                     },
                 TerminatorInst::Jump { target, .. } => {
                     let (target_term, target_block) = if let Some(target_block) = arena.try_get_block(target).cloned() {
-                        (arena.get_block_term(target).clone(), target_block)
+                        (*arena.get_block_term(target), target_block)
                     } else {
                         continue;
                     };

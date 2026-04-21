@@ -1,7 +1,7 @@
-use core::panic;
 use std::collections::{HashMap, HashSet};
 
-use slotmap::Key;
+use indexmap::IndexSet;
+use slotmap::{Key, SlotMap, new_key_type};
 
 use crate::hfs::{BlockId, InstId, InstOrTermId, Instruction, IrArena, IrFuncId};
 
@@ -86,19 +86,22 @@ impl DefUseInfo {
 // DominatorTree
 // ============================================================================
 impl IrArena {
+    /**
+       ```txt
+       Only record a block after all its successors have been recorded. So leaves of the CFG
+       (blocks with no successors, or whose successors were already visited) get recorded
+       first, and the entry block gets recorded last.
+          entry
+          /   \
+         A     B
+         |     |
+         C     D
+          \   /
+            E
+        postorder = [E, C, A, D, B, entry]
+        ```
+    */
     pub fn compute_postorder(&self, func_id: IrFuncId) -> Vec<BlockId> {
-        /* Only record a block after all its successors have been recorded. So leaves of the CFG
-           (blocks with no successors, or whose successors were already visited) get recorded
-           first, and the entry block gets recorded last.
-              entry
-              /   \
-             A     B
-             |     |
-             C     D
-              \   /
-                E
-            postorder = [E, C, A, D, B, entry]
-        */
         let mut worklist = Vec::new();
         let mut visited = HashSet::new();
         let entry = self.get_func(func_id).entry_block;
@@ -119,32 +122,33 @@ impl IrArena {
         visit_block(entry, self, &mut worklist, &mut visited);
         worklist
     }
+    /** In reverse-postorder iteration, a node is visited before any of its successor nodes has
+       been visited, except when the successor is reached by a back edge.
+          entry
+          /   \
+         A     B
+         |     |
+         C     D
+          \   /
+            E
+       reverse_postorder = [entry, B, D, A, C, E]
+    */
     pub fn compute_reverse_postorder(&self, func_id: IrFuncId) -> Vec<BlockId> {
-        /* In reverse-postorder iteration, a node is visited before any of its successor nodes has
-           been visited, except when the successor is reached by a back edge.
-              entry
-              /   \
-             A     B
-             |     |
-             C     D
-              \   /
-                E
-           reverse_postorder = [entry, B, D, A, C, E]
-        */
         let mut postorder = self.compute_postorder(func_id);
         postorder.reverse();
         postorder
     }
 }
-#[derive(Default)]
 pub struct DominatorTree {
     immediate_dominators: HashMap<BlockId, BlockId>,
     dominance_frontiers: HashMap<BlockId, Vec<BlockId>>,
     idom_successors: HashMap<BlockId, Vec<BlockId>>,
+    entry: BlockId,
 }
 
 impl DominatorTree {
-    /*
+    /**
+     ```
      This is an implemention of Cooper-Harvey-Kennedy (A Simple, Fast Dominance Algorithm, 2006)
      It can be read at: https://www.researchgate.net/publication/2569680_A_Simple_Fast_Dominance_Algorithm
 
@@ -153,22 +157,23 @@ impl DominatorTree {
           B0          n   │ DOM       │ IDOM │  DF
           │           B0  │ {0}       │  —   │  —
           v           B1  │ {0,1}     │  0   │  1
-          B1 <─────┐  B2  │ {0,1,2}   │  1   │  3
+          B1 <─────╮  B2  │ {0,1,2}   │  1   │  3
          ╱  ╲      │  B3  │ {0,1,3}   │  1   │  1
         v    v     │  B4  │ {0,1,3,4} │  3   │  —
        B2    B5    │  B5  │ {0,1,5}   │  1   │  3
-        │   ╱  ╲   │  B6  │ {0,1,5,6} │  5   │  7
-        │  v    v  │  B7  │ {0,1,5,7} │  5   │  3
-        │ B6    B8 │  B8  │ {0,1,5,8} │  5   │  7
-        │  ╲    ╱  │
-        │   v  v   │  Dom(n) = {n} ∪ ( ∩ [m ∈ preds(n)] Dom(m) )
-        │    B7    │  reverse_postorder = [B0, B1, B5, B8, B6, B7, B2, B3, B4]
-        v    │     │
-       B3 <──┘     │
-       │└──────────┘
+       │    ╱  ╲   │  B6  │ {0,1,5,6} │  5   │  7
+       │   v    v  │  B7  │ {0,1,5,7} │  5   │  3
+       │  B6    B8 │  B8  │ {0,1,5,8} │  5   │  7
+       │   ╲    ╱  │
+       │    v  v   │  Dom(n) = {n} ∪ ( ∩ [m ∈ preds(n)] Dom(m) )
+       │     B7    │  reverse_postorder = [B0, B1, B5, B8, B6, B7, B2, B3, B4]
+       v     │     │
+       B3 <──╯     │
+       │╰──────────╯
        v
        B4
      ─────────────────────────────────────────────────────────────────────────────────
+    ```
     */
     pub fn compute(arena: &IrArena, func_id: IrFuncId) -> Self {
         // 1. compute reverse postorder
@@ -183,7 +188,8 @@ impl DominatorTree {
             } // skip entry which is its own idom
         }
         let dominance_frontiers = DominatorTree::compute_dominance_frontiers(arena, func_id, &immediate_dominators);
-        Self { immediate_dominators, dominance_frontiers, idom_successors }
+        let entry = arena.get_func(func_id).entry_block;
+        Self { immediate_dominators, dominance_frontiers, idom_successors, entry }
     }
     fn compute_immediate_dominators(arena: &IrArena, func_id: IrFuncId) -> HashMap<BlockId, BlockId> {
         let mut immediate_dominators = HashMap::<BlockId, BlockId>::new();
@@ -205,12 +211,12 @@ impl DominatorTree {
         while changed {
             changed = false; // note that start node isnt in the postorder array
             for curr_block in &postorder {
-                let predecessors = &arena.get_block(*curr_block).predecessors;
+                let predecessors = arena.get_predecessors(*curr_block);
                 let mut new_idom = *predecessors
                     .iter() // pick any processed predecessor of curr_block that was processed
                     .find(|&pred| !immediate_dominators[pred].is_null())
                     .expect("[internal error] must have at least one processed predecessor");
-                for predecessor in &arena.get_block(*curr_block).predecessors {
+                for predecessor in arena.get_predecessors(*curr_block) {
                     if *predecessor == new_idom {
                         continue; // skip the picked element, new idom
                     }
@@ -269,7 +275,7 @@ impl DominatorTree {
 
         let mut dominance_frontiers = HashMap::<BlockId, Vec<BlockId>>::new();
         for curr_block in arena.get_blocks_in(func_id) {
-            let predecessors = arena.get_block(curr_block).predecessors.clone();
+            let predecessors = arena.get_predecessors(curr_block).clone();
             if predecessors.len() >= 2 {
                 // for every join point (block with 2+ predecessors), walk up from each predecessor
                 // until you hit the join point's immediate dominator.
@@ -304,6 +310,19 @@ impl DominatorTree {
     pub fn successors(&self, block_id: BlockId) -> &[BlockId] {
         self.idom_successors.get(&block_id).map_or(&[], |v| v.as_slice())
     }
+    pub fn compute_postorder(&self) -> Vec<BlockId> {
+        // gathers successors before predecessors
+        // dom_tree never revisits any node by definition (there are no back edges)
+        let mut worklist = Vec::new();
+        fn visit_block(block_id: BlockId, worklist: &mut Vec<BlockId>, dom_tree: &DominatorTree) {
+            for &successor in dom_tree.successors(block_id) {
+                visit_block(successor, worklist, dom_tree);
+            }
+            worklist.push(block_id);
+        }
+        visit_block(self.entry, &mut worklist, &self);
+        worklist
+    }
 }
 // dom tree iterators
 pub struct IdomIter<'a> {
@@ -329,3 +348,160 @@ impl<'a> Iterator for IdomIter<'a> {
 impl DominatorTree {
     pub fn iter_idom(&self, block: BlockId) -> IdomIter<'_> { IdomIter { tree: self, curr: Some(block) } }
 }
+
+// ============================================================================
+// Loop detection algorithm and LoopInfo construction
+// ============================================================================
+new_key_type! {
+    pub struct LoopId;
+}
+#[derive(Default, Clone)]
+pub struct Loop {
+    parent_loop: Option<LoopId>, // points to enclosing header
+    sub_loops: IndexSet<LoopId>,
+    // TODO: rpo order for blocks is computed on demand later by passes (add a method)
+    blocks: HashSet<BlockId>,
+    header: BlockId,
+    latches: HashSet<BlockId>, // from back-edge detection
+}
+#[derive(Default)]
+pub struct LoopInfo {
+    loops: SlotMap<LoopId, Loop>,
+    block_to_innermost_loop: HashMap<BlockId, LoopId>, // innermost containing loop
+    top_level_loops: Vec<LoopId>,
+}
+impl LoopInfo {
+    /**
+     ```
+     this is based on natural loop detection and construction from
+     Muchnick's Advanced Compiler Design & Implementation (Chap 7.4)
+     ──────────────────────────────────────────────────────────────────────────────────
+            B0        back-edge := edge(n → h) where h dom n
+            ↓
+      ╭──── B1 <───╮  B0 is a preheader for the outer loop (B4 -> B1)
+      │     ↓      │  the inner loop has no preheader created yet
+      │ ╭── B2 <─╮ │  back-edges are: (B4 → B1), (B3 → B2)
+      │ │   ↓    │ │
+      │ │   B3   │ │  we want to ask:
+      │ │   ╰────╯ │  does this block dominate any of its predecessors?
+      │ ╰─> B4     │  if so, its a header for a loop's back-edge
+      │     ╰──────╯
+      ╰───> B5        for each back-edge n, the natural loop is:
+                         {h} ∪ {nodes that reach n without going through h}
+
+      dominator tree for the graph:
+      B0 ─> B1 ─> B2 ─> B4
+            │     ╰───> B3
+            ╰─> B5
+
+      we might also find cases where we have multiple latches:
+      while (cond) {        (latch 3)     B0 <─╮<─╮<─╮
+          if (x) continue;  (latch 1)     ↓    │  │  │
+          if (y) continue;  (latch 2)     B1   │  │  │
+          ...                             ↓    │  │  │
+      }                                   B2 ──╯  │  │ (latch 1)
+      we want to model all of these as    ↓       │  │
+      one loop                            B3 ─────╯  │ (latch 2)
+                                          ↓          │
+                                          B3 ────────╯ (latch 3)
+
+     ────────────────────────────────────────────────────────────────────────────────
+    ```
+    */
+    pub fn compute(arena: &IrArena, func_id: IrFuncId) -> Self {
+        // walk all blocks in dom tree postorder on the dom tree (successors before predecessors):
+        // this means we always process inner loops before their outer loops.
+        let dom_tree = DominatorTree::compute(arena, func_id);
+        let mut loop_info = LoopInfo::default();
+        // 1. find all back edges
+        for maybe_header in dom_tree.compute_postorder() {
+            // back-edge = edge(latch → header) where header dom latch
+            let latches = arena
+                .get_predecessors(maybe_header)
+                .iter()
+                // dominating one of your predecessor identifies a loop header
+                .filter(|&&pred| dom_tree.dominates(maybe_header, pred))
+                .copied()
+                .collect::<HashSet<BlockId>>();
+            if !latches.is_empty() {
+                loop_info.build_natural_loop(maybe_header, latches, arena);
+            }
+        }
+        for (loop_id, loop_) in &loop_info.loops {
+            if loop_.parent_loop.is_none() {
+                loop_info.top_level_loops.push(loop_id);
+            }
+        }
+        loop_info
+    }
+    fn build_natural_loop(&mut self, header: BlockId, latches: HashSet<BlockId>, arena: &IrArena) -> LoopId {
+        // for each back-edge latch, the natural loop is:
+        //    {header} ∪ {nodes that reach latch without going through header}
+        let loop_id = self.loops.insert(Loop::default());
+        let mut loop_blocks = latches.clone();
+        loop_blocks.insert(header);
+        for &block in &loop_blocks {
+            self.block_to_innermost_loop.entry(block).or_insert(loop_id);
+        }
+        let mut worklist: Vec<BlockId> = loop_blocks.iter().copied().collect();
+
+        while let Some(block_id) = worklist.pop() {
+            for pred in arena.get_predecessors(block_id) {
+                // this means we hit a block of a sub loop we already processed
+                if let Some(&sub_loop_id) = self.block_to_innermost_loop.get(pred) {
+                    if sub_loop_id == loop_id {
+                        continue; // pred is already in our loop
+                    }
+                    let (outermost_sub_loop, mut preds) = self.process_subloop(sub_loop_id, loop_id, arena);
+                    // if we find an inner loop without a parent, then we are its immediate parent
+                    // if its ourselves then that means this subloop was already processed before
+                    if outermost_sub_loop != loop_id {
+                        self.loops[outermost_sub_loop].parent_loop = Some(loop_id);
+                        self.loops[loop_id].sub_loops.insert(outermost_sub_loop);
+                        // all the blocks inside this loop are also in our loop
+                        loop_blocks.extend(self.get_blocks_in(outermost_sub_loop));
+                        // we continue from preds of the loop's header
+                        worklist.append(&mut preds);
+                    }
+                } else {
+                    // if it wasn't in a sub loop, then curr is the innermost loop for this block
+                    self.block_to_innermost_loop.insert(*pred, loop_id);
+                    // walk backwards, header was added before so we wont add its preds
+                    if !loop_blocks.contains(pred) {
+                        loop_blocks.insert(*pred);
+                        worklist.push(*pred);
+                    }
+                }
+            }
+        }
+        self.loops[loop_id].header = header;
+        self.loops[loop_id].latches = latches;
+        self.loops[loop_id].blocks = loop_blocks;
+        loop_id
+    }
+    fn process_subloop(&mut self, sub_loop_id: LoopId, parent_loop_id: LoopId, arena: &IrArena) -> (LoopId, Vec<BlockId>) {
+        let mut outermost_sub_loop = sub_loop_id;
+        while let Some(parent_loop) = self.loops[outermost_sub_loop].parent_loop {
+            // walk up from this innermost loop (we always start from the innermost loop
+            // until we hit a loop with no parent (the outermost loop)
+            outermost_sub_loop = parent_loop;
+            if outermost_sub_loop == parent_loop_id {
+                // we hit the parent, means we have processed this loop before.
+                return (parent_loop_id, Vec::new());
+            }
+        }
+        // take all of the sub loop's predecessors and continue iterating from there
+        let mut worklist = Vec::new();
+        for &pred in arena.get_predecessors(self.loops[outermost_sub_loop].header) {
+            if !self.is_latch(pred, outermost_sub_loop) {
+                worklist.push(pred); // latches can't be added as they don't go "backwards" in the CFG
+            }
+        }
+        (outermost_sub_loop, worklist)
+    }
+    pub fn is_latch(&self, block_id: BlockId, loop_id: LoopId) -> bool { self.loops[loop_id].latches.contains(&block_id) }
+    pub fn get_blocks_in(&self, loop_id: LoopId) -> &HashSet<BlockId> { &self.loops[loop_id].blocks }
+}
+// also need to add preheaders to loops for loop simplified form
+// all of these are latches that belong to this current header
+// do this in LoopSimplify pass later

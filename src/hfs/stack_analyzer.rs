@@ -393,11 +393,11 @@ impl StackAnalyzer {
                         for stmt in stmts {
                             match stmt {
                                 TopLevelId::VariableDecl(var_id) =>
-                                    while_body_source_infos.push(self.arena.get_var_token(*var_id).source_info.clone()),
+                                    while_body_source_infos.push(self.arena.get_var_token(*var_id).source_info),
                                 TopLevelId::FunctionDecl(func_id) =>
-                                    while_body_source_infos.push(self.arena.get_function_token(*func_id).source_info.clone()),
+                                    while_body_source_infos.push(self.arena.get_function_token(*func_id).source_info),
                                 TopLevelId::Statement(stmt_id) =>
-                                    while_body_source_infos.push(self.arena.get_stmt_token(*stmt_id).source_info.clone()),
+                                    while_body_source_infos.push(self.arena.get_stmt_token(*stmt_id).source_info),
                             }
                         }
                         return stack_analyzer_error!(

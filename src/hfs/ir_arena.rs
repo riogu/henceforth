@@ -268,6 +268,7 @@ impl IrArena {
     }
     pub fn get_term_mut(&mut self, term_id: TermInstId) -> &mut TerminatorInst { &mut self.terminators[term_id] }
     pub fn get_block(&self, block_id: BlockId) -> &BasicBlock { &self.blocks[block_id] }
+    pub fn get_predecessors(&self, block_id: BlockId) -> &HashSet<BlockId> { &self.blocks[block_id].predecessors }
     pub fn get_block_mut(&mut self, block_id: BlockId) -> &mut BasicBlock { &mut self.blocks[block_id] }
     pub fn try_get_block(&self, block_id: BlockId) -> Option<&BasicBlock> { self.blocks.get(block_id) }
     pub fn try_get_block_mut(&mut self, block_id: BlockId) -> Option<&mut BasicBlock> { self.blocks.get_mut(block_id) }

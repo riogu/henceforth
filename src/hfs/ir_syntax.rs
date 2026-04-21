@@ -5,20 +5,30 @@
 //
 // Paper: https://dl.acm.org/doi/10.1145/2088456.1863525
 //
-// This implementation solves the problem of having a separate parser and printer, which can become out of sync.
+// This implementation solves the problem of having a separate parser and printer, which can become
+// out of sync.
 //
-// We think of parsers and printers as inverse functions of each other, going from concrete to abstract syntax, and vice-versa. We can then define a trait (Syntax trait) which both the parser and the printer implement, which defines their specific behavior.
-// However, just this isn't enough, since if we were to compose two parsers (e.g. load and store), they would return different ASTs, with no common structure, making it hard to compose them.
-// To fix this problem, we add two extra layers, flat representation and ADT, and define functions (Isos) that transform between them (we have to specify both sides, but since these correspond to the internal representation, it doesn't compromise the invertibility as much).
-// Now, instead of composing the parsers themselves, we compose the Isos
+// We think of parsers and printers as inverse functions of each other, going from concrete to
+// abstract syntax, and vice-versa. We can then define a trait (Syntax trait) which both the parser
+// and the printer implement, which defines their specific behavior. However, just this isn't
+// enough, since if we were to compose two parsers (e.g. load and store), they would return
+// different ASTs, with no common structure, making it hard to compose them. To fix this problem, we
+// add two extra layers, flat representation and ADT, and define functions (Isos) that transform
+// between them (we have to specify both sides, but since these correspond to the internal
+// representation, it doesn't compromise the invertibility as much). Now, instead of composing the
+// parsers themselves, we compose the Isos
 //
 // Our pipeline looks like this now:
 //
 // Text -> Flat representation -> ADT -> AST
 //
-// Using those Isos and the Syntax trait, we define syntax descriptors, which define the specifics of both the textual representation and the AST at the same time, by being generic over a Syntax. Note that we never specify if we are applying or unapplying the Isos in the descriptors, that is handled by the Syntax
+// Using those Isos and the Syntax trait, we define syntax descriptors, which define the specifics
+// of both the textual representation and the AST at the same time, by being generic over a Syntax.
+// Note that we never specify if we are applying or unapplying the Isos in the descriptors, that is
+// handled by the Syntax
 //
-// Additionally, since this IR can have forward references to registers and blocks, we need a pass that collects names
+// Additionally, since this IR can have forward references to registers and blocks, we need a pass
+// that collects names
 
 // Partial isomorphisms (Iso)
 // Represents a partial invertible function, that is:

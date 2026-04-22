@@ -3,9 +3,10 @@ use std::{fmt::Display, fs, path::PathBuf};
 use colored::{ColoredString, Colorize};
 
 use crate::hfs::{
-    AstArena, CfgPrintable, IrArena, SourceInfo, Type,
-    error::{CompileError, DebugInfo, number_length},
+    error::{number_length, CompileError, DebugInfo},
+    print,
     stack_analyzer_errors::StackAnalyzerError,
+    AstArena, CfgPrintable, IrArena, IrFuncId, SourceInfo, Type,
 };
 
 #[derive(Debug)]
@@ -67,13 +68,15 @@ impl CfgAnalyzerError {
 
         let mut functions: Vec<_> = ir_arena.functions.iter().collect();
         functions.sort_by_key(|(k, _)| *k);
-        let functions = functions.into_iter().map(|(_, func)| func.get_repr(ir_arena).to_string()).collect::<Vec<_>>().join("\n");
-
-        let mut glob_vars: Vec<_> = ir_arena.global_vars.iter().collect();
-        glob_vars.sort_by_key(|(k, _)| *k);
-        let global_vars = glob_vars.into_iter().map(|(_, var)| var.get_repr(ir_arena).to_string()).collect::<Vec<_>>().join("\n");
-
-        format!("{}\n\n{}\n\n{}", ast_repr, functions, global_vars)
+        let func_ids: Vec<IrFuncId> = ir_arena.functions.keys().collect();
+        let output = print(&func_ids, &ir_arena);
+        match output {
+            Some(output) => format!("{}\n\n{}", ast_repr, output),
+            None => format!("{}", ast_repr),
+        }
+        // let mut glob_vars: Vec<_> = ir_arena.global_vars.iter().collect();
+        // glob_vars.sort_by_key(|(k, _)| *k);
+        // let global_vars = glob_vars.into_iter().map(|(_, var)| var.get_repr(ir_arena).to_string()).collect::<Vec<_>>().join("\n");
     }
 }
 

@@ -4,7 +4,7 @@ use colored::{ColoredString, Colorize, CustomColor};
 use indexmap::IndexMap;
 use slotmap::new_key_type;
 
-use crate::hfs::{IrArena, Literal, SourceInfo, ast::*};
+use crate::hfs::{ast::*, IrArena, Literal, SourceInfo};
 /*
 =================================================================================================
 Control Flow Graph IR Pass (HFS MIR - Medium-level IR)

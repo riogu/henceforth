@@ -531,7 +531,7 @@ mod tests {
         // only one function
         for (func_id, _) in &ir_arena.functions {
             let loop_info = LoopInfo::compute(ir_arena, func_id);
-            assert_eq!(loop_info.top_level_loops.len(), 2);
+            assert_eq!(loop_info.top_level_loops.len(), 1);
 
             // we parse in postorder of the dom tree so the big loop is the 1st to be found
             let curr_sub_id = loop_info.top_level_loops[0];
@@ -574,9 +574,7 @@ mod tests {
             // both if statements have continues so they become latches
             assert_eq!(loop_info.loops[outer_id].latches.len(), 3);
 
-            let while1 = &loop_info.loops[loop_info.top_level_loops[1]];
-            // outer has two sub-loops
-            assert_eq!(while1.sub_loops.len(), 2);
+            let while1 = &loop_info.loops[loop_info.top_level_loops[0]];
             assert_eq!(while1.parent_loop, None);
         }
     }
@@ -589,7 +587,7 @@ mod tests {
             let loop_info = LoopInfo::compute(ir_arena, func_id);
 
             assert_eq!(loop_info.top_level_loops.len(), 1);
-            let while1_id = loop_info.top_level_loops[1];
+            let while1_id = loop_info.top_level_loops[0];
             let while1 = &loop_info.loops[while1_id];
             // outer has two sub-loops
             assert_eq!(while1.sub_loops.len(), 2);

@@ -570,30 +570,78 @@ impl IrArena {
             out.push_str(&format!("    subgraph cluster_{} {{\n", func.name));
             out.push_str(&format!("        label=\"fn {}\";\n", func.name));
 
-            let blocks: Vec<_> = self.get_blocks_in(*func_id).iter().map(|block_id| self.get_block(*block_id)).collect();
+            for block_id in self.get_blocks_in(*func_id) {
+                let block = self.get_block(block_id);
 
-            for block in blocks.clone() {
-                let mut label_lines = vec![format!("{}:", block.name)];
+                // Build a temporary single-block function view using ir_syntax::print's name map
+                // by printing just this block's instructions via the Printer directly
+                let mut lines = vec![format!("{}:", block.name)];
+
+                // Use a local name map matching what ir_syntax::print would produce
+                let mut names = crate::hfs::ir_syntax::NameMap::default();
+                names.type_to_name.insert(crate::hfs::TypeId(0), "i32".to_string());
+                names.type_to_name.insert(crate::hfs::TypeId(1), "f32".to_string());
+                names.type_to_name.insert(crate::hfs::TypeId(2), "bool".to_string());
+                names.type_to_name.insert(crate::hfs::TypeId(3), "str".to_string());
+
+                // Assign sequential inst numbers across the whole function (same as print())
+                let mut inst_counter = 0usize;
+                for bid in self.get_blocks_in(*func_id) {
+                    for inst_id in &self.get_block(bid).instructions {
+                        names.inst_to_name.insert(*inst_id, inst_counter);
+                        names.name_to_inst.insert(inst_counter, *inst_id);
+                        inst_counter += 1;
+                    }
+                }
+                for bid in self.get_blocks_in(*func_id) {
+                    let b = self.get_block(bid);
+                    names.block_to_name.insert(bid, b.name.clone());
+                    names.unmangled_to_block.insert(b.name.clone(), bid);
+                }
+                for (fid, f) in self.functions.iter() {
+                    names.func_to_name.insert(fid, f.name.clone());
+                }
+                for (i, typ) in self.types.iter().enumerate() {
+                    let tid = crate::hfs::TypeId(i);
+                    if !names.type_to_name.contains_key(&tid) {
+                        if let crate::hfs::Type::Tuple { type_ids, .. } = typ {
+                            let inner: Vec<String> = type_ids
+                                .iter()
+                                .map(|id| names.type_to_name.get(id).cloned().unwrap_or_else(|| format!("t{}", id.0)))
+                                .collect();
+                            let name = format!("({})", inner.join(" "));
+                            names.type_to_name.insert(tid, name);
+                        }
+                    }
+                }
+
+                let printer = crate::hfs::ir_syntax::Printer;
 
                 for inst_id in &block.instructions {
                     let inst = self.get_inst(*inst_id);
-                    label_lines.push(format!("%{} = {}", inst_id, strip_ansi(&inst.get_repr(self).to_string())));
+                    let inst_syntax = crate::hfs::ir_syntax::syntax_named_inst(&printer, &names);
+                    let text =
+                        (inst_syntax.0)((*inst_id, inst.clone())).unwrap_or_else(|| format!("<unprintable inst {:?}>", inst_id));
+                    lines.push(format!("  {}", text));
                 }
 
                 if let Some(term_id) = block.terminator {
-                    label_lines.push(strip_ansi(&self.get_term(term_id).get_repr(self).to_string()));
+                    let term = self.get_term(term_id);
+                    let term_syntax = crate::hfs::ir_syntax::syntax_term(&printer, &names);
+                    let text = (term_syntax.0)(term.clone()).unwrap_or_else(|| format!("<unprintable terminator>"));
+                    lines.push(format!("  {}", text));
                 }
 
-                let label = label_lines.join("\\l");
-                let label = label.replace('"', "\\\"");
+                let label = lines.join("\\l").replace('"', "\\\"");
                 out.push_str(&format!("        {}_{} [label=\"{}\\l\"];\n", func.name, block.name, label));
             }
 
-            for block in blocks {
+            // edges (unchanged)
+            for block_id in self.get_blocks_in(*func_id) {
+                let block = self.get_block(block_id);
                 let Some(term_id) = block.terminator else {
                     continue;
                 };
-
                 match self.get_term(term_id) {
                     TerminatorInst::Branch { true_block, false_block, .. } => {
                         let t = self.get_block(*true_block);
@@ -607,7 +655,7 @@ impl IrArena {
                             func.name, block.name, func.name, f.name
                         ));
                     },
-                    TerminatorInst::Jump { source_info: _, target } => {
+                    TerminatorInst::Jump { target, .. } => {
                         let t = self.get_block(*target);
                         out.push_str(&format!("        {}_{} -> {}_{};\n", func.name, block.name, func.name, t.name));
                     },

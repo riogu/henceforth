@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use indexmap::IndexSet;
-use slotmap::{Key, SlotMap, new_key_type};
+use slotmap::{new_key_type, Key, SlotMap};
 
 use crate::hfs::{BlockId, InstId, InstOrTermId, Instruction, IrArena, IrFuncId};
 
@@ -148,7 +148,7 @@ pub struct DominatorTree {
 
 impl DominatorTree {
     /**
-     ```
+     ```ignore
      This is an implemention of Cooper-Harvey-Kennedy (A Simple, Fast Dominance Algorithm, 2006)
      It can be read at: https://www.researchgate.net/publication/2569680_A_Simple_Fast_Dominance_Algorithm
 
@@ -372,7 +372,7 @@ pub struct LoopInfo {
 }
 impl LoopInfo {
     /**
-     ```
+     ```ignore
      this is based on natural loop detection and construction from
      Muchnick's Advanced Compiler Design & Implementation (Chap 7.4)
      ──────────────────────────────────────────────────────────────────────────────────

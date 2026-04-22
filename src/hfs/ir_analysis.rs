@@ -423,7 +423,6 @@ impl LoopInfo {
                 .filter(|&&pred| dom_tree.dominates(maybe_header, pred))
                 .copied()
                 .collect::<HashSet<BlockId>>();
-            dbg!(maybe_header, latches.clone());
             if !latches.is_empty() {
                 loop_info.build_natural_loop(maybe_header, latches, arena);
             }
@@ -507,3 +506,95 @@ impl LoopInfo {
 }
 // also need to add preheaders to loops for loop simplified form
 // do this in LoopSimplify pass later
+
+#[cfg(test)]
+mod tests {
+    use crate::hfs::{IrArena, LoopId, LoopInfo, utils::*};
+
+    fn check_while_helper(outer_id: LoopId, loop_info: &LoopInfo) {
+        // outer's blocks include both sub-loops' blocks
+        let outer = &loop_info.loops[outer_id];
+        for sub_id in &outer.sub_loops {
+            let sub_loop = &loop_info.loops[*sub_id];
+            assert_eq!(sub_loop.parent_loop, Some(outer_id));
+            for b in &sub_loop.blocks {
+                assert!(outer.blocks.contains(b), "outer loop should contain all sub-loop blocks");
+            }
+        }
+    }
+
+    #[test]
+    fn test_nested_loops() {
+        let ir_arena = run_until("tests/opt-tests/natural-loop.hfs", Phase::CfgAnalyzer).expect("compilation failed");
+        let ir_arena = ir_arena.as_any().downcast_ref::<IrArena>().unwrap();
+
+        // only one function
+        for (func_id, _) in &ir_arena.functions {
+            let loop_info = LoopInfo::compute(ir_arena, func_id);
+            assert_eq!(loop_info.top_level_loops.len(), 2);
+
+            // we parse in postorder of the dom tree so the big loop is the 1st to be found
+            let curr_sub_id = loop_info.top_level_loops[0];
+            let sub_loop = &loop_info.loops[curr_sub_id];
+            assert_eq!(sub_loop.parent_loop, None);
+            assert_eq!(sub_loop.sub_loops.len(), 1);
+            check_while_helper(curr_sub_id, &loop_info);
+
+            // inner while 1
+            let curr_sub_id = sub_loop.sub_loops[0];
+            let sub_loop = &loop_info.loops[curr_sub_id];
+            assert_eq!(sub_loop.sub_loops.len(), 1);
+            assert_eq!(sub_loop.latches.len(), 2);
+            check_while_helper(curr_sub_id, &loop_info);
+
+            // inner while 2
+            let curr_sub_id = sub_loop.sub_loops[0];
+            let sub_loop = &loop_info.loops[curr_sub_id];
+            assert_eq!(sub_loop.sub_loops.len(), 1);
+            check_while_helper(curr_sub_id, &loop_info);
+
+            // inner while 3 (innermost while)
+            let curr_sub_id = sub_loop.sub_loops[0];
+            let sub_loop = &loop_info.loops[curr_sub_id];
+            assert_eq!(sub_loop.sub_loops.len(), 0);
+            check_while_helper(curr_sub_id, &loop_info);
+        }
+    }
+    #[test]
+    fn test_multiple_latches() {
+        let ir_arena = run_until("tests/opt-tests/natural-loop2.hfs", Phase::CfgAnalyzer).expect("compilation failed");
+        let ir_arena = ir_arena.as_any().downcast_ref::<IrArena>().unwrap();
+
+        for (func_id, _) in &ir_arena.functions {
+            let loop_info = LoopInfo::compute(ir_arena, func_id);
+
+            assert_eq!(loop_info.top_level_loops.len(), 1);
+            let outer_id = loop_info.top_level_loops[0];
+
+            // both if statements have continues so they become latches
+            assert_eq!(loop_info.loops[outer_id].latches.len(), 3);
+
+            let while1 = &loop_info.loops[loop_info.top_level_loops[1]];
+            // outer has two sub-loops
+            assert_eq!(while1.sub_loops.len(), 2);
+            assert_eq!(while1.parent_loop, None);
+        }
+    }
+    #[test]
+    fn test_multiple_sub_loops() {
+        let ir_arena = run_until("tests/opt-tests/natural-loop3.hfs", Phase::CfgAnalyzer).expect("compilation failed");
+        let ir_arena = ir_arena.as_any().downcast_ref::<IrArena>().unwrap();
+
+        for (func_id, _) in &ir_arena.functions {
+            let loop_info = LoopInfo::compute(ir_arena, func_id);
+
+            assert_eq!(loop_info.top_level_loops.len(), 1);
+            let while1_id = loop_info.top_level_loops[1];
+            let while1 = &loop_info.loops[while1_id];
+            // outer has two sub-loops
+            assert_eq!(while1.sub_loops.len(), 2);
+            assert_eq!(while1.parent_loop, None);
+            check_while_helper(while1_id, &loop_info);
+        }
+    }
+}

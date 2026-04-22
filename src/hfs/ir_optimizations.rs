@@ -53,6 +53,8 @@ impl OptPipeline for O0 {
         for pass in self.opt_passes.iter_mut() {
             any_changed |= pass.run(arena, func_id);
         }
+        // let loop_info = LoopInfo::compute(arena, func_id);
+        // dbg!(loop_info);
         any_changed
     }
     fn get_opt_passes(&mut self) -> &mut [Box<dyn IrPass>] { &mut self.opt_passes }

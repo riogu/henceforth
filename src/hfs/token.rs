@@ -120,27 +120,6 @@ pub enum TokenKind {
     Newline, // if significant whitespace
 }
 
-impl From<BuilderOperation> for TokenKind {
-    fn from(value: BuilderOperation) -> Self {
-        match value {
-            BuilderOperation::Add => TokenKind::Plus,
-            BuilderOperation::Subtract => TokenKind::Minus,
-            BuilderOperation::Multiply => TokenKind::Star,
-            BuilderOperation::Divide => TokenKind::Slash,
-            BuilderOperation::Modulo => TokenKind::Percent,
-            BuilderOperation::Not => TokenKind::Not,
-            BuilderOperation::Or => TokenKind::Or,
-            BuilderOperation::And => TokenKind::And,
-            BuilderOperation::GreaterThan => TokenKind::Greater,
-            BuilderOperation::GreaterThanEq => TokenKind::GreaterEqual,
-            BuilderOperation::Equals => TokenKind::Equal,
-            BuilderOperation::NotEquals => TokenKind::NotEqual,
-            BuilderOperation::LessThan => TokenKind::Less,
-            BuilderOperation::LessThanEq => TokenKind::LessEqual,
-        }
-    }
-}
-
 impl From<Type> for TokenKind {
     fn from(value: Type) -> Self {
         match value {
@@ -155,7 +134,7 @@ impl From<Type> for TokenKind {
 
 use std::fmt::{self};
 
-use crate::hfs::{ast::Type, builder::builder::BuilderOperation};
+use crate::hfs::{ast::Type};
 
 impl fmt::Display for TokenKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

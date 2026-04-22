@@ -1,8 +1,9 @@
 use std::{any::Any, path::PathBuf, rc::Rc};
 
 use crate::hfs::{
+    AstArena, CfgAnalyzer, File, IrArena, Lexer, O0, OptPipeline, Parser, StackAnalyzer, Token, UnresolvedAstArena,
     error::{CompileError, DiagnosticInfo},
-    get_eof_source_info, AstArena, CfgAnalyzer, File, IrArena, Lexer, Parser, StackAnalyzer, Token, UnresolvedAstArena,
+    get_eof_source_info,
 };
 
 pub trait Byproduct {
@@ -10,29 +11,19 @@ pub trait Byproduct {
 }
 
 impl Byproduct for UnresolvedAstArena {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
+    fn as_any(&self) -> &dyn Any { self }
 }
 impl Byproduct for AstArena {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
+    fn as_any(&self) -> &dyn Any { self }
 }
 impl Byproduct for IrArena {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
+    fn as_any(&self) -> &dyn Any { self }
 }
 impl Byproduct for Vec<Token> {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
+    fn as_any(&self) -> &dyn Any { self }
 }
 impl Byproduct for () {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
+    fn as_any(&self) -> &dyn Any { self }
 }
 
 #[derive(PartialEq, Clone, Copy)]
@@ -41,6 +32,7 @@ pub enum Phase {
     Parser,
     StackAnalyzer,
     CfgAnalyzer,
+    Optimizer,
     Interpreter,
 }
 
@@ -69,11 +61,17 @@ pub fn run_until(filename: &str, phase: Phase) -> Result<Rc<dyn Byproduct>, Box<
         return Ok(Rc::new(ast_arena));
     }
 
-    let (_, inst_arena) = CfgAnalyzer::lower_to_mir(top_level_nodes, ast_arena, diagnostic_info.clone())?;
+    let (_, mut ir_arena) = CfgAnalyzer::lower_to_mir(top_level_nodes, ast_arena, diagnostic_info.clone())?;
 
     if phase == Phase::CfgAnalyzer {
-        return Ok(Rc::new(inst_arena));
+        return Ok(Rc::new(ir_arena));
     }
 
-    return Ok(Rc::new(()));
+    OptPipeline::run_iteratively(&mut O0::new(), &mut ir_arena);
+
+    if phase == Phase::Optimizer {
+        return Ok(Rc::new(ir_arena));
+    }
+
+    Ok(Rc::new(())) // Interpreter case
 }

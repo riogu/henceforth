@@ -1,8 +1,16 @@
 fn main: () -> () {
     while @(false) {
         while @(false) {
-        }
-        while @(false) {
-        }
+            if @(false) {
+                continue;
+            }
+            while @(false) {
+                while @(false) {
+                        if @(false) {
+                            @(321) @pop
+                        } else {}
+                    }
+                }
+            }
     }
 }

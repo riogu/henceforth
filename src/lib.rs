@@ -6,8 +6,8 @@ pub mod hfscheck {
 pub mod hfs {
     pub mod ast;
     // pub mod ast_interpreter;
-    pub mod builder;
     pub mod cfg_analyzer;
+    pub mod utils;
     pub mod diagnostics;
     pub mod hfs_mir;
     pub mod interpreter;
@@ -23,7 +23,6 @@ pub mod hfs {
     pub mod types;
     pub mod unresolved_ast;
     pub use ast::*;
-    pub use builder::*;
     pub use cfg_analyzer::*;
     pub use diagnostics::*;
     pub use hfs_mir::*;
@@ -39,4 +38,5 @@ pub mod hfs {
     pub use token::*;
     pub use types::*;
     pub use unresolved_ast::*;
+    pub use utils::*;
 }

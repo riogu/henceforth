@@ -6,11 +6,11 @@ use slotmap::Key;
 use crate::{
     cfg_analyzer_error,
     hfs::{
-        BlockId, CfgPrintable, GlobalIrVarDeclaration, GlobalIrVarId, InstId, Instruction, IrArena, IrFuncId, IrFunction,
-        IrOperation, IrTopLevelId, PRIMITIVE_TYPE_COUNT, SourceInfo, TerminatorInst,
         ast::*,
         cfg_analyzer_errors::CfgAnalyzerErrorKind,
         error::{CompileError, DiagnosticInfo},
+        BlockId, GlobalIrVarDeclaration, GlobalIrVarId, InstId, Instruction, IrArena, IrFuncId, IrFunction, IrOperation,
+        IrTopLevelId, SourceInfo, TerminatorInst, PRIMITIVE_TYPE_COUNT,
     },
 };
 
@@ -126,7 +126,7 @@ impl CfgAnalyzer {
             parameter_insts: vec![],
             entry_block: BlockId::null(),
         }; // needs to be here because we need to set self.arena.curr_function correctly
-        // id like it to not require exposing a mutable method but it has to be this way
+           // id like it to not require exposing a mutable method but it has to be this way
         let id = self.arena.alloc_function(cfg_function, id);
         self.ir_context.curr_func = id;
 
@@ -214,13 +214,14 @@ impl CfgAnalyzer {
         self.ir_context.curr_insert_block = if_body_block;
 
         // condition isnt included in the stack depth count
-        let cond = match self.arena.pop_hfs_stack() {
-            Some(cond) => cond,
-            None =>
-                return cfg_analyzer_error!(CfgAnalyzerErrorKind::StackUnderflow, &self.arena, Some(&self.ast_arena), vec![
-                    self.ast_arena.get_stmt_token(body).source_info.clone()
-                ]),
-        };
+        let cond =
+            match self.arena.pop_hfs_stack() {
+                Some(cond) => cond,
+                None =>
+                    return cfg_analyzer_error!(CfgAnalyzerErrorKind::StackUnderflow, &self.arena, Some(&self.ast_arena), vec![
+                        self.ast_arena.get_stmt_token(body).source_info.clone()
+                    ]),
+            };
         let cond_type = self.arena.get_type_id_of_inst(cond)?;
         self.arena.compare_types(cond_type, self.arena.bool_type(), vec![self.arena.get_inst(cond).get_source_info()])?;
 
@@ -609,9 +610,9 @@ impl CfgAnalyzer {
                     inst_args.push(arg_inst);
                 }
                 inst_args.reverse(); // we reverse because we were popping the stack
-                // and we want the syntax to work left->right to be more readable and match the
-                // expectations of the stated type of the function that works as a "view" into the
-                // stack, not as a popped argments mechanics
+                                     // and we want the syntax to work left->right to be more readable and match the
+                                     // expectations of the stated type of the function that works as a "view" into the
+                                     // stack, not as a popped argments mechanics
 
                 if !is_move {
                     // restore the stack
@@ -723,24 +724,6 @@ impl CfgAnalyzer {
             Operation::Dereference(_) => todo!(),
         };
         Ok(self.arena.alloc_inst_for(Instruction::Operation { source_info, op: cfg_op }, self.ir_context.curr_insert_block))
-    }
-}
-
-// Debug printing functions (using the MIR syntax)
-impl CfgAnalyzer {
-    pub fn print_hfs_mir(&self, top_level_nodes: Vec<IrTopLevelId>) {
-        for id in top_level_nodes {
-            match id {
-                IrTopLevelId::GlobalVarDecl(var_id) => {
-                    let var = self.arena.get_var(var_id);
-                    println!("{}", var.get_repr(&self.arena));
-                },
-                IrTopLevelId::FunctionDecl(func_id) => {
-                    let func = self.arena.get_func(func_id);
-                    println!("{}", func.get_repr(&self.arena));
-                },
-            }
-        }
     }
 }
 

@@ -1,10 +1,9 @@
 use std::{collections::HashSet, fmt::Display, vec};
 
-use colored::{ColoredString, Colorize, CustomColor};
 use indexmap::IndexMap;
 use slotmap::new_key_type;
 
-use crate::hfs::{ast::*, IrArena, Literal, SourceInfo};
+use crate::hfs::{ast::*, print, IrArena, Literal, SourceInfo};
 /*
 =================================================================================================
 Control Flow Graph IR Pass (HFS MIR - Medium-level IR)
@@ -323,237 +322,22 @@ impl Instruction {
     }
 }
 
-// Debug printing trait and implementations
-pub trait CfgPrintable {
-    fn get_repr(&self, arena: &IrArena) -> ColoredString;
-}
-
-impl CfgPrintable for Type {
-    fn get_repr(&self, arena: &IrArena) -> ColoredString {
-        match self {
-            Type::Int { .. } => String::from("i32").yellow(),
-            Type::String { .. } => String::from("str").yellow(),
-            Type::Bool { .. } => String::from("bool").yellow(),
-            Type::Float { .. } => String::from("f32").yellow(),
-            Type::Tuple { type_ids, .. } => {
-                // ID -> Type -> string representation
-                let type_reprs: Vec<String> =
-                    type_ids.iter().map(|id| arena.get_type(*id)).map(|typ| typ.get_repr(arena).to_string()).collect();
-
-                type_reprs.join(" ").into()
-            },
-        }
-    }
-}
-impl CfgPrintable for IrFunction {
-    fn get_repr(&self, arena: &IrArena) -> ColoredString {
-        let params = arena.get_type(self.param_type).clone();
-        let returns = arena.get_type(self.return_type).clone();
-        let func_id = arena.functions.iter().find(|(_, func)| func.name == self.name).unwrap().0;
-        let blocks_repr = arena
-            .compute_reverse_postorder(func_id)
-            .iter()
-            .map(|block| arena.get_block(*block).get_repr(arena).to_string())
-            .collect::<Vec<String>>()
-            .join("\n");
-        format!(
-            "{} {}{} {}{}{} {} {}{}{} {}\n{}\n{}",
-            "fn".custom_color(CustomColor::new(202, 167, 244)),
-            self.name.blue(),
-            ":".custom_color(CustomColor::new(129, 137, 150)),
-            "(".custom_color(CustomColor::new(129, 137, 150)),
-            params.get_repr(arena),
-            ")".custom_color(CustomColor::new(129, 137, 150)),
-            "->".bright_blue(),
-            "(".custom_color(CustomColor::new(129, 137, 150)),
-            returns.get_repr(arena),
-            ")".custom_color(CustomColor::new(129, 137, 150)),
-            "{".custom_color(CustomColor::new(129, 137, 150)),
-            blocks_repr,
-            "}".custom_color(CustomColor::new(129, 137, 150)),
-        )
-        .into()
-    }
-}
-
-impl CfgPrintable for GlobalIrVarDeclaration {
-    fn get_repr(&self, arena: &IrArena) -> ColoredString {
-        let typ = arena.get_type(self.hfs_type);
-        format!(
-            "{} {}{} {}{}",
-            "let".custom_color(CustomColor::new(202, 167, 244)),
-            self.name,
-            ":".custom_color(CustomColor::new(129, 137, 150)),
-            typ.get_repr(arena),
-            ";".custom_color(CustomColor::new(129, 137, 150))
-        )
-        .into()
-    }
-}
-
-impl CfgPrintable for IrOperation {
-    fn get_repr(&self, arena: &IrArena) -> ColoredString {
-        let op = match self {
-            IrOperation::Add(a, b) => format!("{} {} {}", arena.inst_name(*a), "+".bright_blue(), arena.inst_name(*b)),
-            IrOperation::Sub(a, b) => format!("{} {} {}", arena.inst_name(*a), "-".bright_blue(), arena.inst_name(*b)),
-            IrOperation::Mul(a, b) => format!("{} {} {}", arena.inst_name(*a), "*".bright_blue(), arena.inst_name(*b)),
-            IrOperation::Div(a, b) => format!("{} {} {}", arena.inst_name(*a), "/".bright_blue(), arena.inst_name(*b)),
-            IrOperation::Mod(a, b) => format!("{} {} {}", arena.inst_name(*a), "%".bright_blue(), arena.inst_name(*b)),
-            IrOperation::Equal(a, b) => format!("{} {} {}", arena.inst_name(*a), "==".bright_blue(), arena.inst_name(*b)),
-            IrOperation::NotEqual(a, b) => format!("{} {} {}", arena.inst_name(*a), "!=".bright_blue(), arena.inst_name(*b)),
-            IrOperation::Less(a, b) => format!("{} {} {}", arena.inst_name(*a), "<".bright_blue(), arena.inst_name(*b)),
-            IrOperation::LessEqual(a, b) => format!("{} {} {}", arena.inst_name(*a), "<=".bright_blue(), arena.inst_name(*b)),
-            IrOperation::Greater(a, b) => format!("{} {} {}", arena.inst_name(*a), ">".bright_blue(), arena.inst_name(*b)),
-            IrOperation::GreaterEqual(a, b) => format!("{} {} {}", arena.inst_name(*a), ">=".bright_blue(), arena.inst_name(*b)),
-            IrOperation::Or(a, b) => format!("{} {} {}", arena.inst_name(*a), "||".bright_blue(), arena.inst_name(*b)),
-            IrOperation::And(a, b) => format!("{} {} {}", arena.inst_name(*a), "&&".bright_blue(), arena.inst_name(*b)),
-            IrOperation::Not(a) => format!("{}{}", "!".bright_blue(), arena.inst_name(*a)),
-        };
-        op.into()
-    }
-}
-
-impl CfgPrintable for TerminatorInst {
-    fn get_repr(&self, arena: &IrArena) -> ColoredString {
-        match self {
-            TerminatorInst::Return { source_info: _, return_tuple: inst_id } =>
-                format!("{} {}", "return".custom_color(CustomColor::new(202, 167, 244)), arena.inst_name(*inst_id)).into(),
-            TerminatorInst::Branch { cond, true_block, false_block, .. } => format!(
-                "{} {}, {}, {}",
-                "branch".custom_color(CustomColor::new(202, 167, 244)),
-                arena.inst_name(*cond),
-                arena.get_block(*true_block).name,
-                arena.get_block(*false_block).name
-            )
-            .into(),
-            TerminatorInst::Jump { source_info: _, target: block_id } =>
-                format!("{} {}", "jump".custom_color(CustomColor::new(202, 167, 244)), arena.get_block(*block_id).name).into(),
-            TerminatorInst::Unreachable => format!("{}", "unreachable".custom_color(CustomColor::new(202, 167, 244))).into(),
-        }
-    }
-}
-
-impl CfgPrintable for Instruction {
-    fn get_repr(&self, arena: &IrArena) -> ColoredString {
-        match self {
-            Instruction::Parameter { source_info: _, index, type_id } =>
-                format!("{} %arg{}", arena.get_type(*type_id).get_repr(arena), index).into(),
-            Instruction::FunctionCall { source_info: _, args, func_id, is_move: _, return_values: _ } => {
-                let func = arena.get_func(*func_id);
-                if args.is_empty() {
-                    format!("{} {}", "call".custom_color(CustomColor::new(202, 167, 244)), func.name.blue()).into()
-                } else {
-                    let args_repr: Vec<String> = args.iter().map(|id| arena.inst_name(*id)).collect();
-                    format!(
-                        "{} {}({})",
-                        "call".custom_color(CustomColor::new(202, 167, 244)),
-                        func.name.blue(),
-                        args_repr.join(", ")
-                    )
-                    .into()
-                }
-            },
-            Instruction::Phi { source_info: _, incoming } => {
-                let incoming: Vec<String> = incoming
-                    .iter()
-                    .map(|(block_id, inst_id)| format!("[{}: {}]", arena.get_block(*block_id).name, arena.inst_name(*inst_id)))
-                    .collect();
-                format!("{} {}", "phi".custom_color(CustomColor::new(202, 167, 244)), incoming.join(", ")).into()
-            },
-            Instruction::Tuple { source_info: _, instructions } => {
-                let reprs: Vec<String> = instructions.iter().map(|id| arena.inst_name(*id)).collect();
-                format!(
-                    "{}{}{}",
-                    "(".custom_color(CustomColor::new(129, 137, 150)),
-                    reprs.join(", "),
-                    ")".custom_color(CustomColor::new(129, 137, 150))
-                )
-                .into()
-            },
-            Instruction::Operation { source_info: _, op } => op.get_repr(arena),
-            Instruction::Literal { source_info: _, literal } => match literal {
-                Literal::Integer(lit) => lit.to_string().custom_color(CustomColor::new(250, 180, 134)),
-                Literal::Float(lit) => lit.to_string().custom_color(CustomColor::new(250, 180, 134)),
-                Literal::String(lit) => format!("\"{}\"", lit).custom_color(CustomColor::new(250, 180, 134)),
-                Literal::Bool(lit) => lit.to_string().custom_color(CustomColor::new(250, 180, 134)),
-            },
-            Instruction::LoadElement { source_info: _, index, tuple } => format!(
-                "{} {}, {}",
-                "load_element".custom_color(CustomColor::new(202, 167, 244)),
-                format!("{}", index).green(),
-                arena.inst_name(*tuple)
-            )
-            .into(),
-            Instruction::ReturnValue { source_info: _, type_id } =>
-                format!("{} {}", "retval".custom_color(CustomColor::new(202, 167, 244)), arena.get_type(*type_id).get_repr(arena))
-                    .into(),
-            Instruction::Load { source_info: _, address, type_id: _ } =>
-                format!("{} {}", "load".custom_color(CustomColor::new(202, 167, 244)), arena.inst_name(*address)).into(),
-            Instruction::Store { source_info: _, address, value } => format!(
-                "{} {}, {}",
-                "store".custom_color(CustomColor::new(202, 167, 244)),
-                arena.inst_name(*value),
-                arena.inst_name(*address)
-            )
-            .into(),
-            Instruction::Alloca { source_info: _, type_id } => format!(
-                "{} {}",
-                "alloca".custom_color(CustomColor::new(202, 167, 244)),
-                format!("{}", arena.get_type(*type_id)).yellow()
-            )
-            .into(),
-            Instruction::GlobalAlloca(_) => todo!("joao pls pls help ;_;"),
-        }
-    }
-}
-
-impl CfgPrintable for BasicBlock {
-    fn get_repr(&self, arena: &IrArena) -> ColoredString {
-        let non_term_inst_repr = self
-            .instructions
-            .iter()
-            .map(|id| {
-                let inst = arena.get_inst(*id);
-                if matches!(inst, Instruction::FunctionCall { .. }) {
-                    // TODO: this is hardcoded for functions but there will be other instructions
-                    // that don't really produce any "output", and so we don't wanna print their IR
-                    // numbers in the IR representation for clarity.
-                    // For now though its really just functions and terminators
-                    format!("    {}", inst.get_repr(arena))
-                } else {
-                    format!("    {} = {}", arena.inst_name(*id), inst.get_repr(arena))
-                }
-            })
-            .collect::<Vec<String>>()
-            .join("\n");
-        let terminator_repr = match self.terminator {
-            Some(id) => format!("    {}", arena.get_term(id).get_repr(arena)),
-            None => String::from("    <no terminator>"),
-        };
-        let mut parts = vec![format!("  {}:", self.name.red().bold())];
-        if !non_term_inst_repr.is_empty() {
-            parts.push(non_term_inst_repr);
-        }
-        parts.push(terminator_repr);
-        parts.join("\n").into()
-    }
-}
-
-fn strip_ansi(s: &str) -> String {
-    let mut out = String::new();
-    let mut chars = s.chars().peekable();
-    while let Some(c) = chars.next() {
-        if c == '\x1b' {
-            for c in chars.by_ref() {
-                if c == 'm' {
-                    break;
-                }
+fn prettify_ir(ir: String) -> String {
+    // add indentation
+    ir.lines()
+        .map(|line| {
+            if line.trim().starts_with("fn") || line.trim().starts_with("}") {
+                return line.to_string();
+            } else if line.trim().ends_with(":") {
+                let new_line = "  ".to_string() + line;
+                return new_line;
+            } else {
+                let new_line = "    ".to_string() + line;
+                return new_line;
             }
-        } else {
-            out.push(c);
-        }
-    }
-    out
+        })
+        .collect::<Vec<String>>()
+        .join("\n")
 }
 
 impl IrArena {
@@ -680,11 +464,10 @@ impl IrArena {
                 block.terminator.is_some()
             );
         }
-        for node in top_level {
-            match node {
-                IrTopLevelId::GlobalVarDecl(id) => println!("{}", self.get_var(*id).get_repr(self)),
-                IrTopLevelId::FunctionDecl(id) => println!("{}", self.get_func(*id).get_repr(self)),
-            }
+        let repr = print(&self.functions.iter().map(|f| f.0).collect::<Vec<IrFuncId>>(), self);
+        match repr {
+            Some(repr) => println!("{}", prettify_ir(repr)),
+            None => println!(""),
         }
         let dot = self.generate_dot(top_level);
         std::fs::write("cfg.dot", &dot).unwrap();

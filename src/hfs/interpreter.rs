@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use slotmap::Key;
 
-use crate::hfs::{IrArena, ast::*, hfs_mir::*, scope_stack::*, token::*};
+use crate::hfs::{ast::*, hfs_mir::*, scope_stack::*, token::*, IrArena};
 
 //---------------------------------------------------------------------------
 // Runtime values
@@ -167,8 +167,7 @@ impl Interpreter {
             } else {
                 panic!(
                     // TODO: joao please add a nicer print here with info about the broken block
-                    "[internal error] found block with no terminator in: '{}'",
-                    self.arena.get_func(self.curr_call_frame().func_id).get_repr(&self.arena)
+                    "[internal error] found block with no terminator",
                 )
             }
         }
@@ -188,8 +187,7 @@ impl Interpreter {
                 // the function
                 panic!(
                     "[internal error] found unbound 'Instruction::Parameter'. a parameter should be bound to a value before \
-                     being interpreted\n {}",
-                    self.arena.get_func(self.curr_call_frame().func_id).get_repr(&self.arena)
+                     being interpreted",
                 )
             },
             Instruction::ReturnValue { .. } => {

@@ -6,7 +6,7 @@ use crate::hfs::{
     error::{number_length, CompileError, DebugInfo},
     print,
     stack_analyzer_errors::StackAnalyzerError,
-    AstArena, CfgPrintable, IrArena, IrFuncId, SourceInfo, Type,
+    AstArena, IrArena, IrFuncId, SourceInfo, Type,
 };
 
 #[derive(Debug)]

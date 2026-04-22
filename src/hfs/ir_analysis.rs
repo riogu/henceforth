@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use indexmap::IndexSet;
-use slotmap::{new_key_type, Key, SlotMap};
+use slotmap::{Key, SlotMap, new_key_type};
 
 use crate::hfs::{BlockId, InstId, InstOrTermId, Instruction, IrArena, IrFuncId};
 
@@ -355,7 +355,7 @@ impl DominatorTree {
 new_key_type! {
     pub struct LoopId;
 }
-#[derive(Default, Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct Loop {
     parent_loop: Option<LoopId>, // points to enclosing header
     sub_loops: IndexSet<LoopId>,
@@ -364,7 +364,7 @@ pub struct Loop {
     header: BlockId,
     latches: HashSet<BlockId>, // from back-edge detection
 }
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct LoopInfo {
     loops: SlotMap<LoopId, Loop>,
     block_to_innermost_loop: HashMap<BlockId, LoopId>, // innermost containing loop
@@ -423,6 +423,7 @@ impl LoopInfo {
                 .filter(|&&pred| dom_tree.dominates(maybe_header, pred))
                 .copied()
                 .collect::<HashSet<BlockId>>();
+            dbg!(maybe_header, latches.clone());
             if !latches.is_empty() {
                 loop_info.build_natural_loop(maybe_header, latches, arena);
             }
@@ -443,7 +444,9 @@ impl LoopInfo {
         for &block in &loop_blocks {
             self.block_to_innermost_loop.entry(block).or_insert(loop_id);
         }
-        let mut worklist: Vec<BlockId> = loop_blocks.iter().copied().collect();
+        // also handle the case where there is a self-loop (one block going to itself)
+        // the resulting loop will be just the header by itself
+        let mut worklist: Vec<BlockId> = latches.iter().copied().filter(|&l| l != header).collect();
 
         while let Some(block_id) = worklist.pop() {
             for pred in arena.get_predecessors(block_id) {
@@ -503,5 +506,4 @@ impl LoopInfo {
     pub fn get_blocks_in(&self, loop_id: LoopId) -> &HashSet<BlockId> { &self.loops[loop_id].blocks }
 }
 // also need to add preheaders to loops for loop simplified form
-// all of these are latches that belong to this current header
 // do this in LoopSimplify pass later

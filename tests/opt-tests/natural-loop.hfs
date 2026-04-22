@@ -1,0 +1,8 @@
+fn main: () -> () {
+    while @(false) {
+        while @(false) {
+        }
+        while @(false) {
+        }
+    }
+}

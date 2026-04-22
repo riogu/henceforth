@@ -1,0 +1,13 @@
+fn main: () -> () {
+    let foo: i32;
+    @(321) &= foo;
+    if @(true) {
+        @(69) &= foo;
+    }
+    else {
+        @(420) &= foo;
+    }
+    let bar: i32;
+    @(foo) &= bar;
+    @(bar) @pop
+}

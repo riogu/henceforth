@@ -3,7 +3,9 @@ use std::collections::{HashMap, HashSet};
 use indexmap::IndexMap;
 use slotmap::Key;
 
-use crate::hfs::{BlockId, DefUseInfo, DominatorTree, InstId, InstOrTermId, Instruction, IrArena, IrFuncId, TerminatorInst};
+use crate::hfs::{
+    BlockId, DefUseInfo, DominatorTree, InstId, InstOrTermId, Instruction, IrArena, IrFuncId, LoopInfo, TerminatorInst,
+};
 
 // these are the basic traits and APIs our passes/pipelines must meet
 pub trait IrPass {
@@ -23,9 +25,7 @@ pub trait OptPipeline {
         // run all passes in the pipeline at once, for each function
         let mut any_changed: bool = false;
         for func_id in arena.functions.clone().keys() {
-            for opt_pass in self.get_opt_passes() {
-                any_changed |= opt_pass.run(arena, func_id)
-            }
+            any_changed |= self.run_on_function(arena, func_id);
         }
         any_changed
     }

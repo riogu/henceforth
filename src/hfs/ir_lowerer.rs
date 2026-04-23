@@ -4,14 +4,14 @@ use indexmap::IndexMap;
 use slotmap::Key;
 
 use crate::{
-    ir_lowerer_error,
     hfs::{
+        BlockId, GlobalIrVarDeclaration, GlobalIrVarId, InstId, Instruction, IrArena, IrFuncId, IrFunction, IrOperation,
+        IrTopLevelId, PRIMITIVE_TYPE_COUNT, SourceInfo, TerminatorInst,
         ast::*,
         error::{CompileError, DiagnosticInfo},
         ir_lowerer_errors::IrLowererErrorKind,
-        BlockId, GlobalIrVarDeclaration, GlobalIrVarId, InstId, Instruction, IrArena, IrFuncId, IrFunction, IrOperation,
-        IrTopLevelId, SourceInfo, TerminatorInst, PRIMITIVE_TYPE_COUNT,
     },
+    ir_lowerer_error,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -40,13 +40,24 @@ pub struct IrLowerer {
     // this is used to get rid of duplication issues while lowering stack blocks
     pub lowered_expr_cache: HashMap<ExprId, InstId>,
     pub ir_context: IrContext,
+
+    pub func_id_map: HashMap<FuncId, IrFuncId>,
+    // has both local alloca and global alloca instructions
+    pub var_id_to_alloca_map: HashMap<VarId, InstId>,
 }
 
 impl IrLowerer {
     pub fn new(ast_arena: AstArena, diagnostic_info: Rc<DiagnosticInfo>) -> Self {
         let mut arena = IrArena::new(diagnostic_info);
         arena.types.extend_from_slice(&ast_arena.types[PRIMITIVE_TYPE_COUNT..]);
-        Self { ast_arena, arena, lowered_expr_cache: HashMap::new(), ir_context: IrContext::default() }
+        Self {
+            ast_arena,
+            arena,
+            lowered_expr_cache: HashMap::new(),
+            ir_context: IrContext::default(),
+            func_id_map: HashMap::new(),
+            var_id_to_alloca_map: HashMap::new(),
+        }
     }
 
     pub fn lower_to_mir(
@@ -83,25 +94,24 @@ impl IrLowerer {
         // we don't do anything here at all right now
         // maybe if we add assignments to declarations we might want to in the future but for now this doesn't do anything
         let var = self.ast_arena.get_var(id);
-        self.arena.alloc_global_var(
-            GlobalIrVarDeclaration {
-                source_info: self.ast_arena.get_var_token(id).source_info.clone(),
-                name: var.name.clone(),
-                hfs_type: var.hfs_type,
-            },
-            id,
-        )
+        let (global_var_id, inst_id) = self.arena.alloc_global_var(GlobalIrVarDeclaration {
+            source_info: self.ast_arena.get_var_token(id).source_info.clone(),
+            name: var.name.clone(),
+            hfs_type: var.hfs_type,
+        });
+        self.var_id_to_alloca_map.insert(id, inst_id);
+        global_var_id
     }
     pub fn lower_local_variable_declaration(&mut self, id: VarId) -> InstId {
         // Note that all variables are allocated at the function entry point to make mem2reg simpler
         // since it only works with allocas at the function entry
         let var = self.ast_arena.get_var(id);
         let entry_block = self.arena.get_func(self.ir_context.curr_func).entry_block;
-        let inst_id = self.arena.alloc_local_var(
+        let inst_id = self.arena.alloc_inst_for(
             Instruction::Alloca { source_info: self.ast_arena.get_var_token(id).source_info.clone(), type_id: var.hfs_type },
             entry_block,
-            id,
         );
+        self.var_id_to_alloca_map.insert(id, inst_id);
         inst_id
     }
 
@@ -126,14 +136,15 @@ impl IrLowerer {
             parameter_insts: vec![],
             entry_block: BlockId::null(),
         }; // needs to be here because we need to set self.arena.curr_function correctly
-           // id like it to not require exposing a mutable method but it has to be this way
-        let id = self.arena.alloc_function(cfg_function, id);
-        self.ir_context.curr_func = id;
+        // id like it to not require exposing a mutable method but it has to be this way
+        let new_id = self.arena.alloc_function(cfg_function);
+        self.func_id_map.insert(id, new_id);
+        self.ir_context.curr_func = new_id;
 
         // note that this needs to be allocated before we lower the body so we can access the
         // current function definition (ex: to put allocas at the start)
         let entry_block = self.arena.alloc_block("start", self.ir_context.curr_func); // create before analyzing the parameters
-        self.arena.get_func_mut(id).entry_block = entry_block;
+        self.arena.get_func_mut(new_id).entry_block = entry_block;
         self.ir_context.curr_insert_block = entry_block;
 
         let mut parameter_insts = Vec::<InstId>::new();
@@ -142,7 +153,7 @@ impl IrLowerer {
             parameter_insts.push(param_inst);
             self.arena.push_to_hfs_stack(param_inst);
         }
-        self.arena.get_func_mut(id).parameter_insts = parameter_insts;
+        self.arena.get_func_mut(new_id).parameter_insts = parameter_insts;
 
         let curr_block_context = BlockContext {
             continue_to_block: None,
@@ -167,7 +178,7 @@ impl IrLowerer {
             );
         }
         self.arena.pop_entire_hfs_stack(); // context should be reset after each function!
-        Ok(id)
+        Ok(new_id)
     }
     // TODO: dont forget about issues with dead code elimination. if we have code after
     // a return; or something, we gotta be careful to eliminate it at some point
@@ -566,12 +577,11 @@ impl IrLowerer {
                     }
                 };
                 let (mut address, type_id) = match identifier {
-                    Identifier::GlobalVar(var_id) | Identifier::Variable(var_id) => {
-                        match self.arena.var_id_to_alloca_map.get(&var_id) {
+                    Identifier::GlobalVar(var_id) | Identifier::Variable(var_id) =>
+                        match self.var_id_to_alloca_map.get(&var_id) {
                             Some(alloca_inst) => (*alloca_inst, self.ast_arena.get_var(var_id).hfs_type),
                             None => panic!("[internal error] forgot to alloca a variable before using it"),
-                        }
-                    },
+                        },
                     Identifier::Function(_) => unreachable!("can't happen"),
                 };
                 let other_type_id = self.arena.get_type_id_of_inst(inst_value)?;
@@ -609,9 +619,9 @@ impl IrLowerer {
                     inst_args.push(arg_inst);
                 }
                 inst_args.reverse(); // we reverse because we were popping the stack
-                                     // and we want the syntax to work left->right to be more readable and match the
-                                     // expectations of the stated type of the function that works as a "view" into the
-                                     // stack, not as a popped argments mechanics
+                // and we want the syntax to work left->right to be more readable and match the
+                // expectations of the stated type of the function that works as a "view" into the
+                // stack, not as a popped argments mechanics
 
                 if !is_move {
                     // restore the stack
@@ -619,7 +629,7 @@ impl IrLowerer {
                         self.arena.push_to_hfs_stack(inst_id);
                     }
                 }
-                let func_id = match self.arena.func_id_map.get(&func_id) {
+                let func_id = match self.func_id_map.get(&func_id) {
                     Some(func_id) => *func_id,
                     None => panic!("[internal error] tried making a function call before creating the associated IrFuncId"),
                 };
@@ -672,7 +682,6 @@ impl IrLowerer {
                     // assignments deal with their own identifiers, and here we expect to only need to load.
                     // note that this code also loads from global variables with the same semantics as locals.
                     let address = *self
-                        .arena
                         .var_id_to_alloca_map
                         .get(&var_id)
                         .expect("[internal error] tried loading from a variable that hasn't been alloca'd yet");

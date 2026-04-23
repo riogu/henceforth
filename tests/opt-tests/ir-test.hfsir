@@ -1,37 +1,32 @@
-fn fizz_buzz: (i32) -> (str) {
-  start_2:
-    %2 = i32 %arg0  
-    %3 = 15
-    %4 = %2 % %3
-    %5 = 0
-    %6 = %4 == %5 
-    branch %6, if_body_3 else_if_cond_5
-  if_body_3:
-    %7 = "fizzbuzz"
-    jump if_end_4
-  else_if_cond_5:
-    %10 = 3
-    %11 = %2 % %10
-    %12 = 0
-    %13 = %11 == %12
-    branch %13, if_body_6 else_if_cond_7
-  if_body_6:
-    %14 = "fizz"
-    jump if_end_4
-  else_if_cond_7:
-    %15 = 5
-    %16 = %2 % %15
-    %17 = 0
-    %18 = %16 == %17
-    branch %18, if_body_8 else_body_9
-  else_body_9:
-    %20 = "no fizzbuzz"
-    jump if_end_4
-  if_body_8:
-    %19 = "buzz"
-    jump if_end_4
-  if_end_4:
-    %8 = phi [if_body_3: %7], [if_body_6: %14], [if_body_8: %19], [else_body_9: %20]
-    %9 = (%8)
-    return %9
+fn main: () -> () {
+  start_1:
+    %0 = alloca i32
+    %1 = 321
+    %2 = store %1, %0
+    %3 = true
+    %4 = alloca i32
+    branch %3, if_body_2 else_body_4
+  else_body_4:
+    %11 = 420
+    %12 = store %11, %0
+    jump if_end_3
+  if_body_2:
+    %5 = 69
+    %6 = store %5, %0
+    jump if_end_3
+  if_end_3:
+    %7 = load %0
+    %8 = store %7, %4
+    %9 = load %4
+    %10 = ()
+    return %10
 }
+// CHECK-FN "main" 
+
+
+fn main: () -> () {
+  start_1:
+    %0 = ()
+    return %0
+}
+

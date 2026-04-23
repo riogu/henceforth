@@ -10,14 +10,14 @@ use colored::{Colorize, CustomColor};
 use slotmap::SlotMap;
 
 use crate::{
-    ir_lowerer_error,
     hfs::{
         BasicBlock, BlockId, GlobalIrVarDeclaration, GlobalIrVarId, InstId, Instruction, IrFuncId, IrFunction, SourceInfo,
         TermInstId, TerminatorInst,
         ast::*,
-        ir_lowerer_errors::IrLowererErrorKind,
         error::{CompileError, DiagnosticInfo},
+        ir_lowerer_errors::IrLowererErrorKind,
     },
+    ir_lowerer_error,
 };
 
 #[derive(Debug, Default)]
@@ -31,15 +31,10 @@ pub struct IrArena {
     pub terminators: SlotMap<TermInstId, TerminatorInst>,
     pub blocks: SlotMap<BlockId, BasicBlock>,
     pub types: Vec<Type>,
-
-    pub func_id_map: HashMap<FuncId, IrFuncId>,
     pub func_id_to_blocks: HashMap<IrFuncId, Vec<BlockId>>, // in insertion order
-    // has both local alloca and global alloca instructions
-    pub var_id_to_alloca_map: HashMap<VarId, InstId>,
 
     pub type_source_infos: Vec<SourceInfo>,
     type_cache: HashMap<Type, TypeId>,
-
     pub hfs_stack: Vec<InstId>,
     // this is reset whenever we add a terminator instruction to the current block
     // its used to keep track of each merging stack
@@ -113,9 +108,8 @@ impl IrArena {
         } // If not, allocate it
         self.alloc_type_uncached(hfs_type, source_info)
     }
-    pub fn alloc_function(&mut self, func: IrFunction, old_id: FuncId) -> IrFuncId {
+    pub fn alloc_function(&mut self, func: IrFunction) -> IrFuncId {
         let id = self.functions.insert(func);
-        self.func_id_map.insert(old_id, id);
         id
     }
 
@@ -135,31 +129,15 @@ impl IrArena {
         id
     }
     pub fn alloc_inst_at_start_for(&mut self, inst: Instruction, block_id: BlockId) -> InstId {
-        if matches!(inst, Instruction::Alloca { .. }) || matches!(inst, Instruction::GlobalAlloca(..)) {
-            panic!(
-                "[internal error] please use alloc_global_var and alloc_local_var instead of alloca_inst_for when creating \
-                 alloca instructions"
-            )
-        }
         let id = self.instructions.insert(inst);
         self.get_block_mut(block_id).instructions.insert(0, id);
         id
     }
 
-    pub fn alloc_local_var(&mut self, inst: Instruction, block_id: BlockId, var_id: VarId) -> InstId {
-        // produces an alloca
-        let id = self.instructions.insert(inst);
-        self.var_id_to_alloca_map.insert(var_id, id);
-        self.get_block_mut(block_id).instructions.push(id);
-        id
-    }
-    pub fn alloc_global_var(&mut self, var: GlobalIrVarDeclaration, old_var_id: VarId) -> GlobalIrVarId {
+    pub fn alloc_global_var(&mut self, var: GlobalIrVarDeclaration) -> (GlobalIrVarId, InstId) {
         let global_var_id = self.global_vars.insert(var);
-
         let inst_id = self.instructions.insert(Instruction::GlobalAlloca(global_var_id));
-        self.var_id_to_alloca_map.insert(old_var_id, inst_id);
-
-        global_var_id
+        (global_var_id, inst_id)
     }
 
     pub fn alloc_terminator_for(&mut self, terminator: TerminatorInst, block_id: BlockId) -> TermInstId {

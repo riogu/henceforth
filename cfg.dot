@@ -1,30 +1,32 @@
 digraph CFG {
     node [shape=box fontname="Monospace"]
-    subgraph cluster_foo {
-        label="fn foo";
-        foo_start_0 [label="start_0:\l%0 = 1\l%1 = 2\l%2 = 3\l%3 = 1\l%4 = 2\l%5 = %3 < %4\l%6 = alloca i32\lbranch %5, if_body_1, else_if_cond_6\l"];
-        foo_if_body_1 [label="if_body_1:\l%7 = 4\l%8 = 5\l%9 = store %8, %6\l%10 = true\lbranch %10, if_body_2, else_body_4\l"];
-        foo_if_body_2 [label="if_body_2:\l%11 = 5\l%12 = 6\ljump if_end_3\l"];
-        foo_if_end_3 [label="if_end_3:\l%15 = phi [else_body_4: %13], [if_body_2: %11]\l%16 = phi [if_body_2: %12], [else_body_4: %14]\ljump if_end_5\l"];
-        foo_if_end_5 [label="if_end_5:\l%25 = phi [if_end_3: %7], [if_body_7: %19], [else_body_8: %22]\l%26 = phi [if_end_3: %15], [if_body_7: %20], [else_body_8: %23]\l%27 = phi [if_body_7: %21], [if_end_3: %16], [else_body_8: %24]\l%28 = (%0, %1, %2, %25, %26, %27)\lreturn %28\l"];
-        foo_else_body_4 [label="else_body_4:\l%13 = 5\l%14 = 6\ljump if_end_3\l"];
-        foo_else_if_cond_6 [label="else_if_cond_6:\l%17 = 4\l%18 = %3 < %17\lbranch %18, if_body_7, else_body_8\l"];
-        foo_if_body_7 [label="if_body_7:\l%19 = 4\l%20 = 5\l%21 = 6\ljump if_end_5\l"];
-        foo_else_body_8 [label="else_body_8:\l%22 = 4\l%23 = 5\l%24 = 6\ljump if_end_5\l"];
-        foo_start_0 -> foo_if_body_1 [label="true"];
-        foo_start_0 -> foo_else_if_cond_6 [label="false"];
-        foo_if_body_1 -> foo_if_body_2 [label="true"];
-        foo_if_body_1 -> foo_else_body_4 [label="false"];
-        foo_if_body_2 -> foo_if_end_3;
-        foo_if_end_3 -> foo_if_end_5;
-        foo_else_body_4 -> foo_if_end_3;
-        foo_else_if_cond_6 -> foo_if_body_7 [label="true"];
-        foo_else_if_cond_6 -> foo_else_body_8 [label="false"];
-        foo_if_body_7 -> foo_if_end_5;
-        foo_else_body_8 -> foo_if_end_5;
+    subgraph cluster_print {
+        label="fn print";
+        print_start_1 [label="start_1:\l  %0 = str %arg0\l  %1 = (%0)\l  return %1\l"];
+    }
+    subgraph cluster_fizz_buzz {
+        label="fn fizz_buzz";
+        fizz_buzz_start_2 [label="start_2:\l  %0 = i32 %arg0\l  %1 = 15\l  %2 = %0 % %1\l  %3 = 0\l  %4 = %2 == %3\l  branch %4 ,if_body_3 else_if_cond_5\l"];
+        fizz_buzz_if_body_3 [label="if_body_3:\l  %5 = \"fizzbuzz\"\l  jump if_end_4\l"];
+        fizz_buzz_if_end_4 [label="if_end_4:\l  %6 = phi [if_body_3: %5],[if_body_6: %12],[if_body_8: %17],[else_body_9: %18]\l  %7 = (%6)\l  return %7\l"];
+        fizz_buzz_else_if_cond_5 [label="else_if_cond_5:\l  %8 = 3\l  %9 = %0 % %8\l  %10 = 0\l  %11 = %9 == %10\l  branch %11 ,if_body_6 else_if_cond_7\l"];
+        fizz_buzz_if_body_6 [label="if_body_6:\l  %12 = \"fizz\"\l  jump if_end_4\l"];
+        fizz_buzz_else_if_cond_7 [label="else_if_cond_7:\l  %13 = 5\l  %14 = %0 % %13\l  %15 = 0\l  %16 = %14 == %15\l  branch %16 ,if_body_8 else_body_9\l"];
+        fizz_buzz_if_body_8 [label="if_body_8:\l  %17 = \"buzz\"\l  jump if_end_4\l"];
+        fizz_buzz_else_body_9 [label="else_body_9:\l  %18 = \"no fizzbuzz\"\l  jump if_end_4\l"];
+        fizz_buzz_start_2 -> fizz_buzz_if_body_3 [label="true"];
+        fizz_buzz_start_2 -> fizz_buzz_else_if_cond_5 [label="false"];
+        fizz_buzz_if_body_3 -> fizz_buzz_if_end_4;
+        fizz_buzz_else_if_cond_5 -> fizz_buzz_if_body_6 [label="true"];
+        fizz_buzz_else_if_cond_5 -> fizz_buzz_else_if_cond_7 [label="false"];
+        fizz_buzz_if_body_6 -> fizz_buzz_if_end_4;
+        fizz_buzz_else_if_cond_7 -> fizz_buzz_if_body_8 [label="true"];
+        fizz_buzz_else_if_cond_7 -> fizz_buzz_else_body_9 [label="false"];
+        fizz_buzz_if_body_8 -> fizz_buzz_if_end_4;
+        fizz_buzz_else_body_9 -> fizz_buzz_if_end_4;
     }
     subgraph cluster_main {
         label="fn main";
-        main_start_9 [label="start_9:\l%29 = call foo, \l%30 = ()\lreturn %30\l"];
+        main_start_10 [label="start_10:\l  %0 = 67\l  %1 = call fizz_buzz(%0)\l  %2 = retval str\l  %3 = call print(%2)\l  %4 = retval str\l  %5 = ()\l  return %5\l"];
     }
 }

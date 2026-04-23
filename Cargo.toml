@@ -9,6 +9,7 @@ slotmap = { version = "1.0" }
 indexmap  = { version = "2.13" }
 colored = "3.1.1"
 libtest-mimic = "0.8.2"
+aho-corasick = "1.1.4"
 
 [dev-dependencies]
 pretty_assertions = "1.4.1"

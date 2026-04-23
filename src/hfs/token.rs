@@ -17,24 +17,16 @@ impl Literal {
 }
 
 impl From<i32> for Literal {
-    fn from(value: i32) -> Self {
-        Literal::Integer(value)
-    }
+    fn from(value: i32) -> Self { Literal::Integer(value) }
 }
 impl From<f32> for Literal {
-    fn from(value: f32) -> Self {
-        Literal::Float(value)
-    }
+    fn from(value: f32) -> Self { Literal::Float(value) }
 }
 impl From<&str> for Literal {
-    fn from(value: &str) -> Self {
-        Literal::String(value.to_string())
-    }
+    fn from(value: &str) -> Self { Literal::String(value.to_string()) }
 }
 impl From<bool> for Literal {
-    fn from(value: bool) -> Self {
-        Literal::Bool(value)
-    }
+    fn from(value: bool) -> Self { Literal::Bool(value) }
 }
 
 impl std::fmt::Display for Literal {
@@ -128,13 +120,14 @@ impl From<Type> for TokenKind {
             Type::Bool { .. } => TokenKind::Bool,
             Type::Float { .. } => TokenKind::Float,
             Type::Tuple { .. } => TokenKind::LeftParen,
+            Type::Array { hfs_type, length } => todo!(),
         }
     }
 }
 
 use std::fmt::{self};
 
-use crate::hfs::{ast::Type};
+use crate::hfs::ast::Type;
 
 impl fmt::Display for TokenKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -214,9 +207,7 @@ pub struct Token {
 }
 
 impl Token {
-    pub fn new(kind: TokenKind, source_info: SourceInfo) -> Self {
-        Self { kind, source_info }
-    }
+    pub fn new(kind: TokenKind, source_info: SourceInfo) -> Self { Self { kind, source_info } }
 
     pub fn is_type(&self) -> bool {
         match self.kind {

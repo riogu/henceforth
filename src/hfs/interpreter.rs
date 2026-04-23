@@ -24,6 +24,7 @@ impl RuntimeValue {
             Type::Bool { .. } => RuntimeValue::Bool(false),
             Type::Float { .. } => RuntimeValue::Float(0.0),
             Type::Tuple { .. } => RuntimeValue::Tuple(Vec::new()),
+            Type::Array { hfs_type, length } => todo!(),
         }
     }
 }

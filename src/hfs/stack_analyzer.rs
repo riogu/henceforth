@@ -366,9 +366,9 @@ impl StackAnalyzer {
                     },
                 };
                 if matches!(unresolved_stmt, UnresolvedStatement::ElseIf { .. }) {
-                    Ok(self.arena.alloc_stmt(Statement::ElseIf { cond_stack_block, body, else_stmt }, token))
+                    Ok(self.arena.alloc_stmt(Statement::ElseIf { condition: cond_stack_block, body, else_stmt }, token))
                 } else {
-                    Ok(self.arena.alloc_stmt(Statement::If { cond_stack_block, body, else_stmt }, token))
+                    Ok(self.arena.alloc_stmt(Statement::If { condition: cond_stack_block, body, else_stmt }, token))
                 }
             },
             UnresolvedStatement::While { body, cond } => {

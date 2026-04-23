@@ -7,8 +7,8 @@ use crate::{
     ir_lowerer_error,
     hfs::{
         ast::*,
-        ir_lowerer_errors::IrLowererErrorKind,
         error::{CompileError, DiagnosticInfo},
+        ir_lowerer_errors::IrLowererErrorKind,
         BlockId, GlobalIrVarDeclaration, GlobalIrVarId, InstId, Instruction, IrArena, IrFuncId, IrFunction, IrOperation,
         IrTopLevelId, SourceInfo, TerminatorInst, PRIMITIVE_TYPE_COUNT,
     },
@@ -290,8 +290,8 @@ impl IrLowerer {
 
         match self.ast_arena.get_stmt(id).clone() {
             Statement::Else(stmt_id) => self.lower_stmt(stmt_id, curr_block_context),
-            if_stmt @ Statement::ElseIf { cond_stack_block, body, else_stmt }
-            | if_stmt @ Statement::If { cond_stack_block, body, else_stmt } => {
+            if_stmt @ Statement::ElseIf { condition: cond_stack_block, body, else_stmt }
+            | if_stmt @ Statement::If { condition: cond_stack_block, body, else_stmt } => {
                 // means we are starting a new chain of ifs
                 let mut stack_snapshots = curr_block_context.stack_snapshots.clone();
                 let stack_before_branches = self.arena.hfs_stack.clone();
@@ -639,6 +639,7 @@ impl IrLowerer {
                 }
                 Ok(())
             },
+            Statement::ArrayAssignment { position, identifier, is_move, deref_count } => todo!(),
         }
     }
     pub fn lower_expr(&mut self, id: ExprId) -> Result<InstId, Box<dyn CompileError>> {
@@ -721,11 +722,11 @@ impl IrLowerer {
             Operation::Not(expr_id) => IrOperation::Not(self.lower_expr(expr_id)?),
             Operation::AddressOf(_) => todo!(),
             Operation::Dereference(_) => todo!(),
+            Operation::ArrayAccess(expr_id, expr_id1) => todo!(),
         };
         Ok(self.arena.alloc_inst_for(Instruction::Operation { source_info, op: cfg_op }, self.ir_context.curr_insert_block))
     }
 }
-
 
 // impl IrArena {
 // ---------------------------------------------------------------------------------

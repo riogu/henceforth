@@ -47,6 +47,7 @@ pub enum Operation {
     LessEqual(ExprId, ExprId),
     Greater(ExprId, ExprId),
     GreaterEqual(ExprId, ExprId),
+    ArrayAccess(ExprId, ExprId),
     Or(ExprId, ExprId),
     And(ExprId, ExprId),
     Not(ExprId),
@@ -121,14 +122,14 @@ pub struct StackKeyword {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Statement {
     ElseIf {
-        cond_stack_block: StmtId, // boolean from the stack or operation
-        body: StmtId,             // points to BlockScope
+        condition: StmtId,
+        body: StmtId, // points to BlockScope
         else_stmt: Option<StmtId>,
     },
     Else(StmtId), // Points to a BlockScope
     If {
-        cond_stack_block: StmtId, // boolean from the stack or operation
-        body: StmtId,             // points to BlockScope
+        condition: StmtId, // boolean from the stack or operation
+        body: StmtId,      // points to BlockScope
         else_stmt: Option<StmtId>,
     },
     While {
@@ -144,6 +145,12 @@ pub enum Statement {
     Break,
     Continue,
     Empty,
+    ArrayAssignment {
+        position: ExprId,
+        identifier: Identifier,
+        is_move: bool,
+        deref_count: usize,
+    },
     Assignment {
         identifier: Identifier,
         is_move: bool,
@@ -166,6 +173,7 @@ pub enum Type {
     Bool { ptr_count: usize },
     Float { ptr_count: usize },
     Tuple { type_ids: Vec<TypeId>, ptr_count: usize },
+    Array { hfs_type: TypeId, length: Option<usize> },
 }
 
 impl Display for Type {
@@ -176,7 +184,7 @@ impl Display for Type {
             Type::Bool { ptr_count: _ } => write!(f, "bool"),
             Type::Float { ptr_count: _ } => write!(f, "f32"),
             Type::Tuple { type_ids: _, ptr_count: _ } => write!(f, "tuple"),
-            // todo!("this might not be printable with the current structure"),
+            Type::Array { hfs_type: r#type, length } => todo!(),
         }
     }
 }
@@ -192,6 +200,7 @@ impl Type {
                 "Tuple<{}>",
                 type_ids.iter().map(|id| arena.get_type(*id).get_repr_unresolved(arena)).collect::<Vec<String>>().join(", ")
             ),
+            Type::Array { hfs_type: r#type, length } => todo!(),
         }
     }
     pub fn get_repr_resolved(&self, arena: &AstArena) -> String {
@@ -204,6 +213,7 @@ impl Type {
                 "Tuple<{}>",
                 type_ids.iter().map(|id| arena.get_type(*id).get_repr_resolved(arena)).collect::<Vec<String>>().join(", ")
             ),
+            Type::Array { hfs_type: r#type, length } => todo!(),
         }
     }
 }
@@ -216,23 +226,14 @@ impl Type {
             Type::Bool { ptr_count } => ptr_count,
             Type::Float { ptr_count } => ptr_count,
             Type::Tuple { ptr_count, .. } => ptr_count,
+            Type::Array { hfs_type: r#type, length } => todo!(),
         }
     }
-    pub fn new_int(ptr_count: usize) -> Self {
-        Type::Int { ptr_count }
-    }
-    pub fn new_string(ptr_count: usize) -> Self {
-        Type::String { ptr_count }
-    }
-    pub fn new_bool(ptr_count: usize) -> Self {
-        Type::Bool { ptr_count }
-    }
-    pub fn new_float(ptr_count: usize) -> Self {
-        Type::Float { ptr_count }
-    }
-    pub fn new_tuple(types: Vec<TypeId>, ptr_count: usize) -> Self {
-        Type::Tuple { type_ids: types, ptr_count }
-    }
+    pub fn new_int(ptr_count: usize) -> Self { Type::Int { ptr_count } }
+    pub fn new_string(ptr_count: usize) -> Self { Type::String { ptr_count } }
+    pub fn new_bool(ptr_count: usize) -> Self { Type::Bool { ptr_count } }
+    pub fn new_float(ptr_count: usize) -> Self { Type::Float { ptr_count } }
+    pub fn new_tuple(types: Vec<TypeId>, ptr_count: usize) -> Self { Type::Tuple { type_ids: types, ptr_count } }
     pub fn to_token(&self) -> TokenKind {
         match self {
             Type::Int { ptr_count: _ } => TokenKind::Int,
@@ -240,6 +241,7 @@ impl Type {
             Type::Bool { ptr_count: _ } => TokenKind::Bool,
             Type::Float { ptr_count: _ } => TokenKind::Float,
             Type::Tuple { .. } => TokenKind::LeftParen,
+            Type::Array { hfs_type: r#type, length } => todo!(),
         }
     }
 }
@@ -366,9 +368,7 @@ impl AstArena {
     }
     //---------------------------------------------------------------------------------
     // provenance methods
-    pub fn get_expr_provenance(&self, expr: ExprId) -> &ExprProvenance {
-        &self.expr_provenances[expr.0]
-    }
+    pub fn get_expr_provenance(&self, expr: ExprId) -> &ExprProvenance { &self.expr_provenances[expr.0] }
     pub fn get_identifier_provenance(&self, id: Identifier) -> &ExprProvenance {
         match id {
             Identifier::GlobalVar(var_id) | Identifier::Variable(var_id) => &self.curr_var_provenances[var_id.0],
@@ -377,21 +377,11 @@ impl AstArena {
     }
     //---------------------------------------------------------------------------------
     // Immutable accessor methods
-    pub fn get_expr(&self, id: ExprId) -> &Expression {
-        &self.exprs[id.0]
-    }
-    pub fn get_stmt(&self, id: StmtId) -> &Statement {
-        &self.stmts[id.0]
-    }
-    pub fn get_var(&self, id: VarId) -> &VarDeclaration {
-        &self.vars[id.0]
-    }
-    pub fn get_func(&self, id: FuncId) -> &FunctionDeclaration {
-        &self.functions[id.0]
-    }
-    pub fn get_type(&self, id: TypeId) -> &Type {
-        &self.types[id.0]
-    }
+    pub fn get_expr(&self, id: ExprId) -> &Expression { &self.exprs[id.0] }
+    pub fn get_stmt(&self, id: StmtId) -> &Statement { &self.stmts[id.0] }
+    pub fn get_var(&self, id: VarId) -> &VarDeclaration { &self.vars[id.0] }
+    pub fn get_func(&self, id: FuncId) -> &FunctionDeclaration { &self.functions[id.0] }
+    pub fn get_type(&self, id: TypeId) -> &Type { &self.types[id.0] }
 
     pub fn get_stack_keyword_from_name(&self, name: &str) -> &StackKeywordDeclaration<'_> {
         if let Some(keyword) = STACK_KEYWORDS.iter().find(|keyword| keyword.name == name) {
@@ -402,39 +392,21 @@ impl AstArena {
     }
 
     // Mutable accessor methods
-    pub fn get_expr_mut(&mut self, id: ExprId) -> &mut Expression {
-        &mut self.exprs[id.0]
-    }
-    pub fn get_stmt_mut(&mut self, id: StmtId) -> &mut Statement {
-        &mut self.stmts[id.0]
-    }
-    pub fn get_var_mut(&mut self, id: VarId) -> &mut VarDeclaration {
-        &mut self.vars[id.0]
-    }
-    pub fn get_func_mut(&mut self, id: FuncId) -> &mut FunctionDeclaration {
-        &mut self.functions[id.0]
-    }
+    pub fn get_expr_mut(&mut self, id: ExprId) -> &mut Expression { &mut self.exprs[id.0] }
+    pub fn get_stmt_mut(&mut self, id: StmtId) -> &mut Statement { &mut self.stmts[id.0] }
+    pub fn get_var_mut(&mut self, id: VarId) -> &mut VarDeclaration { &mut self.vars[id.0] }
+    pub fn get_func_mut(&mut self, id: FuncId) -> &mut FunctionDeclaration { &mut self.functions[id.0] }
 
     // Token accessor methods
-    pub fn get_expr_token(&self, id: ExprId) -> &Token {
-        &self.expr_tokens[id.0]
-    }
+    pub fn get_expr_token(&self, id: ExprId) -> &Token { &self.expr_tokens[id.0] }
 
-    pub fn get_stmt_token(&self, id: StmtId) -> &Token {
-        &self.stmt_tokens[id.0]
-    }
+    pub fn get_stmt_token(&self, id: StmtId) -> &Token { &self.stmt_tokens[id.0] }
 
-    pub fn get_var_token(&self, id: VarId) -> &Token {
-        &self.var_tokens[id.0]
-    }
+    pub fn get_var_token(&self, id: VarId) -> &Token { &self.var_tokens[id.0] }
 
-    pub fn get_function_token(&self, id: FuncId) -> &Token {
-        &self.function_tokens[id.0]
-    }
+    pub fn get_function_token(&self, id: FuncId) -> &Token { &self.function_tokens[id.0] }
 
-    pub fn get_type_token(&self, id: TypeId) -> &Token {
-        &self.type_tokens[id.0]
-    }
+    pub fn get_type_token(&self, id: TypeId) -> &Token { &self.type_tokens[id.0] }
 
     pub fn to_type(&mut self, token: Token) -> TypeId {
         match token.kind {

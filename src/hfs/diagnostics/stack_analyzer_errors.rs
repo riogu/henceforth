@@ -89,28 +89,21 @@ impl StackAnalyzerError {
 impl CompileError for StackAnalyzerError {
     fn message(&self) -> (String, String) {
         match &self.kind {
-            StackAnalyzerErrorKind::StackUnderflow => {
-                (String::from("stack underflow"), String::from("stack underflow occurred here"))
-            },
+            StackAnalyzerErrorKind::StackUnderflow =>
+                (String::from("stack underflow"), String::from("stack underflow occurred here")),
             StackAnalyzerErrorKind::ExpectedItemOnStack => (String::from("expected item on stack"), String::new()),
-            StackAnalyzerErrorKind::IncorrectNumberReturnValues(expected, actual) => {
-                (format!("expected {} values on stack for return, found {}", expected, actual), String::new())
-            },
-            StackAnalyzerErrorKind::TypeMismatchReturnValues(expected, actual) => {
-                (format!("expected {} on stack for return, found {}", expected, actual), String::new())
-            },
-            StackAnalyzerErrorKind::TypeMismatch(expected, actual) => {
-                (format!("expected {}, found {}", expected, actual), format!("found {}", actual))
-            },
-            StackAnalyzerErrorKind::IncorrectTupleLength(expected, actual) => {
-                (format!("expected a tuple of size {}, found a tuple of size {}", expected, actual), String::new())
-            },
-            StackAnalyzerErrorKind::IncorrectPointerCount(expected, actual) => {
-                (format!("expected a pointer count of {}, found a pointer count of {}", expected, actual), String::new())
-            },
-            StackAnalyzerErrorKind::MismatchingStackDepths(expected, actual) => {
-                (format!("expected a stack depth of {}, found a stack depth of {}", expected, actual), String::new())
-            },
+            StackAnalyzerErrorKind::IncorrectNumberReturnValues(expected, actual) =>
+                (format!("expected {} values on stack for return, found {}", expected, actual), String::new()),
+            StackAnalyzerErrorKind::TypeMismatchReturnValues(expected, actual) =>
+                (format!("expected {} on stack for return, found {}", expected, actual), String::new()),
+            StackAnalyzerErrorKind::TypeMismatch(expected, actual) =>
+                (format!("expected {}, found {}", expected, actual), format!("found {}", actual)),
+            StackAnalyzerErrorKind::IncorrectTupleLength(expected, actual) =>
+                (format!("expected a tuple of size {}, found a tuple of size {}", expected, actual), String::new()),
+            StackAnalyzerErrorKind::IncorrectPointerCount(expected, actual) =>
+                (format!("expected a pointer count of {}, found a pointer count of {}", expected, actual), String::new()),
+            StackAnalyzerErrorKind::MismatchingStackDepths(expected, actual) =>
+                (format!("expected a stack depth of {}, found a stack depth of {}", expected, actual), String::new()),
             StackAnalyzerErrorKind::ExpectedNetZeroStackEffectIfStmt(found) => (
                 format!("expected a net-zero stack effect on all branches, found a stack depth difference of {}", found),
                 String::new(),
@@ -119,23 +112,18 @@ impl CompileError for StackAnalyzerError {
                 format!("expected while loop to maintain a net-zero stack effect, found a stack depth difference of {}", found),
                 String::new(),
             ),
-            StackAnalyzerErrorKind::FoundXOutsideWhileLoop(jump_keyword) => {
-                (format!("found {} outside while loop", jump_keyword), format!("found {}", jump_keyword))
-            },
+            StackAnalyzerErrorKind::FoundXOutsideWhileLoop(jump_keyword) =>
+                (format!("found {} outside while loop", jump_keyword), format!("found {}", jump_keyword)),
             StackAnalyzerErrorKind::AssignValueToFunction => (format!("cannot assign value to a function"), String::new()),
-            StackAnalyzerErrorKind::TooManyDereferences(actual, max) => {
-                (format!("cannot dereference {} times", actual), format!("type only has {} levels of indirection", max))
-            },
+            StackAnalyzerErrorKind::TooManyDereferences(actual, max) =>
+                (format!("cannot dereference {} times", actual), format!("type only has {} levels of indirection", max)),
             StackAnalyzerErrorKind::CallVariableAsFunction => (format!("cannot call variable as a function"), String::new()),
-            StackAnalyzerErrorKind::UseOfUndeclaredIdentifier(name) => {
-                (format!("use of undeclared identifier '{}'", name), format!("undeclared identifier"))
-            },
+            StackAnalyzerErrorKind::UseOfUndeclaredIdentifier(name) =>
+                (format!("use of undeclared identifier '{}'", name), format!("undeclared identifier")),
         }
     }
 
-    fn header(&self) -> colored::ColoredString {
-        format!("{} {}", "error:".red().bold(), self.message().0.bold()).into()
-    }
+    fn header(&self) -> colored::ColoredString { format!("{} {}", "error:".red().bold(), self.message().0.bold()).into() }
 
     fn location(&self) -> colored::ColoredString {
         format!(
@@ -187,9 +175,7 @@ impl CompileError for StackAnalyzerError {
         return ColoredString::from("");
     }
 
-    fn get_line(&self) -> usize {
-        return self.source_info.line_number;
-    }
+    fn get_line(&self) -> usize { return self.source_info.line_number; }
 }
 
 impl Display for StackAnalyzerError {
@@ -201,9 +187,7 @@ impl Display for StackAnalyzerError {
         write!(f, "{}\n{}\n{}{}", self.header(), self.location(), source_code, self.debug_info())
     }
 }
-fn indent(s: &ColoredString) -> ColoredString {
-    ColoredString::from(s.trim_start_matches('\n').replace('\n', "\n\t"))
-}
+fn indent(s: &ColoredString) -> ColoredString { ColoredString::from(s.trim_start_matches('\n').replace('\n', "\n\t")) }
 
 fn indent_list(items: &[ColoredString]) -> ColoredString {
     ColoredString::from(items.iter().map(|s| format!("\t{}", indent(s))).collect::<Vec<String>>().join(",\n"))
@@ -389,6 +373,7 @@ impl Dumpable for Operation {
                 arena.get_expr(*x).dump(arena),
                 ")".custom_color(CustomColor::new(129, 137, 150))
             )),
+            Operation::ArrayAccess(expr_id, expr_id1) => todo!(),
         };
         op
     }
@@ -430,9 +415,8 @@ impl Dumpable for Expression {
 
     fn dump(&self, arena: &Self::Arena) -> ColoredString {
         match self {
-            Expression::Operation(operation) => {
-                ColoredString::from(format!("{}\n\t{}", "Operation:".red().bold(), indent(&operation.dump(arena)).yellow()))
-            },
+            Expression::Operation(operation) =>
+                ColoredString::from(format!("{}\n\t{}", "Operation:".red().bold(), indent(&operation.dump(arena)).yellow())),
             Expression::Identifier(name) => ColoredString::from(format!(
                 "{} {}",
                 "Identifier".red().bold(),
@@ -443,9 +427,8 @@ impl Dumpable for Expression {
                     ")".custom_color(CustomColor::new(129, 137, 150)),
                 )
             )),
-            Expression::Literal(literal) => {
-                ColoredString::from(format!("{} {}", "Literal: ".red().bold(), format!("{}", literal).green()))
-            },
+            Expression::Literal(literal) =>
+                ColoredString::from(format!("{} {}", "Literal: ".red().bold(), format!("{}", literal).green())),
             Expression::Tuple { expressions } => {
                 let items: Vec<ColoredString> = expressions.iter().map(|expr| arena.get_expr(*expr).dump(arena)).collect();
                 ColoredString::from(format!(
@@ -491,7 +474,7 @@ impl Dumpable for Statement {
 
     fn dump(&self, arena: &Self::Arena) -> ColoredString {
         match self {
-            Statement::ElseIf { cond_stack_block, body, else_stmt } => ColoredString::from(format!(
+            Statement::ElseIf { condition: cond_stack_block, body, else_stmt } => ColoredString::from(format!(
                 "\n{}\n\t{} {}\n\t{} {}{}",
                 "Else-If Statement:".red().bold(),
                 "Condition:".blue(),
@@ -509,7 +492,7 @@ impl Dumpable for Statement {
                 "Body:".blue(),
                 indent(&arena.get_stmt(*unresolved_stmt_id).dump(arena)),
             )),
-            Statement::If { cond_stack_block, body, else_stmt } => ColoredString::from(format!(
+            Statement::If { condition: cond_stack_block, body, else_stmt } => ColoredString::from(format!(
                 "\n{}\n\t{} {}\n\t{} {}{}",
                 "If Statement:".red().bold(),
                 "Condition:".blue(),
@@ -582,6 +565,7 @@ impl Dumpable for Statement {
                     "]".custom_color(CustomColor::new(129, 137, 150)),
                 ))
             },
+            Statement::ArrayAssignment { position, identifier, is_move, deref_count } => todo!(),
         }
     }
 }

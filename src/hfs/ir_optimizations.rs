@@ -17,8 +17,15 @@ pub trait IrPass {
 pub trait OptPipeline {
     fn new() -> Self;
     fn name(&self) -> &str;
-    fn run_on_function(&mut self, arena: &mut IrArena, func_id: IrFuncId) -> bool; // returns true if changed
     fn get_opt_passes(&mut self) -> &mut [Box<dyn IrPass>];
+
+    fn run_on_function(&mut self, arena: &mut IrArena, func_id: IrFuncId) -> bool {
+        let mut any_changed = false;
+        for pass in self.get_opt_passes() {
+            any_changed |= pass.run(arena, func_id);
+        }
+        any_changed
+    }
 
     // default run method if none is provided
     fn run(&mut self, arena: &mut IrArena) -> bool {
@@ -48,15 +55,6 @@ pub struct O0 {
 impl OptPipeline for O0 {
     fn new() -> Self { O0 { opt_passes: passes!(Mem2Reg, DeadCodeElimination) } }
     fn name(&self) -> &str { "-O0: Basic Optimizations" }
-    fn run_on_function(&mut self, arena: &mut IrArena, func_id: IrFuncId) -> bool {
-        let mut any_changed = false;
-        for pass in self.opt_passes.iter_mut() {
-            any_changed |= pass.run(arena, func_id);
-        }
-        // let loop_info = LoopInfo::compute(arena, func_id);
-        // dbg!(loop_info);
-        any_changed
-    }
     fn get_opt_passes(&mut self) -> &mut [Box<dyn IrPass>] { &mut self.opt_passes }
 }
 

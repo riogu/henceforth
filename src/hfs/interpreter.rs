@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use slotmap::Key;
 
-use crate::hfs::{ast::*, hfs_mir::*, scope_stack::*, token::*, IrArena};
+use crate::hfs::{ast::*, hfs_mir::*, scope_stack::*, token::*, DeadCodeElimination, IrArena, Mem2Reg};
 
 //---------------------------------------------------------------------------
 // Runtime values

@@ -10,7 +10,7 @@ use colored::{Colorize, CustomColor};
 use slotmap::SlotMap;
 
 use crate::{
-    cfg_analyzer_error,
+    ir_lowerer_error,
     hfs::{
         BasicBlock, BlockId, GlobalIrVarDeclaration, GlobalIrVarId, InstId, Instruction, IrFuncId, IrFunction, SourceInfo,
         TermInstId, TerminatorInst,
@@ -75,7 +75,7 @@ impl IrArena {
     pub fn pop_or_error(&mut self, source_infos: Vec<SourceInfo>, ast_arena: &AstArena) -> Result<InstId, Box<dyn CompileError>> {
         match self.pop_hfs_stack() {
             Some(id) => Ok(id),
-            None => cfg_analyzer_error!(IrLowererErrorKind::StackUnderflow, &*self, Some(ast_arena), source_infos),
+            None => ir_lowerer_error!(IrLowererErrorKind::StackUnderflow, &*self, Some(ast_arena), source_infos),
         }
     }
     pub fn last_or_error(
@@ -85,7 +85,7 @@ impl IrArena {
     ) -> Result<InstId, Box<dyn CompileError>> {
         match self.hfs_stack.last() {
             Some(id) => Ok(*id),
-            None => cfg_analyzer_error!(IrLowererErrorKind::ExpectedItemOnStack, &*self, Some(ast_arena), source_infos),
+            None => ir_lowerer_error!(IrLowererErrorKind::ExpectedItemOnStack, &*self, Some(ast_arena), source_infos),
         }
     }
     pub fn push_to_hfs_stack(&mut self, inst: InstId) {
@@ -286,7 +286,7 @@ impl IrArena {
         let expected_count = stack1.len();
         let actual_count = stack2.len();
         if expected_count != actual_count {
-            return cfg_analyzer_error!(
+            return ir_lowerer_error!(
                 IrLowererErrorKind::MismatchingStackDepths(expected_count, actual_count),
                 &self,
                 None,
@@ -317,7 +317,7 @@ impl IrArena {
                 Type::Tuple { type_ids: expected_types, ptr_count: expected_ptr_count },
             ) => {
                 if actual_types.len() != expected_types.len() {
-                    return cfg_analyzer_error!(
+                    return ir_lowerer_error!(
                         IrLowererErrorKind::IncorrectTupleLength(expected_types.len(), actual_types.len()),
                         self,
                         None,
@@ -325,7 +325,7 @@ impl IrArena {
                     );
                 }
                 if actual_ptr_count != expected_ptr_count {
-                    return cfg_analyzer_error!(
+                    return ir_lowerer_error!(
                         IrLowererErrorKind::IncorrectPointerCount(*expected_ptr_count, *actual_ptr_count),
                         self,
                         None,
@@ -343,7 +343,7 @@ impl IrArena {
                 Ok(())
             },
             (actual, expected) if actual == expected => Ok(()),
-            (actual, expected) => cfg_analyzer_error!(
+            (actual, expected) => ir_lowerer_error!(
                 IrLowererErrorKind::MismatchingTypes(actual.clone(), expected.clone()),
                 self,
                 None,

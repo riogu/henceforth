@@ -1,5 +1,3 @@
-fn print: (str) -> () { /* builtin lmaoooooo */ }
-
 fn print_board: ([]str) -> () {
     @("next move:\n") &> print;
     let board: [9]str; &= board;
@@ -43,7 +41,7 @@ fn get_winner: ([]str /* board */ ) -> (str) {
     }
 }
 
-fn tic_tac_toe: ([]str i32 str) -> ([]str) {
+fn tic_tac_toe: ([9]str i32 str) -> ([9]str) {
     let player: str; &= player;       // "X" or "O"
     let board_pos: i32; &= board_pos; // where to play in the board
     let board: [9]str; &= board;
@@ -58,9 +56,7 @@ fn tic_tac_toe: ([]str i32 str) -> ([]str) {
 }
 
 fn main: () -> () {
-    let board_start: str; @(" ") &= board_start;
     let board: [9]str; (board_start&) &= board;
-
     // initialize the board, i guess?
     let idx: i32; @(0) &= idx;
     while @(idx 9 !=) {

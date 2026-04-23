@@ -31,7 +31,7 @@ pub struct IrLowererError {
 }
 
 #[macro_export]
-macro_rules! cfg_analyzer_error {
+macro_rules! ir_lowerer_error {
     ($kind:expr, $arena:expr, $ast:expr, $source_info:expr) => {
         Err(Box::new($crate::hfs::diagnostics::ir_lowerer_errors::IrLowererError {
             kind: $kind,

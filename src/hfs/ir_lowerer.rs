@@ -4,7 +4,7 @@ use indexmap::IndexMap;
 use slotmap::Key;
 
 use crate::{
-    cfg_analyzer_error,
+    ir_lowerer_error,
     hfs::{
         ast::*,
         ir_lowerer_errors::IrLowererErrorKind,
@@ -54,10 +54,10 @@ impl IrLowerer {
         ast_arena: AstArena,
         diagnostic_info: Rc<DiagnosticInfo>,
     ) -> Result<(Vec<IrTopLevelId>, IrArena), Box<dyn CompileError>> {
-        let mut cfg_analyzer = IrLowerer::new(ast_arena, diagnostic_info);
-        let analyzed_top_level = cfg_analyzer.lower_top_level(top_level)?;
-        // cfg_analyzer.print_hfs_mir(analyzed_top_level);
-        Ok((analyzed_top_level, cfg_analyzer.arena))
+        let mut ir_lowerer = IrLowerer::new(ast_arena, diagnostic_info);
+        let analyzed_top_level = ir_lowerer.lower_top_level(top_level)?;
+        // ir_lowerer.print_hfs_mir(analyzed_top_level);
+        Ok((analyzed_top_level, ir_lowerer.arena))
     }
 
     pub fn lower_top_level(&mut self, top_level: Vec<TopLevelId>) -> Result<Vec<IrTopLevelId>, Box<dyn CompileError>> {
@@ -67,7 +67,7 @@ impl IrLowerer {
                 TopLevelId::VariableDecl(id) => IrTopLevelId::GlobalVarDecl(self.lower_global_variable_declaration(id)),
                 TopLevelId::FunctionDecl(id) => IrTopLevelId::FunctionDecl(self.lower_function_declaration(id)?),
                 TopLevelId::Statement(id) =>
-                    return cfg_analyzer_error!(
+                    return ir_lowerer_error!(
                         IrLowererErrorKind::NoStatementsInGlobalScope,
                         &self.arena,
                         Some(&self.ast_arena),
@@ -174,7 +174,7 @@ impl IrLowerer {
     // otherwise we might have issues. maybe we should do that in StackAnalyzer instead?
     // watch out for accidentally overwriting the old terminator if we run this code without dead code elimination
     // basically, this code expects dead code elimination to have occurred BEFORE
-    // FIXME: implement a small dead code elimination on the AST before cfg_analyzer
+    // FIXME: implement a small dead code elimination on the AST before ir_lowerer
 
     /* example of CFG blocks that cover many of the cases of the code below:
       start_function:
@@ -217,7 +217,7 @@ impl IrLowerer {
         let cond = match self.arena.pop_hfs_stack() {
             Some(cond) => cond,
             None =>
-                return cfg_analyzer_error!(IrLowererErrorKind::StackUnderflow, &self.arena, Some(&self.ast_arena), vec![
+                return ir_lowerer_error!(IrLowererErrorKind::StackUnderflow, &self.arena, Some(&self.ast_arena), vec![
                     self.ast_arena.get_stmt_token(body).source_info.clone()
                 ]),
         };
@@ -367,7 +367,7 @@ impl IrLowerer {
                     }
                 } else {
                     if self.arena.hfs_stack.len() != stack_before_branches.len() {
-                        return cfg_analyzer_error!(
+                        return ir_lowerer_error!(
                             IrLowererErrorKind::ExpectedNetZeroStackEffectIfStmt(self.arena.hfs_stack.len()),
                             &self.arena,
                             Some(&self.ast_arena),
@@ -433,7 +433,7 @@ impl IrLowerer {
                 // Enforce stack balance
                 let stack_depth_after = self.arena.hfs_stack.len();
                 if stack_depth_before != stack_depth_after {
-                    return cfg_analyzer_error!(
+                    return ir_lowerer_error!(
                         IrLowererErrorKind::ExpectedNetZeroStackEffectWhileLoop(stack_depth_after - stack_depth_before),
                         &self.arena,
                         Some(&self.ast_arena),
@@ -493,7 +493,7 @@ impl IrLowerer {
             Statement::Return => {
                 // note that we have already checked that the state of the stack is correct in
                 // terms of size and types before each return statement.
-                // what the cfg_analyzer does is also check all branches against each other.
+                // what the ir_lowerer does is also check all branches against each other.
                 let return_tuple = self.arena.alloc_inst_for(
                     Instruction::Tuple { source_info: source_info.clone(), instructions: self.arena.hfs_stack.clone() },
                     self.ir_context.curr_insert_block,
@@ -540,7 +540,7 @@ impl IrLowerer {
                     match self.arena.pop_hfs_stack() {
                         Some(val) => val,
                         None =>
-                            return cfg_analyzer_error!(
+                            return ir_lowerer_error!(
                                 IrLowererErrorKind::StackUnderflow,
                                 &self.arena,
                                 Some(&self.ast_arena),
@@ -554,7 +554,7 @@ impl IrLowerer {
                     match self.arena.hfs_stack.last() {
                         Some(val) => *val,
                         None =>
-                            return cfg_analyzer_error!(
+                            return ir_lowerer_error!(
                                 IrLowererErrorKind::ExpectedItemOnStack,
                                 &self.arena,
                                 Some(&self.ast_arena),

@@ -3,14 +3,14 @@ use std::{fmt::Display, fs, path::PathBuf};
 use colored::{ColoredString, Colorize};
 
 use crate::hfs::{
-    error::{number_length, CompileError, DebugInfo},
+    AstArena, IrArena, IrFuncId, SourceInfo, Type,
+    error::{CompileError, DebugInfo, number_length},
     print,
     stack_analyzer_errors::StackAnalyzerError,
-    AstArena, IrArena, IrFuncId, SourceInfo, Type,
 };
 
 #[derive(Debug)]
-pub enum CfgAnalyzerErrorKind {
+pub enum IrLowererErrorKind {
     IncorrectTupleLength(usize, usize),
     IncorrectPointerCount(usize, usize),
     MismatchingStackDepths(usize, usize),
@@ -23,8 +23,8 @@ pub enum CfgAnalyzerErrorKind {
 }
 
 #[derive(Debug)]
-pub struct CfgAnalyzerError {
-    pub kind: CfgAnalyzerErrorKind,
+pub struct IrLowererError {
+    pub kind: IrLowererErrorKind,
     pub path: PathBuf,
     pub source_info: SourceInfo,
     pub debug_info: DebugInfo,
@@ -33,21 +33,21 @@ pub struct CfgAnalyzerError {
 #[macro_export]
 macro_rules! cfg_analyzer_error {
     ($kind:expr, $arena:expr, $ast:expr, $source_info:expr) => {
-        Err(Box::new($crate::hfs::diagnostics::cfg_analyzer_errors::CfgAnalyzerError {
+        Err(Box::new($crate::hfs::diagnostics::ir_lowerer_errors::IrLowererError {
             kind: $kind,
             path: $arena.diagnostic_info.path.clone(),
-            source_info: $crate::hfs::diagnostics::cfg_analyzer_errors::CfgAnalyzerError::merge_source_info($source_info),
+            source_info: $crate::hfs::diagnostics::ir_lowerer_errors::IrLowererError::merge_source_info($source_info),
             debug_info: $crate::hfs::diagnostics::error::DebugInfo {
                 compiler_file: file!(),
                 compiler_line: line!(),
                 compiler_column: column!(),
-                internal_dump: $crate::hfs::diagnostics::cfg_analyzer_errors::CfgAnalyzerError::dump_ast_and_ir($ast, $arena),
+                internal_dump: $crate::hfs::diagnostics::ir_lowerer_errors::IrLowererError::dump_ast_and_ir($ast, $arena),
             },
         }))
     };
 }
 
-impl CfgAnalyzerError {
+impl IrLowererError {
     pub fn merge_source_info(mut source_infos: Vec<SourceInfo>) -> SourceInfo {
         source_infos.sort();
         let first = source_infos.first().unwrap();
@@ -80,30 +80,30 @@ impl CfgAnalyzerError {
     }
 }
 
-impl CompileError for CfgAnalyzerError {
+impl CompileError for IrLowererError {
     fn get_line(&self) -> usize { return self.source_info.line_number; }
     fn message(&self) -> (String, String) {
         match &self.kind {
-            CfgAnalyzerErrorKind::StackUnderflow =>
+            IrLowererErrorKind::StackUnderflow =>
                 (String::from("stack underflow"), String::from("stack underflow occurred here")),
-            CfgAnalyzerErrorKind::ExpectedItemOnStack => (String::from("expected item on stack"), String::new()),
-            CfgAnalyzerErrorKind::ExpectedNetZeroStackEffectIfStmt(found) => (
+            IrLowererErrorKind::ExpectedItemOnStack => (String::from("expected item on stack"), String::new()),
+            IrLowererErrorKind::ExpectedNetZeroStackEffectIfStmt(found) => (
                 format!("expected a net-zero stack effect on all branches, found a stack depth difference of {}", found),
                 String::new(),
             ),
-            CfgAnalyzerErrorKind::ExpectedNetZeroStackEffectWhileLoop(found) => (
+            IrLowererErrorKind::ExpectedNetZeroStackEffectWhileLoop(found) => (
                 format!("expected while loop to maintain a net-zero stack effect, found a stack depth difference of {}", found),
                 String::new(),
             ),
-            CfgAnalyzerErrorKind::MismatchingStackDepths(expected, actual) =>
+            IrLowererErrorKind::MismatchingStackDepths(expected, actual) =>
                 (format!("expected a stack depth of {}, found a stack depth of {}", expected, actual), String::new()),
-            CfgAnalyzerErrorKind::IncorrectTupleLength(expected, actual) =>
+            IrLowererErrorKind::IncorrectTupleLength(expected, actual) =>
                 (format!("expected a tuple of size {}, found a tuple of size {}", expected, actual), String::new()),
-            CfgAnalyzerErrorKind::IncorrectPointerCount(expected, actual) =>
+            IrLowererErrorKind::IncorrectPointerCount(expected, actual) =>
                 (format!("expected a pointer count of {}, found a pointer count of {}", expected, actual), String::new()),
-            CfgAnalyzerErrorKind::MismatchingTypes(expected, actual) =>
+            IrLowererErrorKind::MismatchingTypes(expected, actual) =>
                 (format!("expected {}, found {}", expected, actual), format!("found {}", actual)),
-            CfgAnalyzerErrorKind::NoStatementsInGlobalScope =>
+            IrLowererErrorKind::NoStatementsInGlobalScope =>
                 (String::from("statements are not allowed in the global scope"), String::new()),
         }
     }
@@ -161,7 +161,7 @@ impl CompileError for CfgAnalyzerError {
     }
 }
 
-impl Display for CfgAnalyzerError {
+impl Display for IrLowererError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let source_code = match self.source_code() {
             Ok(source_code) => source_code,

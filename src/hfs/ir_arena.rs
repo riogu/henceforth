@@ -15,7 +15,7 @@ use crate::{
         BasicBlock, BlockId, GlobalIrVarDeclaration, GlobalIrVarId, InstId, Instruction, IrFuncId, IrFunction, SourceInfo,
         TermInstId, TerminatorInst,
         ast::*,
-        cfg_analyzer_errors::CfgAnalyzerErrorKind,
+        ir_lowerer_errors::IrLowererErrorKind,
         error::{CompileError, DiagnosticInfo},
     },
 };
@@ -75,7 +75,7 @@ impl IrArena {
     pub fn pop_or_error(&mut self, source_infos: Vec<SourceInfo>, ast_arena: &AstArena) -> Result<InstId, Box<dyn CompileError>> {
         match self.pop_hfs_stack() {
             Some(id) => Ok(id),
-            None => cfg_analyzer_error!(CfgAnalyzerErrorKind::StackUnderflow, &*self, Some(ast_arena), source_infos),
+            None => cfg_analyzer_error!(IrLowererErrorKind::StackUnderflow, &*self, Some(ast_arena), source_infos),
         }
     }
     pub fn last_or_error(
@@ -85,7 +85,7 @@ impl IrArena {
     ) -> Result<InstId, Box<dyn CompileError>> {
         match self.hfs_stack.last() {
             Some(id) => Ok(*id),
-            None => cfg_analyzer_error!(CfgAnalyzerErrorKind::ExpectedItemOnStack, &*self, Some(ast_arena), source_infos),
+            None => cfg_analyzer_error!(IrLowererErrorKind::ExpectedItemOnStack, &*self, Some(ast_arena), source_infos),
         }
     }
     pub fn push_to_hfs_stack(&mut self, inst: InstId) {
@@ -287,7 +287,7 @@ impl IrArena {
         let actual_count = stack2.len();
         if expected_count != actual_count {
             return cfg_analyzer_error!(
-                CfgAnalyzerErrorKind::MismatchingStackDepths(expected_count, actual_count),
+                IrLowererErrorKind::MismatchingStackDepths(expected_count, actual_count),
                 &self,
                 None,
                 source_infos
@@ -318,7 +318,7 @@ impl IrArena {
             ) => {
                 if actual_types.len() != expected_types.len() {
                     return cfg_analyzer_error!(
-                        CfgAnalyzerErrorKind::IncorrectTupleLength(expected_types.len(), actual_types.len()),
+                        IrLowererErrorKind::IncorrectTupleLength(expected_types.len(), actual_types.len()),
                         self,
                         None,
                         source_infos
@@ -326,7 +326,7 @@ impl IrArena {
                 }
                 if actual_ptr_count != expected_ptr_count {
                     return cfg_analyzer_error!(
-                        CfgAnalyzerErrorKind::IncorrectPointerCount(*expected_ptr_count, *actual_ptr_count),
+                        IrLowererErrorKind::IncorrectPointerCount(*expected_ptr_count, *actual_ptr_count),
                         self,
                         None,
                         source_infos
@@ -344,7 +344,7 @@ impl IrArena {
             },
             (actual, expected) if actual == expected => Ok(()),
             (actual, expected) => cfg_analyzer_error!(
-                CfgAnalyzerErrorKind::MismatchingTypes(actual.clone(), expected.clone()),
+                IrLowererErrorKind::MismatchingTypes(actual.clone(), expected.clone()),
                 self,
                 None,
                 source_infos

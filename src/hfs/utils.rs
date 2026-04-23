@@ -1,7 +1,7 @@
 use std::{any::Any, path::PathBuf, rc::Rc};
 
 use crate::hfs::{
-    AstArena, CfgAnalyzer, File, IrArena, Lexer, O0, OptPipeline, Parser, StackAnalyzer, Token, UnresolvedAstArena,
+    AstArena, IrLowerer, File, IrArena, Lexer, O0, OptPipeline, Parser, StackAnalyzer, Token, UnresolvedAstArena,
     error::{CompileError, DiagnosticInfo},
     get_eof_source_info,
 };
@@ -61,7 +61,7 @@ pub fn run_until(filename: &str, phase: Phase) -> Result<Rc<dyn Byproduct>, Box<
         return Ok(Rc::new(ast_arena));
     }
 
-    let (_, mut ir_arena) = CfgAnalyzer::lower_to_mir(top_level_nodes, ast_arena, diagnostic_info.clone())?;
+    let (_, mut ir_arena) = IrLowerer::lower_to_mir(top_level_nodes, ast_arena, diagnostic_info.clone())?;
 
     if phase == Phase::CfgAnalyzer {
         return Ok(Rc::new(ir_arena));

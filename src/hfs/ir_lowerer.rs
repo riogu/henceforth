@@ -7,7 +7,7 @@ use crate::{
     cfg_analyzer_error,
     hfs::{
         ast::*,
-        cfg_analyzer_errors::CfgAnalyzerErrorKind,
+        ir_lowerer_errors::IrLowererErrorKind,
         error::{CompileError, DiagnosticInfo},
         BlockId, GlobalIrVarDeclaration, GlobalIrVarId, InstId, Instruction, IrArena, IrFuncId, IrFunction, IrOperation,
         IrTopLevelId, SourceInfo, TerminatorInst, PRIMITIVE_TYPE_COUNT,
@@ -34,7 +34,7 @@ pub struct IrContext {
 }
 
 #[derive(Debug)]
-pub struct CfgAnalyzer {
+pub struct IrLowerer {
     pub ast_arena: AstArena,
     pub arena: IrArena,
     // this is used to get rid of duplication issues while lowering stack blocks
@@ -42,7 +42,7 @@ pub struct CfgAnalyzer {
     pub ir_context: IrContext,
 }
 
-impl CfgAnalyzer {
+impl IrLowerer {
     pub fn new(ast_arena: AstArena, diagnostic_info: Rc<DiagnosticInfo>) -> Self {
         let mut arena = IrArena::new(diagnostic_info);
         arena.types.extend_from_slice(&ast_arena.types[PRIMITIVE_TYPE_COUNT..]);
@@ -54,7 +54,7 @@ impl CfgAnalyzer {
         ast_arena: AstArena,
         diagnostic_info: Rc<DiagnosticInfo>,
     ) -> Result<(Vec<IrTopLevelId>, IrArena), Box<dyn CompileError>> {
-        let mut cfg_analyzer = CfgAnalyzer::new(ast_arena, diagnostic_info);
+        let mut cfg_analyzer = IrLowerer::new(ast_arena, diagnostic_info);
         let analyzed_top_level = cfg_analyzer.lower_top_level(top_level)?;
         // cfg_analyzer.print_hfs_mir(analyzed_top_level);
         Ok((analyzed_top_level, cfg_analyzer.arena))
@@ -68,7 +68,7 @@ impl CfgAnalyzer {
                 TopLevelId::FunctionDecl(id) => IrTopLevelId::FunctionDecl(self.lower_function_declaration(id)?),
                 TopLevelId::Statement(id) =>
                     return cfg_analyzer_error!(
-                        CfgAnalyzerErrorKind::NoStatementsInGlobalScope,
+                        IrLowererErrorKind::NoStatementsInGlobalScope,
                         &self.arena,
                         Some(&self.ast_arena),
                         vec![self.ast_arena.get_stmt_token(id).source_info.clone()]
@@ -214,14 +214,13 @@ impl CfgAnalyzer {
         self.ir_context.curr_insert_block = if_body_block;
 
         // condition isnt included in the stack depth count
-        let cond =
-            match self.arena.pop_hfs_stack() {
-                Some(cond) => cond,
-                None =>
-                    return cfg_analyzer_error!(CfgAnalyzerErrorKind::StackUnderflow, &self.arena, Some(&self.ast_arena), vec![
-                        self.ast_arena.get_stmt_token(body).source_info.clone()
-                    ]),
-            };
+        let cond = match self.arena.pop_hfs_stack() {
+            Some(cond) => cond,
+            None =>
+                return cfg_analyzer_error!(IrLowererErrorKind::StackUnderflow, &self.arena, Some(&self.ast_arena), vec![
+                    self.ast_arena.get_stmt_token(body).source_info.clone()
+                ]),
+        };
         let cond_type = self.arena.get_type_id_of_inst(cond)?;
         self.arena.compare_types(cond_type, self.arena.bool_type(), vec![self.arena.get_inst(cond).get_source_info()])?;
 
@@ -369,7 +368,7 @@ impl CfgAnalyzer {
                 } else {
                     if self.arena.hfs_stack.len() != stack_before_branches.len() {
                         return cfg_analyzer_error!(
-                            CfgAnalyzerErrorKind::ExpectedNetZeroStackEffectIfStmt(self.arena.hfs_stack.len()),
+                            IrLowererErrorKind::ExpectedNetZeroStackEffectIfStmt(self.arena.hfs_stack.len()),
                             &self.arena,
                             Some(&self.ast_arena),
                             vec![self.ast_arena.get_stmt_token(body).source_info.clone()]
@@ -435,7 +434,7 @@ impl CfgAnalyzer {
                 let stack_depth_after = self.arena.hfs_stack.len();
                 if stack_depth_before != stack_depth_after {
                     return cfg_analyzer_error!(
-                        CfgAnalyzerErrorKind::ExpectedNetZeroStackEffectWhileLoop(stack_depth_after - stack_depth_before),
+                        IrLowererErrorKind::ExpectedNetZeroStackEffectWhileLoop(stack_depth_after - stack_depth_before),
                         &self.arena,
                         Some(&self.ast_arena),
                         vec![self.ast_arena.get_stmt_token(body).source_info.clone()]
@@ -542,7 +541,7 @@ impl CfgAnalyzer {
                         Some(val) => val,
                         None =>
                             return cfg_analyzer_error!(
-                                CfgAnalyzerErrorKind::StackUnderflow,
+                                IrLowererErrorKind::StackUnderflow,
                                 &self.arena,
                                 Some(&self.ast_arena),
                                 vec![
@@ -556,7 +555,7 @@ impl CfgAnalyzer {
                         Some(val) => *val,
                         None =>
                             return cfg_analyzer_error!(
-                                CfgAnalyzerErrorKind::ExpectedItemOnStack,
+                                IrLowererErrorKind::ExpectedItemOnStack,
                                 &self.arena,
                                 Some(&self.ast_arena),
                                 vec![
@@ -726,6 +725,7 @@ impl CfgAnalyzer {
         Ok(self.arena.alloc_inst_for(Instruction::Operation { source_info, op: cfg_op }, self.ir_context.curr_insert_block))
     }
 }
+
 
 // impl IrArena {
 // ---------------------------------------------------------------------------------

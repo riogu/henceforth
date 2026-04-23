@@ -446,7 +446,6 @@ impl LoopInfo {
         // also handle the case where there is a self-loop (one block going to itself)
         // the resulting loop will be just the header by itself
         let mut worklist: Vec<BlockId> = latches.iter().copied().filter(|&l| l != header).collect();
-
         while let Some(block_id) = worklist.pop() {
             for pred in arena.get_predecessors(block_id) {
                 // this means we hit a block of a sub loop we already processed

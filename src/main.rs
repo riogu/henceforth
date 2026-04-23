@@ -2,12 +2,12 @@
 
 use std::{error::Error, path::PathBuf, process::exit, rc::Rc};
 
-use clap::{arg, Parser};
+use clap::{Parser, arg};
 use henceforth::hfs::{
-    self,
-    cfg_analyzer_errors::CfgAnalyzerError,
+    self, OptPipeline,
     error::{CompileError, DiagnosticInfo},
-    get_eof_source_info, OptPipeline,
+    get_eof_source_info,
+    ir_lowerer_errors::IrLowererError,
 };
 
 #[derive(Parser, Debug, Clone)]
@@ -32,12 +32,11 @@ fn run() -> Result<(), Box<dyn CompileError>> {
         hfs::StackAnalyzer::resolve(unresolved_top_level_nodes, unresolved_ast_arena.clone(), diagnostic_info.clone())?;
 
     let (top_level_insts, mut ir_arena) =
-        hfs::CfgAnalyzer::lower_to_mir(top_level_nodes, ast_arena.clone(), diagnostic_info.clone())?;
+        hfs::IrLowerer::lower_to_mir(top_level_nodes, ast_arena.clone(), diagnostic_info.clone())?;
 
-    ir_arena.dump(&top_level_insts);
-    // println!("\nIR before optimizations:{}", CfgAnalyzerError::dump_ast_and_ir(None, &ir_arena));
+    println!("\nIR before optimizations:{}", IrLowererError::dump_ast_and_ir(None, &ir_arena));
     hfs::OptPipeline::run_iteratively(&mut hfs::O0::new(), &mut ir_arena);
-    // println!("IR after optimizations:{}", CfgAnalyzerError::dump_ast_and_ir(None, &ir_arena));
+    println!("IR after optimizations:{}", IrLowererError::dump_ast_and_ir(None, &ir_arena));
 
     hfs::Interpreter::interpret(ir_arena, top_level_insts, scope_stack);
 

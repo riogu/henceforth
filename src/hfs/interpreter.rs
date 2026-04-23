@@ -76,10 +76,11 @@ impl Interpreter {
             }
         }
 
-        if let Some(main) = scope_stack.find_function("main") {
+        if let Some(_) = scope_stack.find_function("main") {
             // get the CfgFunction version of main (not the old AST function)
-            let main = interpreter.arena.func_id_map[&main];
-            interpreter.call_declared_function(main, Vec::new());
+            if let Some((main, _)) = interpreter.arena.functions.iter().find(|func| func.1.name == "main") {
+                interpreter.call_declared_function(main, Vec::new());
+            };
         } else {
             panic!("this file has no 'main()' entrypoint, so it cannot be interpreted")
         }

@@ -33,7 +33,7 @@
 use std::collections::HashMap;
 
 use crate::hfs::{
-    BlockId, FuncId, InstId, Instruction, IrArena, IrFuncId, IrFunction, Literal, SourceInfo, TerminatorInst, Type, TypeId,
+    BlockId, InstId, Instruction, IrArena, IrFuncId, IrFunction, Literal, SourceInfo, TerminatorInst, Type, TypeId,
 };
 
 #[derive(Default)]
@@ -1146,17 +1146,14 @@ fn collect_names(input: &str, arena: &mut IrArena, names: &mut NameMap) {
         // collect func_ids
         if let Some(rest) = line.strip_prefix("fn ") {
             let name = rest.split_whitespace().next().unwrap_or("").trim_end_matches(':').to_string();
-            let func_id = arena.alloc_function(
-                IrFunction {
-                    source_info: SourceInfo::default(),
-                    name: name.clone(),
-                    param_type: placeholder_type,
-                    return_type: placeholder_type,
-                    parameter_insts: vec![],
-                    entry_block: BlockId::default(),
-                },
-                FuncId::default(),
-            );
+            let func_id = arena.alloc_function(IrFunction {
+                source_info: SourceInfo::default(),
+                name: name.clone(),
+                param_type: placeholder_type,
+                return_type: placeholder_type,
+                parameter_insts: vec![],
+                entry_block: BlockId::default(),
+            });
             names.func_to_name.insert(func_id, name.clone());
             names.name_to_func.insert(name, func_id);
             current_func = Some(func_id);
@@ -1249,9 +1246,8 @@ fn parse_function<'a>(input: &'a str, names: &NameMap, arena: &mut IrArena) -> O
             entry_block = Some(raw_block.id);
         }
 
-        for (inst_id, inst) in raw_block.insts {
-            *arena.get_inst_mut(inst_id) = inst;
-            arena.get_block_mut(raw_block.id).instructions.push(inst_id);
+        for (_, inst) in raw_block.insts {
+            arena.alloc_inst_for(inst, raw_block.id);
         }
 
         arena.alloc_terminator_for(raw_block.term, raw_block.id);

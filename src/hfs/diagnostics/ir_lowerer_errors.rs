@@ -3,10 +3,10 @@ use std::{fmt::Display, fs, path::PathBuf};
 use colored::{ColoredString, Colorize};
 
 use crate::hfs::{
-    AstArena, IrArena, IrFuncId, SourceInfo, Type,
-    error::{CompileError, DebugInfo, number_length},
-    print,
+    error::{number_length, CompileError, DebugInfo},
+    prettify_ir, print,
     stack_analyzer_errors::StackAnalyzerError,
+    AstArena, IrArena, IrFuncId, SourceInfo, Type,
 };
 
 #[derive(Debug)]
@@ -71,7 +71,7 @@ impl IrLowererError {
         let func_ids: Vec<IrFuncId> = ir_arena.functions.keys().collect();
         let output = print(&func_ids, &ir_arena);
         match output {
-            Some(output) => format!("{}\n\n{}", ast_repr, output),
+            Some(output) => format!("{}\n\n{}", ast_repr, prettify_ir(output)),
             None => format!("{}", ast_repr),
         }
         // let mut glob_vars: Vec<_> = ir_arena.global_vars.iter().collect();

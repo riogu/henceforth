@@ -50,9 +50,7 @@ pub struct Test {
 }
 
 impl Test {
-    pub fn check(&self, message: String, line: usize) -> bool {
-        (self.message_check)(message) && (self.error_line_check)(line)
-    }
+    pub fn check(&self, message: String, line: usize) -> bool { (self.message_check)(message) && (self.error_line_check)(line) }
 }
 
 impl ErrorParser {

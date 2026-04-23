@@ -2,12 +2,13 @@
 
 use std::{error::Error, path::PathBuf, process::exit, rc::Rc};
 
-use clap::{Parser, arg};
+use clap::{arg, Parser};
 use henceforth::hfs::{
-    self, OptPipeline,
+    self,
     error::{CompileError, DiagnosticInfo},
     get_eof_source_info,
     ir_lowerer_errors::IrLowererError,
+    OptPipeline,
 };
 
 #[derive(Parser, Debug, Clone)]

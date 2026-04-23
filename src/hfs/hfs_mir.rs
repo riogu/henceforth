@@ -3,7 +3,7 @@ use std::{collections::HashSet, fmt::Display, vec};
 use indexmap::IndexMap;
 use slotmap::new_key_type;
 
-use crate::hfs::{ast::*, print, IrArena, Literal, SourceInfo};
+use crate::hfs::{ast::*, ir_pretty_printing::prettify_ir, print, IrArena, Literal, SourceInfo};
 /*
 =================================================================================================
 Control Flow Graph IR Pass (HFS MIR - Medium-level IR)
@@ -321,25 +321,6 @@ impl Instruction {
         }
     }
 }
-
-fn prettify_ir(ir: String) -> String {
-    // add indentation
-    ir.lines()
-        .map(|line| {
-            if line.trim().starts_with("fn") || line.trim().starts_with("}") {
-                return line.to_string();
-            } else if line.trim().ends_with(":") {
-                let new_line = "  ".to_string() + line;
-                return new_line;
-            } else {
-                let new_line = "    ".to_string() + line;
-                return new_line;
-            }
-        })
-        .collect::<Vec<String>>()
-        .join("\n")
-}
-
 impl IrArena {
     pub fn generate_dot(&self, top_level: &Vec<IrTopLevelId>) -> String {
         let mut out = String::from("digraph CFG {\n");

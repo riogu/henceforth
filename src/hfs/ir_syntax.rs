@@ -53,8 +53,14 @@ pub struct NameMap {
 #[derive(Debug)]
 struct RawBlock {
     id: BlockId,
-    insts: Vec<(InstId, Instruction)>,
+    insts: Vec<RawInst>,
     term: TerminatorInst,
+}
+
+#[derive(Debug, Clone)]
+enum RawInst {
+    Named(InstId, TypeId, Instruction),
+    Unnamed(Instruction),
 }
 
 struct RawFunction {
@@ -1050,8 +1056,12 @@ fn syntax_inst<S: Syntax>(s: &S, names: &NameMap) -> S::Output<Instruction> {
     ])
 }
 
-pub(crate) fn syntax_named_inst<S: Syntax>(s: &S, names: &NameMap) -> S::Output<(InstId, Instruction)> {
-    s.product(s.ignore_right(s.inst_name(names), s.operator("=")), syntax_inst(s, names))
+pub(crate) fn syntax_named_inst<S: Syntax>(s: &S, names: &NameMap) -> S::Output<(InstId, TypeId, Instruction)> {
+    s.product3(
+        s.ignore_right(s.inst_name(names), s.operator("=")),
+        s.ignore_right(s.type_name(names), s.whitespace()),
+        syntax_inst(s, names),
+    )
 }
 
 fn syntax_return<S: Syntax>(s: &S, names: &NameMap) -> S::Output<TerminatorInst> {
@@ -1079,6 +1089,36 @@ pub(crate) fn syntax_term<S: Syntax>(s: &S, names: &NameMap) -> S::Output<Termin
     s.choice(vec![syntax_return(s, names), syntax_branch(s, names), syntax_jump(s, names)])
 }
 
+fn syntax_raw_inst<S: Syntax>(s: &S, names: &NameMap) -> S::Output<RawInst> {
+    let named = s.iso(
+        Iso::new(
+            |(id, type_id, inst)| Some(RawInst::Named(id, type_id, inst)),
+            |ri| {
+                if let RawInst::Named(id, type_id, inst) = ri {
+                    Some((id, type_id, inst))
+                } else {
+                    None
+                }
+            },
+        ),
+        syntax_named_inst(s, names),
+    );
+    let unnamed = s.iso(
+        Iso::new(
+            |inst| Some(RawInst::Unnamed(inst)),
+            |ri| {
+                if let RawInst::Unnamed(inst) = ri {
+                    Some(inst)
+                } else {
+                    None
+                }
+            },
+        ),
+        syntax_store(s, names),
+    );
+    s.alt(named, unnamed)
+}
+
 fn syntax_raw_block<S: Syntax>(s: &S, names: &NameMap) -> S::Output<RawBlock> {
     let iso = Iso::new(|(id, insts, term)| Some(RawBlock { id, insts, term }), |rb| Some((rb.id, rb.insts, rb.term)));
     s.iso(
@@ -1093,7 +1133,7 @@ fn syntax_raw_block<S: Syntax>(s: &S, names: &NameMap) -> S::Output<RawBlock> {
         // ),
         s.product3(
             s.ignore_right(s.block_name(names), s.ignore_right(s.literal_str(":"), s.newline())),
-            s.sep_by(s.ignore_right(syntax_named_inst(s, names), s.newline()), s.opt_whitespace()),
+            s.sep_by(s.ignore_right(syntax_raw_inst(s, names), s.newline()), s.opt_whitespace()),
             s.ignore_right(syntax_term(s, names), s.newline()),
         ),
     )
@@ -1246,8 +1286,12 @@ fn parse_function<'a>(input: &'a str, names: &NameMap, arena: &mut IrArena) -> O
             entry_block = Some(raw_block.id);
         }
 
-        for (_, inst) in raw_block.insts {
-            arena.alloc_inst_for(inst, raw_block.id);
+        for raw_inst in raw_block.insts {
+            match raw_inst {
+                RawInst::Named(_, _, inst) | RawInst::Unnamed(inst) => {
+                    arena.alloc_inst_for(inst, raw_block.id);
+                },
+            }
         }
 
         arena.alloc_terminator_for(raw_block.term, raw_block.id);
@@ -1366,30 +1410,49 @@ pub fn print(func_ids: &[IrFuncId], arena: &IrArena) -> Option<String> {
         }
     }
 
+    let mut raw_functions = Vec::new();
+    for func_id in func_ids {
+        let (func_name, param_type, return_type) = {
+            let func = arena.get_func(*func_id);
+            (func.name.clone(), func.param_type, func.return_type)
+        };
+
+        let block_ids = arena.compute_reverse_postorder(*func_id);
+        let mut blocks = Vec::new();
+        for block_id in &block_ids {
+            let inst_ids: Vec<InstId> = arena.get_block(*block_id).instructions.clone();
+            let terminator = arena.get_block(*block_id).terminator;
+
+            let mut type_ids = Vec::new();
+            for inst_id in &inst_ids {
+                type_ids.push(arena.get_type_id_of_inst_no_alloc(*inst_id).unwrap_or_default());
+            }
+
+            let mut insts = Vec::new();
+            for inst_id in &inst_ids {
+                let inst = arena.get_inst(*inst_id).clone();
+                let raw = match &inst {
+                    Instruction::Store { .. } => RawInst::Unnamed(inst),
+                    _ => {
+                        let type_id = arena.get_type_id_of_inst_no_alloc(*inst_id).unwrap_or_default();
+                        RawInst::Named(*inst_id, type_id, inst)
+                    },
+                };
+                insts.push(raw);
+            }
+
+            let term = match terminator {
+                Some(id) => arena.get_term(id).clone(),
+                None => unimplemented!("TODO: add <no terminator>"),
+            };
+
+            blocks.push(RawBlock { id: *block_id, insts, term });
+        }
+
+        raw_functions.push(RawFunction { name: func_name, param_type, return_type, blocks });
+    }
     let printer = Printer;
     let syntax = syntax_top_level(&printer, &names);
-
-    let raw_functions: Vec<RawFunction> = func_ids
-        .iter()
-        .map(|func_id| {
-            let func = arena.get_func(*func_id);
-            let blocks = arena
-                .compute_reverse_postorder(*func_id)
-                .iter()
-                .map(|block_id| {
-                    let block = arena.get_block(*block_id);
-                    let insts = block.instructions.iter().map(|inst_id| (*inst_id, arena.get_inst(*inst_id).clone())).collect();
-                    let term_id = block.terminator;
-                    let term = match term_id {
-                        Some(id) => arena.get_term(id).clone(),
-                        None => unimplemented!("TODO: add <no terminator>"),
-                    };
-                    RawBlock { id: *block_id, insts, term }
-                })
-                .collect();
-            RawFunction { name: func.name.clone(), param_type: func.param_type, return_type: func.return_type, blocks }
-        })
-        .collect();
 
     (syntax.0)(raw_functions)
 }

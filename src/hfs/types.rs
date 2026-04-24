@@ -171,4 +171,61 @@ impl IrArena {
         };
         self.alloc_type(hfs_type, source_info)
     }
+
+    // these functions are only used for printing so we don't have to pass a mutable reference to an arena everywhere
+    pub fn get_type_of_operation_no_alloc(&self, op: &IrOperation) -> Option<TypeId> {
+        match op {
+            IrOperation::Add(lhs, rhs)
+            | IrOperation::Sub(lhs, rhs)
+            | IrOperation::Mul(lhs, rhs)
+            | IrOperation::Div(lhs, rhs)
+            | IrOperation::Mod(lhs, rhs) => self.get_type_id_of_inst_no_alloc(*lhs),
+            IrOperation::Or(_, _)
+            | IrOperation::And(_, _)
+            | IrOperation::Not(_)
+            | IrOperation::Equal(_, _)
+            | IrOperation::NotEqual(_, _)
+            | IrOperation::Less(_, _)
+            | IrOperation::LessEqual(_, _)
+            | IrOperation::Greater(_, _)
+            | IrOperation::GreaterEqual(_, _) => Some(self.bool_type()),
+        }
+    }
+
+    pub fn get_type_id_of_inst_no_alloc(&self, inst_id: InstId) -> Option<TypeId> {
+        match self.get_inst(inst_id) {
+            Instruction::Operation { op, .. } => self.get_type_of_operation_no_alloc(op),
+            Instruction::Literal { literal, .. } => match literal {
+                Literal::Integer(_) => Some(self.int_type()),
+                Literal::Float(_) => Some(self.float_type()),
+                Literal::String(_) => Some(self.string_type()),
+                Literal::Bool(_) => Some(self.bool_type()),
+            },
+            Instruction::Tuple { instructions, .. } => {
+                let element_types: Option<Vec<TypeId>> =
+                    instructions.iter().map(|id| self.get_type_id_of_inst_no_alloc(*id)).collect();
+                let element_types = element_types?;
+                self.types.iter().enumerate().find_map(|(i, t)| {
+                    if let Type::Tuple { type_ids, .. } = t {
+                        if *type_ids == element_types {
+                            Some(TypeId(i))
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                })
+            },
+            Instruction::Parameter { type_id, .. } => Some(*type_id),
+            Instruction::FunctionCall { func_id, .. } => Some(self.get_func(*func_id).return_type),
+            Instruction::Phi { incoming, .. } => self.get_type_id_of_inst_no_alloc(*incoming.values().next()?),
+            Instruction::ReturnValue { type_id, .. } => Some(*type_id),
+            Instruction::Load { type_id, .. } => Some(*type_id),
+            Instruction::Store { value, .. } => self.get_type_id_of_inst_no_alloc(*value),
+            Instruction::Alloca { .. } => None,
+            Instruction::LoadElement { .. } => None,
+            Instruction::GlobalAlloca(_) => None,
+        }
+    }
 }

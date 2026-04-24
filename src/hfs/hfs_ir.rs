@@ -330,99 +330,107 @@ impl IrArena {
             let IrTopLevelId::FunctionDecl(func_id) = node else {
                 continue;
             };
-            let func = self.get_func(*func_id);
 
-            out.push_str(&format!("    subgraph cluster_{} {{\n", func.name));
-            out.push_str(&format!("        label=\"fn {}\";\n", func.name));
+            let func_name = self.get_func(*func_id).name.clone();
 
-            for block_id in self.get_blocks_in(*func_id) {
-                let block = self.get_block(block_id);
+            out.push_str(&format!("    subgraph cluster_{} {{\n", func_name));
+            out.push_str(&format!("        label=\"fn {}\";\n", func_name));
 
-                // Build a temporary single-block function view using ir_syntax::print's name map
-                // by printing just this block's instructions via the Printer directly
-                let mut lines = vec![format!("{}:", block.name)];
+            let mut names = crate::hfs::ir_syntax::NameMap::default();
+            names.type_to_name.insert(crate::hfs::TypeId(0), "i32".to_string());
+            names.type_to_name.insert(crate::hfs::TypeId(1), "f32".to_string());
+            names.type_to_name.insert(crate::hfs::TypeId(2), "bool".to_string());
+            names.type_to_name.insert(crate::hfs::TypeId(3), "str".to_string());
 
-                // Use a local name map matching what ir_syntax::print would produce
-                let mut names = crate::hfs::ir_syntax::NameMap::default();
-                names.type_to_name.insert(crate::hfs::TypeId(0), "i32".to_string());
-                names.type_to_name.insert(crate::hfs::TypeId(1), "f32".to_string());
-                names.type_to_name.insert(crate::hfs::TypeId(2), "bool".to_string());
-                names.type_to_name.insert(crate::hfs::TypeId(3), "str".to_string());
-
-                // Assign sequential inst numbers across the whole function (same as print())
-                let mut inst_counter = 0usize;
-                for bid in self.get_blocks_in(*func_id) {
-                    for inst_id in &self.get_block(bid).instructions {
-                        names.inst_to_name.insert(*inst_id, inst_counter);
-                        names.name_to_inst.insert(inst_counter, *inst_id);
-                        inst_counter += 1;
+            let mut inst_counter = 0usize;
+            for bid in self.get_blocks_in(*func_id) {
+                for inst_id in &self.get_block(bid).instructions.clone() {
+                    names.inst_to_name.insert(*inst_id, inst_counter);
+                    names.name_to_inst.insert(inst_counter, *inst_id);
+                    inst_counter += 1;
+                }
+            }
+            for bid in self.get_blocks_in(*func_id) {
+                let name = self.get_block(bid).name.clone();
+                names.block_to_name.insert(bid, name.clone());
+                names.unmangled_to_block.insert(name, bid);
+            }
+            for (fid, f) in self.functions.iter() {
+                names.func_to_name.insert(fid, f.name.clone());
+            }
+            for (i, typ) in self.types.iter().enumerate() {
+                let tid = crate::hfs::TypeId(i);
+                if !names.type_to_name.contains_key(&tid) {
+                    if let crate::hfs::Type::Tuple { type_ids, .. } = typ {
+                        let inner: Vec<String> = type_ids
+                            .iter()
+                            .map(|id| names.type_to_name.get(id).cloned().unwrap_or_else(|| format!("t{}", id.0)))
+                            .collect();
+                        names.type_to_name.insert(tid, format!("({})", inner.join(" ")));
                     }
                 }
-                for bid in self.get_blocks_in(*func_id) {
-                    let b = self.get_block(bid);
-                    names.block_to_name.insert(bid, b.name.clone());
-                    names.unmangled_to_block.insert(b.name.clone(), bid);
-                }
-                for (fid, f) in self.functions.iter() {
-                    names.func_to_name.insert(fid, f.name.clone());
-                }
-                for (i, typ) in self.types.iter().enumerate() {
-                    let tid = crate::hfs::TypeId(i);
-                    if !names.type_to_name.contains_key(&tid) {
-                        if let crate::hfs::Type::Tuple { type_ids, .. } = typ {
-                            let inner: Vec<String> = type_ids
-                                .iter()
-                                .map(|id| names.type_to_name.get(id).cloned().unwrap_or_else(|| format!("t{}", id.0)))
-                                .collect();
-                            let name = format!("({})", inner.join(" "));
-                            names.type_to_name.insert(tid, name);
-                        }
-                    }
+            }
+
+            let block_ids = self.get_blocks_in(*func_id);
+            for block_id in &block_ids {
+                let (block_name, inst_ids, terminator) = {
+                    let block = self.get_block(*block_id);
+                    (block.name.clone(), block.instructions.clone(), block.terminator)
+                };
+
+                let mut lines = vec![format!("{}:", block_name)];
+
+                let mut type_ids = Vec::new();
+                for inst_id in &inst_ids {
+                    type_ids.push(self.get_type_id_of_inst_no_alloc(*inst_id).unwrap_or_default());
                 }
 
                 let printer = crate::hfs::ir_syntax::Printer;
-
-                for inst_id in &block.instructions {
-                    let inst = self.get_inst(*inst_id);
+                for ((inst_id, type_id), inst) in inst_ids.iter().zip(type_ids).map(|(id, tid)| {
+                    let inst = self.get_inst(*id).clone();
+                    ((*id, tid), inst)
+                }) {
                     let inst_syntax = crate::hfs::ir_syntax::syntax_named_inst(&printer, &names);
                     let text =
-                        (inst_syntax.0)((*inst_id, inst.clone())).unwrap_or_else(|| format!("<unprintable inst {:?}>", inst_id));
+                        (inst_syntax.0)((inst_id, type_id, inst)).unwrap_or_else(|| format!("<unprintable inst {:?}>", inst_id));
                     lines.push(format!("  {}", text));
                 }
 
-                if let Some(term_id) = block.terminator {
-                    let term = self.get_term(term_id);
+                if let Some(term_id) = terminator {
+                    let term = self.get_term(term_id).clone();
                     let term_syntax = crate::hfs::ir_syntax::syntax_term(&printer, &names);
-                    let text = (term_syntax.0)(term.clone()).unwrap_or_else(|| format!("<unprintable terminator>"));
+                    let text = (term_syntax.0)(term).unwrap_or_else(|| "<unprintable terminator>".to_string());
                     lines.push(format!("  {}", text));
                 }
 
                 let label = lines.join("\\l").replace('"', "\\\"");
-                out.push_str(&format!("        {}_{} [label=\"{}\\l\"];\n", func.name, block.name, label));
+                out.push_str(&format!("        {}_{} [label=\"{}\\l\"];\n", func_name, block_name, label));
             }
 
-            // edges (unchanged)
-            for block_id in self.get_blocks_in(*func_id) {
-                let block = self.get_block(block_id);
-                let Some(term_id) = block.terminator else {
+            for block_id in &block_ids {
+                let (block_name, terminator) = {
+                    let block = self.get_block(*block_id);
+                    (block.name.clone(), block.terminator)
+                };
+                let Some(term_id) = terminator else {
                     continue;
                 };
-                match self.get_term(term_id) {
+                match self.get_term(term_id).clone() {
                     TerminatorInst::Branch { true_block, false_block, .. } => {
-                        let t = self.get_block(*true_block);
-                        let f = self.get_block(*false_block);
+                        let t_name = self.get_block(true_block).name.clone();
+                        let f_name = self.get_block(false_block).name.clone();
                         out.push_str(&format!(
                             "        {}_{} -> {}_{} [label=\"true\"];\n",
-                            func.name, block.name, func.name, t.name
+                            func_name, block_name, func_name, t_name
                         ));
                         out.push_str(&format!(
                             "        {}_{} -> {}_{} [label=\"false\"];\n",
-                            func.name, block.name, func.name, f.name
+                            func_name, block_name, func_name, f_name
                         ));
                     },
                     TerminatorInst::Jump { target, .. } => {
-                        let t = self.get_block(*target);
-                        out.push_str(&format!("        {}_{} -> {}_{};\n", func.name, block.name, func.name, t.name));
+                        let t_name = self.get_block(target).name.clone();
+                        out.push_str(&format!("        {}_{} -> {}_{};\n", func_name, block_name, func_name, t_name));
                     },
                     TerminatorInst::Return { .. } | TerminatorInst::Unreachable => {},
                 }
@@ -434,6 +442,7 @@ impl IrArena {
         out.push_str("}\n");
         out
     }
+
     pub fn dump(&self, top_level: &Vec<IrTopLevelId>) {
         eprintln!("total blocks: {}", self.blocks.len());
         for (i, block) in self.blocks.values().enumerate() {

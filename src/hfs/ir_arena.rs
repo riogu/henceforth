@@ -11,11 +11,11 @@ use slotmap::SlotMap;
 
 use crate::{
     hfs::{
-        BasicBlock, BlockId, GlobalIrVarDeclaration, GlobalIrVarId, InstId, Instruction, IrFuncId, IrFunction, SourceInfo,
-        TermInstId, TerminatorInst,
         ast::*,
         error::{CompileError, DiagnosticInfo},
         ir_lowerer_errors::IrLowererErrorKind,
+        BasicBlock, BlockId, GlobalIrVarDeclaration, GlobalIrVarId, InstId, Instruction, IrFuncId, IrFunction, SourceInfo,
+        TermInstId, TerminatorInst,
     },
     ir_lowerer_error,
 };

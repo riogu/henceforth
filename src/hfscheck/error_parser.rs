@@ -1,47 +1,8 @@
 use std::path::PathBuf;
 
+use crate::hfscheck::hfscheck::HfsRegex;
+
 pub struct ErrorParser {}
-
-pub enum HfsRegex {
-    Text(String),
-    SingleChar,
-    Wildcard,
-    Range(char, char),
-    List(Vec<char>),
-}
-
-impl HfsRegex {
-    fn new(pattern: &str) -> Self {
-        match pattern {
-            "*" => HfsRegex::Wildcard,
-            "." => HfsRegex::SingleChar,
-            text if text.starts_with('[') && text.ends_with(']') => {
-                let inner = &text[1..text.len() - 1];
-                let mut chars = inner.chars();
-                match (chars.next(), chars.next(), chars.next()) {
-                    (Some(a), Some('-'), Some(b)) => HfsRegex::Range(a, b),
-                    _ => panic!("invalid range syntax"),
-                }
-            },
-            text if text.starts_with('{') && text.ends_with('}') => {
-                let inner = &text[1..text.len() - 1];
-                let chars: Vec<char> = inner.split(',').map(|s| s.chars().next().expect("empty list item")).collect();
-                HfsRegex::List(chars)
-            },
-            text => HfsRegex::Text(text.to_string()),
-        }
-    }
-
-    fn matches(&self, msg: &str) -> Option<usize> {
-        match self {
-            HfsRegex::Text(text) => msg.find(text).map(|i| i + text.len()),
-            HfsRegex::SingleChar => Some(1),
-            HfsRegex::Wildcard => Some(0),
-            HfsRegex::Range(a, b) => msg.chars().position(|c| c >= *a && c <= *b).map(|i| i + 1),
-            HfsRegex::List(items) => msg.chars().position(|c| items.contains(&c)).map(|i| i + 1),
-        }
-    }
-}
 
 pub struct Test {
     pub path: PathBuf,
@@ -67,18 +28,17 @@ impl ErrorParser {
                         message.push(char);
                     }
                     chars_iter.next();
-                    message_check = ErrorParser::hfs_regex(message);
+                    message_check = HfsRegex::parse(message);
                 },
-                '@' => {
+                '@' =>
                     if let Some(_) = chars_iter.next_if_eq(&'[') {
                         let mut error_position = String::new();
                         while let Some(char) = chars_iter.next_if(|c| c != &']') {
                             error_position.push(char);
                         }
-                        chars_iter.next(); // consume the ]
+                        chars_iter.next();
                         error_line_check = ErrorParser::generate_error_line_check(error_position, line_number);
-                    }
-                },
+                    },
                 c => panic!("found {c} in {path:?}"),
             }
         }
@@ -106,21 +66,6 @@ impl ErrorParser {
             Some(_) => panic!("invalid token for error line positioning"),
             None => Box::new(move |pos| pos == line_number),
         }
-    }
-
-    fn hfs_regex(message: String) -> Box<dyn Fn(String) -> bool + Send + Sync> {
-        let patterns: Vec<HfsRegex> = message.split(' ').map(HfsRegex::new).collect();
-        Box::new(move |msg| {
-            let mut last_found_pos = 0;
-            for pattern in &patterns {
-                let found = pattern.matches(&msg[last_found_pos..]);
-                match found {
-                    Some(pos) => last_found_pos += pos,
-                    None => return false,
-                }
-            }
-            return true;
-        })
     }
 }
 
@@ -196,63 +141,5 @@ mod tests {
         let path = PathBuf::new();
         let test = ErrorParser::generate_test(&path, 50, String::from("@[]"));
         assert!((test.error_line_check)(50));
-    }
-
-    #[test]
-    fn test_regex_empty_matches_any() {
-        let path = PathBuf::new();
-        let test = ErrorParser::generate_test(&path, 50, String::from("\"\""));
-        assert!((test.message_check)(String::from("any message")));
-        assert!((test.message_check)(String::from("any message works for this")));
-        assert!((test.message_check)(String::new()));
-    }
-
-    #[test]
-    fn test_regex_text_works_fuzzily() {
-        let path = PathBuf::new();
-        let test = ErrorParser::generate_test(&path, 50, String::from("\"error when stuff\""));
-        assert!((test.message_check)(String::from("error when performing stuff")));
-        assert!((test.message_check)(String::from("error when doing stuff")));
-        assert!((test.message_check)(String::from("you got an error when stuff")));
-        assert!((test.message_check)(String::from("error when stuff went wrong")));
-        assert!(!(test.message_check)(String::from("error")));
-    }
-
-    #[test]
-    fn test_regex_wildcard_matches_as_much_as_necessary() {
-        let path = PathBuf::new();
-        let test = ErrorParser::generate_test(&path, 50, String::from("\"error when * stuff\""));
-        assert!((test.message_check)(String::from("error when performing stuff")));
-        assert!((test.message_check)(String::from("error when doing stuff")));
-        assert!(!(test.message_check)(String::from("error when doing things")));
-        assert!((test.message_check)(String::from("error when stuff")));
-    }
-
-    #[test]
-    fn test_regex_anychar_matches_a_single_character() {
-        let path = PathBuf::new();
-        let test = ErrorParser::generate_test(&path, 50, String::from("\". error\""));
-        assert!((test.message_check)(String::from("a error")));
-        assert!((test.message_check)(String::from("b error")));
-        assert!(!(test.message_check)(String::from("error")));
-    }
-
-    #[test]
-    fn test_regex_range_matches_only_in_range() {
-        let path = PathBuf::new();
-        let test = ErrorParser::generate_test(&path, 50, String::from("\"[0-9]\""));
-        assert!((test.message_check)(String::from("0")));
-        assert!((test.message_check)(String::from("9")));
-        assert!((test.message_check)(String::from("5")));
-        assert!(!(test.message_check)(String::from("e")));
-    }
-    #[test]
-    fn test_regex_list_matches_only_members() {
-        let path = PathBuf::new();
-        let test = ErrorParser::generate_test(&path, 50, String::from("\"{a,b,c}\""));
-        assert!((test.message_check)(String::from("a")));
-        assert!((test.message_check)(String::from("b")));
-        assert!((test.message_check)(String::from("c")));
-        assert!(!(test.message_check)(String::from("d")));
     }
 }

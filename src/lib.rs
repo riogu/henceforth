@@ -8,7 +8,7 @@ pub mod hfs {
     pub mod ast;
     // pub mod ast_interpreter;
     pub mod diagnostics;
-    pub mod hfs_mir;
+    pub mod hfs_ir;
     pub mod interpreter;
     pub mod ir_analysis;
     pub mod ir_arena;
@@ -26,7 +26,7 @@ pub mod hfs {
     pub mod utils;
     pub use ast::*;
     pub use diagnostics::*;
-    pub use hfs_mir::*;
+    pub use hfs_ir::*;
     pub use interpreter::*;
     pub use ir_analysis::*;
     pub use ir_arena::*;

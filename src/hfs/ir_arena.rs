@@ -118,12 +118,6 @@ impl IrArena {
     pub fn inst_is_valid(&self, inst_id: InstId) -> bool { self.instructions.contains_key(inst_id) }
 
     pub fn alloc_inst_for(&mut self, inst: Instruction, block_id: BlockId) -> InstId {
-        if matches!(inst, Instruction::Alloca { .. }) || matches!(inst, Instruction::GlobalAlloca(..)) {
-            panic!(
-                "[internal error] please use alloc_global_var and alloc_local_var instead of alloca_inst_for when creating \
-                 alloca instructions"
-            )
-        }
         let id = self.instructions.insert(inst);
         self.get_block_mut(block_id).instructions.push(id);
         id

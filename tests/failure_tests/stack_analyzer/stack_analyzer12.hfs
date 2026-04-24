@@ -1,4 +1,4 @@
-fn foo: () -> (i32) { //? "expected i32 found bool"
+fn foo: () -> (i32) { //? ERROR "expected i32 found bool"
 	@(true); 
 }
 

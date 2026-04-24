@@ -1,2 +1,2 @@
 fn main: () -> () {
-	@( //? "expected stack expression or )"
+	@( //? ERROR "expected stack expression or )"

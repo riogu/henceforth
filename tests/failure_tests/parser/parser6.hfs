@@ -1,1 +1,1 @@
-let var: (i32 i32 //? "expected type"
+let var: (i32 i32 //? ERROR "expected type"

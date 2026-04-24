@@ -1,1 +1,1 @@
-&| //? "unexpected character"
+&| //? ERROR "unexpected character"

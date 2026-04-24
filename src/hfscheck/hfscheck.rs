@@ -21,11 +21,14 @@ pub fn find_assertions(path: &'_ PathBuf) -> Vec<Assertion<'_>> {
                         line_column += 1;
                         if let Some(char) = chars_iter.next() {
                             match char {
-                                '?' => assertions.push(Assertion::Error(
-                                    path,
-                                    line_number + 1,
-                                    line_string[line_column..].to_string(),
-                                )),
+                                '?' => {
+                                    let rest = &line_string[line_column..].trim_start_matches(' ');
+                                    let (kind, msg) = rest.split_once(' ').unwrap_or(("", ""));
+                                    match kind {
+                                        "ERROR" => assertions.push(Assertion::Error(path, line_number + 1, msg.to_string())),
+                                        _ => {},
+                                    }
+                                },
                                 _ => {},
                             }
                         }
@@ -61,7 +64,7 @@ mod tests {
         let assertions = find_assertions(&path);
 
         assert_eq!(assertions.len(), 1);
-        assert_eq!(assertions[0], Assertion::Error(&path, 1, String::from(" \"unexpected character\" ")));
+        assert_eq!(assertions[0], Assertion::Error(&path, 1, String::from("\"unexpected character\" ")));
     }
 
     #[test]

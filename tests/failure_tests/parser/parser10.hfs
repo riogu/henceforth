@@ -1,3 +1,3 @@
 fn main: () -> () {
-	30 //? "expected statement found ' [0-9] [0-9] '"
+	30 //? ERROR "expected statement found ' [0-9] [0-9] '"
 }

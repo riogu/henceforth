@@ -6,6 +6,6 @@ fn max: (i32 i32) -> (i32) {
 	}
 }
 
-fn foo: () -> (i32 f32) {} //? "expected [0-9] values found [0-9]"
+fn foo: () -> (i32 f32) {} //? ERROR "expected [0-9] values found [0-9]"
 
 fn main: () -> () {}

@@ -1,1 +1,1 @@
-fn if: () -> () {} //? "expected identifier, found if"
+fn if: () -> () {} //? ERROR "expected identifier, found if"

@@ -1,1 +1,1 @@
-fn //? "expected identifier"
+fn //? ERROR "expected identifier"

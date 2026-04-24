@@ -3,5 +3,5 @@ fn id: (i32) -> (i32) {
 }
 
 fn main: () -> () {
-	@() &> id; //? "stack underflow"
+	@() &> id; //? ERROR "stack underflow"
 }

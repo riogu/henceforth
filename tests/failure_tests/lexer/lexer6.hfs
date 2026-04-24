@@ -1,4 +1,4 @@
-//? "invalid stack keyword" @[v*]
+//? ERROR "invalid stack keyword" @[v*]
 
 
 

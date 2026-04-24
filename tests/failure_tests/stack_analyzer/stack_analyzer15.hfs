@@ -5,4 +5,4 @@ fn foo: (i32 bool str) -> (i32 bool str) {
 fn main: () -> () { 
 	@(5 true "test") &> foo;
 }
-//? "expected [0-9] on stack found [0-9]" @[^*]
+//? ERROR "expected [0-9] on stack found [0-9]" @[^*]

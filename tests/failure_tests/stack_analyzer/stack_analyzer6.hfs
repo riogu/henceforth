@@ -1,4 +1,4 @@
 fn main: () -> () {
 	let a: i32;
-	:= a; //? "expected on stack"
+	:= a; //? ERROR "expected on stack"
 }

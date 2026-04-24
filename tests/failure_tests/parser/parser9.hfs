@@ -1,1 +1,1 @@
-fn main: () -> () { //? "expected }"
+fn main: () -> () { //? ERROR "expected }"

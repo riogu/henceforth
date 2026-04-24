@@ -1,3 +1,3 @@
 fn main: () -> () {
-	@(foo); //? "undeclared identifier foo"
+	@(foo); //? ERROR "undeclared identifier foo"
 }

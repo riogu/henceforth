@@ -1,2 +1,2 @@
 «
-//? "unexpected character" @[^1]
+//? ERROR "unexpected character" @[^1]

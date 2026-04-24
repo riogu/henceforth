@@ -1,5 +1,5 @@
 fn main: () -> () {
 	if @(5 6 >) {
-		@(1 2 3); //? "expected net-zero stack effect on all branches"
+		@(1 2 3); //? ERROR "expected net-zero stack effect on all branches"
 	};
 }

@@ -1,7 +1,7 @@
 fn main: () -> () {
 	if @(5 3 >) {
 		
-	} else if @() { //? "stack underflow"
+	} else if @() { //? ERROR "stack underflow"
 		
 	};
 }

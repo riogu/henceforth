@@ -48,6 +48,7 @@ fn tic_tac_toe: ([9]str i32 str) -> ([9]str) {
 
     if @(board board_pos [] " " !=) {
         @("you tried assigning to an already filled position!\n") &> print; 
+        @(board);
     } else {
         let board_ptr: [9]str; 
         @(player 9) [&]= board;   // board[board_pos] = player;
@@ -56,22 +57,21 @@ fn tic_tac_toe: ([9]str i32 str) -> ([9]str) {
 }
 
 fn main: () -> () {
-    let board: [9]str; (board_start&) &= board;
-    // initialize the board, i guess?
-    let idx: i32; @(0) &= idx;
-    while @(idx 9 !=) {
-        @(" " idx) [&]= board;
-        // we are writing outside the varible's allocated stack space...
-        // need to decide the semantics
-        @(idx 1 +) &= idx;
-    }
+    let N: i32 @(9) &= N; // board size
+    let board: [N]str;
 
+    let idx: i32; @(0) &= idx;
+    while @(idx N !=) {
+        @(" " idx) [&]= board; // board[idx] = " ";
+        @(idx 1 +) &= idx;     // idx += 1;
+    }
+    // play the game
     @(6 "X") &> tic_tac_toe;
     @(1 "O") &> tic_tac_toe;
     @(4 "X") &> tic_tac_toe;
     @(2 "O") &> tic_tac_toe;
     @(3 "O") &> tic_tac_toe;
-    &> get_winner; &> print;
+    &> get_winner &> print;
     @pop_all
 }
 

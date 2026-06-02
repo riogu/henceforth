@@ -120,7 +120,7 @@ impl From<Type> for TokenKind {
             Type::Bool { .. } => TokenKind::Bool,
             Type::Float { .. } => TokenKind::Float,
             Type::Tuple { .. } => TokenKind::LeftParen,
-            Type::Array { hfs_type, length } => todo!(),
+            Type::Array { hfs_type: _, length: _ } => todo!(),
         }
     }
 }

@@ -184,7 +184,7 @@ impl Display for Type {
             Type::Bool { ptr_count: _ } => write!(f, "bool"),
             Type::Float { ptr_count: _ } => write!(f, "f32"),
             Type::Tuple { type_ids: _, ptr_count: _ } => write!(f, "tuple"),
-            Type::Array { hfs_type: r#type, length } => todo!(),
+            Type::Array { hfs_type: _, length: _ } => todo!(),
         }
     }
 }
@@ -200,7 +200,7 @@ impl Type {
                 "Tuple<{}>",
                 type_ids.iter().map(|id| arena.get_type(*id).get_repr_unresolved(arena)).collect::<Vec<String>>().join(", ")
             ),
-            Type::Array { hfs_type: r#type, length } => todo!(),
+            Type::Array { hfs_type: _, length: _ } => todo!(),
         }
     }
     pub fn get_repr_resolved(&self, arena: &AstArena) -> String {
@@ -213,7 +213,7 @@ impl Type {
                 "Tuple<{}>",
                 type_ids.iter().map(|id| arena.get_type(*id).get_repr_resolved(arena)).collect::<Vec<String>>().join(", ")
             ),
-            Type::Array { hfs_type: r#type, length } => todo!(),
+            Type::Array { hfs_type: _, length: _ } => todo!(),
         }
     }
 }
@@ -226,7 +226,7 @@ impl Type {
             Type::Bool { ptr_count } => ptr_count,
             Type::Float { ptr_count } => ptr_count,
             Type::Tuple { ptr_count, .. } => ptr_count,
-            Type::Array { hfs_type: r#type, length } => todo!(),
+            Type::Array { hfs_type: _, length: _ } => todo!(),
         }
     }
     pub fn new_int(ptr_count: usize) -> Self { Type::Int { ptr_count } }
@@ -241,7 +241,7 @@ impl Type {
             Type::Bool { ptr_count: _ } => TokenKind::Bool,
             Type::Float { ptr_count: _ } => TokenKind::Float,
             Type::Tuple { .. } => TokenKind::LeftParen,
-            Type::Array { hfs_type: r#type, length } => todo!(),
+            Type::Array { hfs_type: _, length: _ } => todo!(),
         }
     }
 }

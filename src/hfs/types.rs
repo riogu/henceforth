@@ -33,7 +33,7 @@ impl AstArena {
             | Operation::GreaterEqual(_, _) => Ok(self.bool_type()),
             Operation::AddressOf(_) => todo!(),
             Operation::Dereference(_) => todo!(),
-            Operation::ArrayAccess(expr_id, expr_id1) => todo!(),
+            Operation::ArrayAccess(_expr_id, _expr_id1) => todo!(),
         }
     }
 
@@ -167,7 +167,7 @@ impl IrArena {
             Type::Bool { ptr_count } => Type::Bool { ptr_count: ptr_count - 1 },
             Type::Float { ptr_count } => Type::Float { ptr_count: ptr_count - 1 },
             Type::Tuple { ptr_count, type_ids } => Type::Tuple { ptr_count: ptr_count - 1, type_ids: type_ids.clone() },
-            Type::Array { hfs_type, length } => todo!(),
+            Type::Array { hfs_type: _, length: _ } => todo!(),
         };
         self.alloc_type(hfs_type, source_info)
     }
@@ -175,11 +175,11 @@ impl IrArena {
     // these functions are only used for printing so we don't have to pass a mutable reference to an arena everywhere
     pub fn get_type_of_operation_no_alloc(&self, op: &IrOperation) -> Option<TypeId> {
         match op {
-            IrOperation::Add(lhs, rhs)
-            | IrOperation::Sub(lhs, rhs)
-            | IrOperation::Mul(lhs, rhs)
-            | IrOperation::Div(lhs, rhs)
-            | IrOperation::Mod(lhs, rhs) => self.get_type_id_of_inst_no_alloc(*lhs),
+            IrOperation::Add(lhs, _rhs)
+            | IrOperation::Sub(lhs, _rhs)
+            | IrOperation::Mul(lhs, _rhs)
+            | IrOperation::Div(lhs, _rhs)
+            | IrOperation::Mod(lhs, _rhs) => self.get_type_id_of_inst_no_alloc(*lhs),
             IrOperation::Or(_, _)
             | IrOperation::And(_, _)
             | IrOperation::Not(_)

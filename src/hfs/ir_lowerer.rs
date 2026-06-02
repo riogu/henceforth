@@ -5,11 +5,11 @@ use slotmap::Key;
 
 use crate::{
     hfs::{
-        BlockId, GlobalIrVarDeclaration, GlobalIrVarId, InstId, Instruction, IrArena, IrFuncId, IrFunction, IrOperation,
-        IrTopLevelId, PRIMITIVE_TYPE_COUNT, SourceInfo, TerminatorInst,
         ast::*,
         error::{CompileError, DiagnosticInfo},
         ir_lowerer_errors::IrLowererErrorKind,
+        BlockId, GlobalIrVarDeclaration, GlobalIrVarId, InstId, Instruction, IrArena, IrFuncId, IrFunction, IrOperation,
+        IrTopLevelId, SourceInfo, TerminatorInst, PRIMITIVE_TYPE_COUNT,
     },
     ir_lowerer_error,
 };
@@ -136,7 +136,7 @@ impl IrLowerer {
             parameter_insts: vec![],
             entry_block: BlockId::null(),
         }; // needs to be here because we need to set self.arena.curr_function correctly
-        // id like it to not require exposing a mutable method but it has to be this way
+           // id like it to not require exposing a mutable method but it has to be this way
         let new_id = self.arena.alloc_function(cfg_function);
         self.func_id_map.insert(id, new_id);
         self.ir_context.curr_func = new_id;
@@ -228,9 +228,11 @@ impl IrLowerer {
         let cond = match self.arena.pop_hfs_stack() {
             Some(cond) => cond,
             None =>
-                return ir_lowerer_error!(IrLowererErrorKind::StackUnderflow, &self.arena, Some(&self.ast_arena), vec![
-                    self.ast_arena.get_stmt_token(body).source_info.clone()
-                ]),
+                return ir_lowerer_error!(IrLowererErrorKind::StackUnderflow, &self.arena, Some(&self.ast_arena), vec![self
+                    .ast_arena
+                    .get_stmt_token(body)
+                    .source_info
+                    .clone()]),
         };
         let cond_type = self.arena.get_type_id_of_inst(cond)?;
         self.arena.compare_types(cond_type, self.arena.bool_type(), vec![self.arena.get_inst(cond).get_source_info()])?;
@@ -619,9 +621,9 @@ impl IrLowerer {
                     inst_args.push(arg_inst);
                 }
                 inst_args.reverse(); // we reverse because we were popping the stack
-                // and we want the syntax to work left->right to be more readable and match the
-                // expectations of the stated type of the function that works as a "view" into the
-                // stack, not as a popped argments mechanics
+                                     // and we want the syntax to work left->right to be more readable and match the
+                                     // expectations of the stated type of the function that works as a "view" into the
+                                     // stack, not as a popped argments mechanics
 
                 if !is_move {
                     // restore the stack
@@ -649,7 +651,7 @@ impl IrLowerer {
                 }
                 Ok(())
             },
-            Statement::ArrayAssignment { position, identifier, is_move, deref_count } => todo!(),
+            Statement::ArrayAssignment { position: _, identifier: _, is_move: _, deref_count: _ } => todo!(),
         }
     }
     pub fn lower_expr(&mut self, id: ExprId) -> Result<InstId, Box<dyn CompileError>> {
@@ -731,7 +733,7 @@ impl IrLowerer {
             Operation::Not(expr_id) => IrOperation::Not(self.lower_expr(expr_id)?),
             Operation::AddressOf(_) => todo!(),
             Operation::Dereference(_) => todo!(),
-            Operation::ArrayAccess(expr_id, expr_id1) => todo!(),
+            Operation::ArrayAccess(_expr_id, _expr_id11) => todo!(),
         };
         Ok(self.arena.alloc_inst_for(Instruction::Operation { source_info, op: cfg_op }, self.ir_context.curr_insert_block))
     }

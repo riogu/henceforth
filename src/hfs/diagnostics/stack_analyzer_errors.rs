@@ -373,7 +373,7 @@ impl Dumpable for Operation {
                 arena.get_expr(*x).dump(arena),
                 ")".custom_color(CustomColor::new(129, 137, 150))
             )),
-            Operation::ArrayAccess(expr_id, expr_id1) => todo!(),
+            Operation::ArrayAccess(_expr_id, _expr_id1) => todo!(),
         };
         op
     }
@@ -565,7 +565,7 @@ impl Dumpable for Statement {
                     "]".custom_color(CustomColor::new(129, 137, 150)),
                 ))
             },
-            Statement::ArrayAssignment { position, identifier, is_move, deref_count } => todo!(),
+            Statement::ArrayAssignment { position: _, identifier: _, is_move: _, deref_count: _ } => todo!(),
         }
     }
 }

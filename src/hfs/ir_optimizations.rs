@@ -7,15 +7,18 @@ use crate::hfs::{BlockId, DefUseInfo, DominatorTree, InstId, InstOrTermId, Instr
 
 // these are the basic traits and APIs our passes/pipelines must meet
 pub trait IrPass {
-    fn new() -> Box<Self>
+    fn new() -> Box<dyn IrPass + Send + Sync>
     where Self: Sized;
     fn name(&self) -> &str;
     fn run(&self, arena: &mut IrArena, func_id: IrFuncId) -> bool; // returns true if changed
+    fn short_name(&self) -> &str;
 }
 pub trait OptPipeline {
-    fn new() -> Self;
     fn name(&self) -> &str;
-    fn get_opt_passes(&mut self) -> &mut [Box<dyn IrPass>];
+    fn get_opt_passes(&mut self) -> &mut [Box<dyn IrPass + Send + Sync>];
+    fn get_pass_names(&mut self) -> Vec<&str> {
+        self.get_opt_passes().iter().map(|p| p.short_name()).collect()
+    }
 
     fn run_on_function(&mut self, arena: &mut IrArena, func_id: IrFuncId) -> bool {
         let mut any_changed = false;
@@ -48,12 +51,16 @@ pub trait OptPipeline {
 // ======================================================================================
 macro_rules! passes { ($($pass:ty),+ $(,)?) => { vec![$(<$pass>::new()),+] }; }
 pub struct O0 {
-    opt_passes: Vec<Box<dyn IrPass>>,
+    opt_passes: Vec<Box<dyn IrPass + Send + Sync>>,
 }
+
+impl O0 {
+    pub fn new() -> Self { O0 { opt_passes: passes!(Mem2Reg, DeadCodeElimination) } }
+}
+
 impl OptPipeline for O0 {
-    fn new() -> Self { O0 { opt_passes: passes!(Mem2Reg, DeadCodeElimination) } }
     fn name(&self) -> &str { "-O0: Basic Optimizations" }
-    fn get_opt_passes(&mut self) -> &mut [Box<dyn IrPass>] { &mut self.opt_passes }
+    fn get_opt_passes(&mut self) -> &mut [Box<dyn IrPass + Send + Sync>] { &mut self.opt_passes }
 }
 
 // ======================================================================================
@@ -62,7 +69,7 @@ impl OptPipeline for O0 {
 
 pub struct CommonCleanupPipeline;
 impl IrPass for CommonCleanupPipeline {
-    fn new() -> Box<Self> { Box::new(CommonCleanupPipeline) }
+    fn new() -> Box<dyn IrPass + Send + Sync> { Box::new(CommonCleanupPipeline) }
     fn name(&self) -> &str { "CommonCleanupPipeline: runs RemoveStaleIR and CleanCFG iteratively" }
     fn run(&self, arena: &mut IrArena, func_id: IrFuncId) -> bool {
         let mut any_changed = false;
@@ -70,6 +77,10 @@ impl IrPass for CommonCleanupPipeline {
         any_changed |= CleanCFG::new().run(arena, func_id);
         any_changed |= RemoveStaleIR::new().run(arena, func_id);
         any_changed
+    }
+
+    fn short_name(&self) -> &str {
+        "CommonCleanupPipeline"
     }
 }
 fn retain_changed<T>(vec: &mut Vec<T>, pred: impl Fn(&T) -> bool) -> bool {
@@ -79,8 +90,11 @@ fn retain_changed<T>(vec: &mut Vec<T>, pred: impl Fn(&T) -> bool) -> bool {
 }
 pub struct RemoveStaleIR;
 impl IrPass for RemoveStaleIR {
-    fn new() -> Box<Self> { Box::new(Self) }
+    fn new() -> Box<dyn IrPass + Send + Sync> { Box::new(Self) }
     fn name(&self) -> &str { "RemoveStaleInstIds: clean all blocks that have stale InstIds" }
+    fn short_name(&self) -> &str {
+        "RemoveStaleIR"
+    }
     fn run(&self, arena: &mut IrArena, func_id: IrFuncId) -> bool {
         let mut any_changed = false;
 
@@ -105,7 +119,7 @@ impl IrPass for RemoveStaleIR {
 
 pub struct DeadCodeElimination;
 impl IrPass for DeadCodeElimination {
-    fn new() -> Box<Self> { Box::new(Self) }
+    fn new() -> Box<dyn IrPass + Send + Sync> { Box::new(Self) }
     fn name(&self) -> &str { "DeadCodeElimination: remove unused and unreachable code" }
     fn run(&self, arena: &mut IrArena, func_id: IrFuncId) -> bool {
         let mut def_use = DefUseInfo::compute(arena, func_id);
@@ -142,6 +156,10 @@ impl IrPass for DeadCodeElimination {
         } // run RemoveStaleInstIds for cleanup
         changed | CommonCleanupPipeline::new().run(arena, func_id)
     }
+
+    fn short_name(&self) -> &str {
+        "DeadCodeElimination"
+    }
 }
 
 // ======================================================================================
@@ -151,7 +169,7 @@ impl IrPass for DeadCodeElimination {
 // ======================================================================================
 pub struct Mem2Reg;
 impl IrPass for Mem2Reg {
-    fn new() -> Box<Self> { Box::new(Self) }
+    fn new() -> Box<dyn IrPass + Send + Sync> { Box::new(Self) }
     fn name(&self) -> &str { "Mem2Reg: replace alloca/load/store with ssa values and phis" }
     fn run(&self, arena: &mut IrArena, func_id: IrFuncId) -> bool {
         let mut def_use = DefUseInfo::compute(arena, func_id);
@@ -187,6 +205,10 @@ impl IrPass for Mem2Reg {
         CommonCleanupPipeline::new().run(arena, func_id)
         // if this pass does anything, then RemoveStaleInstIds will have stuff to cleanup
         // therefore checking if it did anything is enough to know if this pass did work
+    }
+
+    fn short_name(&self) -> &str {
+        "Mem2Reg"
     }
 }
 // phase 1 of SSA construction algorithm (also known as Mem2Reg)
@@ -340,7 +362,7 @@ impl Mem2Reg {
 // ======================================================================================
 pub struct CleanCFG;
 impl IrPass for CleanCFG {
-    fn new() -> Box<Self> { Box::new(Self) }
+    fn new() -> Box<dyn IrPass + Send + Sync> { Box::new(Self) }
     fn name(&self) -> &str { "CleanCFG: Remove useless control flow from the CFG" }
     fn run(&self, arena: &mut IrArena, func_id: IrFuncId) -> bool {
         let mut any_changed = false;
@@ -348,6 +370,10 @@ impl IrPass for CleanCFG {
             any_changed = true;
         }
         any_changed
+    }
+
+    fn short_name(&self) -> &str {
+        "CleanCFG"
     }
 }
 impl CleanCFG {

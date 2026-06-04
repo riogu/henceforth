@@ -70,6 +70,7 @@ pub struct IrFunction {
 pub struct BasicBlock {
     pub parent_function: IrFuncId,
     pub name: String,
+    pub display_name: String,
     pub predecessors: HashSet<BlockId>, // for phi node construction
     pub successors: HashSet<BlockId>,
     pub instructions: Vec<InstId>,

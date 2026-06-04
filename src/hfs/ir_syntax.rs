@@ -259,7 +259,7 @@ impl Syntax for Printer {
 
     fn empty<A>(&self) -> Self::Output<A> { PrinterSyntax(Box::new(|_| None)) }
 
-    fn keyword(&self, s: &'static str) -> PrinterSyntax<()> { PrinterSyntax(Box::new(move |()| Some(format!("{} ", s)))) }
+    fn keyword(&self, s: &'static str) -> PrinterSyntax<()> { self.ignore_right(self.literal_str(s), self.whitespace()) }
 
     fn literal_str(&self, s: &'static str) -> PrinterSyntax<()> { PrinterSyntax(Box::new(move |()| Some(s.to_string()))) }
 
@@ -1521,7 +1521,10 @@ fn parse_function<'a>(
 
         for raw_inst in raw_block.insts {
             match raw_inst {
-                RawInst::Named(_, _, inst) | RawInst::Unnamed(inst) => {
+                RawInst::Named(id, _, inst) => {
+                    arena.fill_inst(id, inst, raw_block.id);
+                },
+                RawInst::Unnamed(inst) => {
                     arena.alloc_inst_for(inst, raw_block.id);
                 },
             }
@@ -1681,8 +1684,8 @@ pub fn print(func_ids: &[IrFuncId], arena: &IrArena) -> Option<String> {
 
         for block_id in arena.get_blocks_in(*func_id) {
             let block = arena.get_block(block_id);
-            names.block_to_name.insert(block_id, block.name.clone());
-            names.name_to_block.insert(block.name.clone(), block_id);
+            names.block_to_name.insert(block_id, block.display_name.clone());
+            names.name_to_block.insert(block.display_name.clone(), block_id);
             names.unmangled_to_block.insert(block.name.clone(), block_id);
 
             for inst_id in &block.instructions {

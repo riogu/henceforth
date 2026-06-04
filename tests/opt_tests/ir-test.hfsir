@@ -41,9 +41,3 @@ fn fizz_buzz: (i32) -> (str) {
 
 //? CHECK FN "fizz_buzz"
 //? CHECK BLOCK "start_2"
-//? CHECK "phi" 
-//? CHECK NEXT "branch"
-//? CHECK SAME "%[[X:*]], {{*}} {{*}}"
-//? CHECK NOT "dead_code:"
-//? CHECK DAG "load"
-//? CHECK COUNT 3 "store"

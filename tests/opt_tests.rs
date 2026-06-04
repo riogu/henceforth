@@ -34,11 +34,12 @@ pub fn generate_test_function(test: Box<IrTest>) -> Box<dyn Fn() -> Result<(), F
     Box::new(move || {
         let mut test = test.lock().unwrap();
         let (arena, funcs) = run_with_opts(&mut test);
-        let input = TestInput::Ir(print(&funcs, &arena).unwrap());
+        let optimized_output = print(&funcs, &arena).unwrap();
+        let input = TestInput::Ir(optimized_output.clone());
         if test.check(input) {
             Ok(())
         } else {
-            Err("invalid assertions".into())
+            Err(format!("invalid assertions\noptimized output:\n{}", optimized_output).into())
         }
     })
 }

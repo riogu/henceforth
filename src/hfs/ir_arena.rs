@@ -122,6 +122,12 @@ impl IrArena {
         self.get_block_mut(block_id).instructions.push(id);
         id
     }
+
+    pub fn fill_inst(&mut self, id: InstId, inst: Instruction, block_id: BlockId) {
+        self.instructions[id] = inst;
+        self.get_block_mut(block_id).instructions.push(id);
+    }
+
     pub fn alloc_inst_at_start_for(&mut self, inst: Instruction, block_id: BlockId) -> InstId {
         let id = self.instructions.insert(inst);
         self.get_block_mut(block_id).instructions.insert(0, id);
@@ -196,6 +202,7 @@ impl IrArena {
             successors: HashSet::new(),   // always empty, filled by alloc_terminator_for
             instructions: Vec::new(),
             terminator: None,
+            display_name: name.to_string(),
         });
         self.func_id_to_blocks.entry(func_id).or_default().push(block_id);
         block_id

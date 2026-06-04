@@ -2,10 +2,7 @@ use std::{error::Error, fs, io};
 
 use henceforth::{
     hfs::utils::{run_until, Phase},
-    hfscheck::{
-        error_parser::ErrorTest,
-        hfscheck::{generate_tests, Test, TestInput},
-    },
+    hfscheck::hfscheck::{generate_tests, Test, TestInput},
 };
 use libtest_mimic::{Arguments, Failed, Trial};
 
@@ -17,7 +14,7 @@ const FAILURE_TESTS_FOLDERS: &[(&str, Phase)] = &[
 
 fn generate_test_function(test: Box<dyn Test + Send + Sync>, phase: Phase) -> Box<dyn Fn() -> Result<(), Failed> + Send + Sync> {
     Box::new(move || {
-        if let Err(e) = run_until(test.path().to_str().unwrap(), phase) {
+        if let Err(e) = run_until(test.path().to_str().unwrap(), phase, None) {
             if test.check(TestInput::Error(e.message().0, e.get_line())) {
                 Ok(())
             } else {

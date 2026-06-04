@@ -22,3 +22,8 @@ path = "src/lib.rs"
 name = "error_tests"
 path = "tests/error_tests.rs"
 harness = false
+
+[[test]]
+name = "opt_tests"
+path = "tests/opt_tests.rs"
+harness = false

@@ -1,21 +1,29 @@
 use std::path::PathBuf;
 
-use crate::hfscheck::hfscheck::HfsRegex;
+use crate::hfscheck::hfscheck::{HfsRegex, Test, TestInput};
 
 pub struct ErrorParser {}
 
-pub struct Test {
+pub struct ErrorTest {
     pub path: PathBuf,
     pub message_check: Box<dyn Fn(String) -> bool + Send + Sync>,
     pub error_line_check: Box<dyn Fn(usize) -> bool + Send + Sync>,
 }
 
-impl Test {
-    pub fn check(&self, message: String, line: usize) -> bool { (self.message_check)(message) && (self.error_line_check)(line) }
+impl Test for ErrorTest {
+    fn check(&self, input: TestInput) -> bool {
+        if let TestInput::Error(message, line) = input {
+            (self.message_check)(message) && (self.error_line_check)(line)
+        } else {
+            false
+        }
+    }
+
+    fn path(&self) -> &PathBuf { &self.path }
 }
 
 impl ErrorParser {
-    pub fn generate_test(path: &'_ PathBuf, line_number: usize, error: String) -> Test {
+    pub fn generate_test(path: &'_ PathBuf, line_number: usize, error: String) -> ErrorTest {
         let mut chars_iter = error.chars().peekable();
         let mut error_line_check: Box<dyn Fn(usize) -> bool + Send + Sync> = Box::new(move |l| l == line_number);
         let mut message_check: Box<dyn Fn(String) -> bool + Send + Sync> = Box::new(|_| true);
@@ -43,7 +51,7 @@ impl ErrorParser {
             }
         }
 
-        return Test { path: path.clone(), message_check, error_line_check };
+        return ErrorTest { path: path.clone(), message_check, error_line_check };
     }
 
     fn generate_error_line_check(error_position: String, line_number: usize) -> Box<dyn Fn(usize) -> bool + Send + Sync> {

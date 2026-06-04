@@ -1,8 +1,13 @@
 use std::{fs, path::PathBuf};
 
+use libtest_mimic::Failed;
+
 use crate::{
     hfs::{OptPipeline, O0},
-    hfscheck::{error_parser::ErrorParser, ir_check::IrCheck},
+    hfscheck::{
+        error_parser::ErrorParser,
+        ir_check::{IrCheck, IrTest},
+    },
 };
 
 #[derive(Debug, PartialEq, Clone)]
@@ -246,8 +251,26 @@ pub fn generate_tests(path: &PathBuf) -> Vec<Box<dyn Test + Send + Sync>> {
                 if parsed_pipelines.len() == 0 {
                     parsed_pipelines = vec![(Box::new(O0::new()), false)]
                 }
-                tests.push(Box::new(IrCheck::generate_test(path, name, checks, parsed_pipelines)));
+                let content = fs::read_to_string(path).expect("Could not read file");
+                tests.push(Box::new(IrCheck::generate_test(path, &content, name, checks, parsed_pipelines)));
             },
+        }
+    }
+    tests
+}
+
+pub fn generate_ir_tests(path: &PathBuf) -> Vec<Box<IrTest>> {
+    let assertions = find_assertions(path, fs::read_to_string(path).expect("Could not read file."));
+    let mut tests = Vec::new();
+    for assertion in assertions {
+        if let Assertion::CheckFn { path, name, checks, pipelines } = assertion {
+            let mut parsed_pipelines: Vec<(Box<dyn OptPipeline + Send + Sync>, bool)> =
+                pipelines.iter().map(IrCheck::parse_pipeline).collect();
+            if parsed_pipelines.len() == 0 {
+                parsed_pipelines = vec![(Box::new(O0::new()), false)];
+            }
+            let content = fs::read_to_string(path).expect("Could not read file");
+            tests.push(Box::new(IrCheck::generate_test(path, &content, name, checks, parsed_pipelines)));
         }
     }
     tests

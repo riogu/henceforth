@@ -1,7 +1,5 @@
 use std::{fs, path::PathBuf};
 
-use libtest_mimic::Failed;
-
 use crate::{
     hfs::{OptPipeline, O0},
     hfscheck::{
@@ -251,8 +249,7 @@ pub fn generate_tests(path: &PathBuf) -> Vec<Box<dyn Test + Send + Sync>> {
                 if parsed_pipelines.len() == 0 {
                     parsed_pipelines = vec![(Box::new(O0::new()), false)]
                 }
-                let content = fs::read_to_string(path).expect("Could not read file");
-                tests.push(Box::new(IrCheck::generate_test(path, &content, name, checks, parsed_pipelines)));
+                tests.push(Box::new(IrCheck::generate_test(path, name, checks, parsed_pipelines)));
             },
         }
     }
@@ -269,8 +266,7 @@ pub fn generate_ir_tests(path: &PathBuf) -> Vec<Box<IrTest>> {
             if parsed_pipelines.len() == 0 {
                 parsed_pipelines = vec![(Box::new(O0::new()), false)];
             }
-            let content = fs::read_to_string(path).expect("Could not read file");
-            tests.push(Box::new(IrCheck::generate_test(path, &content, name, checks, parsed_pipelines)));
+            tests.push(Box::new(IrCheck::generate_test(path, name, checks, parsed_pipelines)));
         }
     }
     tests

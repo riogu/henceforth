@@ -134,7 +134,9 @@ pub trait Syntax {
 
     fn empty<A>(&self) -> Self::Output<A>;
 
-    fn keyword(&self, s: &'static str) -> Self::Output<()>;
+    fn keyword(&self, s: &'static str) -> Self::Output<()> { self.ignore_right(self.literal_str(s), self.whitespace()) }
+
+    fn symbol(&self, s: &'static str) -> Self::Output<()> { self.ignore_right(self.literal_str(s), self.opt_whitespace()) }
 
     fn literal_str(&self, s: &'static str) -> Self::Output<()>;
 
@@ -194,10 +196,6 @@ pub trait Syntax {
     fn func_name(&self, names: &NameMap) -> Self::Output<IrFuncId> { self.iso(iso::func_id(names), self.identifier()) }
 
     fn block_name(&self, names: &NameMap) -> Self::Output<BlockId> { self.iso(iso::block_id(names), self.identifier()) }
-
-    fn symbol(&self, s: &'static str) -> Self::Output<()> {
-        self.ignore_left(self.opt_whitespace(), self.ignore_left(self.literal_str(s), self.opt_whitespace()))
-    }
 
     fn between<A: 'static>(&self, (left, right): (&'static str, &'static str), inner: Self::Output<A>) -> Self::Output<A> {
         self.ignore_left(self.symbol(left), self.ignore_right(inner, self.literal_str(right)))
@@ -307,8 +305,8 @@ impl Syntax for Printer {
 
     fn identifier(&self) -> PrinterSyntax<String> { PrinterSyntax(Box::new(|s| Some(s))) }
 
-    fn indent(&self) -> PrinterSyntax<()> { PrinterSyntax(Box::new(|()| Some("\t".into()))) }
-    fn double_indent(&self) -> PrinterSyntax<()> { PrinterSyntax(Box::new(|()| Some("\t\t".into()))) }
+    fn indent(&self) -> PrinterSyntax<()> { PrinterSyntax(Box::new(|()| Some("    ".into()))) }
+    fn double_indent(&self) -> PrinterSyntax<()> { PrinterSyntax(Box::new(|()| Some("        ".into()))) }
 
     fn line_comment(&self) -> Self::Output<()> { PrinterSyntax(Box::new(|()| Some("".into()))) }
 
@@ -537,27 +535,6 @@ impl Syntax for IrParser {
             let mut chars = input.chars();
             let c = chars.next()?;
             Some((c, chars.as_str(), offset + c.len_utf8()))
-        }))
-    }
-    fn keyword(&self, s: &'static str) -> IrParserSyntax<()> {
-        let furthest = self.furthest.clone();
-        let furthest_expected = self.furthest_expected.clone();
-        IrParserSyntax(Box::new(move |input, offset| {
-            let trimmed = input.trim_start_matches([' ', '\t']);
-            let skipped = input.len() - trimmed.len();
-            match trimmed.strip_prefix(s) {
-                Some(rest) => Some(((), rest, offset + skipped + s.len())),
-                None => {
-                    let off = offset + skipped;
-                    if off > furthest.get() {
-                        furthest.set(off);
-                        *furthest_expected.borrow_mut() = vec![format!("keyword `{}`", s)];
-                    } else if off == furthest.get() {
-                        furthest_expected.borrow_mut().push(format!("keyword `{}`", s));
-                    }
-                    None
-                },
-            }
         }))
     }
 
@@ -1157,13 +1134,13 @@ fn syntax_literal<S: Syntax>(s: &S) -> S::Output<Instruction> {
 }
 
 fn syntax_load<S: Syntax>(s: &S, names: &NameMap) -> S::Output<Instruction> {
-    s.iso(iso::inst_load(), s.ignore_left(s.symbol("load"), s.inst_name(names)))
+    s.iso(iso::inst_load(), s.ignore_left(s.keyword("load"), s.inst_name(names)))
 }
 
 fn syntax_store<S: Syntax>(s: &S, names: &NameMap) -> S::Output<Instruction> {
     s.iso(
         iso::inst_store(),
-        s.ignore_left(s.symbol("store"), s.product(s.inst_name(names), s.ignore_left(s.symbol(","), s.inst_name(names)))),
+        s.ignore_left(s.keyword("store"), s.product(s.inst_name(names), s.ignore_left(s.symbol(","), s.inst_name(names)))),
     )
 }
 
@@ -1184,16 +1161,16 @@ fn syntax_parameter<S: Syntax>(s: &S) -> S::Output<Instruction> {
 }
 
 fn syntax_alloca<S: Syntax>(s: &S, names: &NameMap) -> S::Output<Instruction> {
-    s.iso(iso::inst_alloca(), s.ignore_left(s.symbol("alloca"), s.type_name(names)))
+    s.iso(iso::inst_alloca(), s.ignore_left(s.keyword("alloca"), s.type_name(names)))
 }
 fn syntax_retval<S: Syntax>(s: &S, names: &NameMap) -> S::Output<Instruction> {
-    s.iso(iso::inst_retval(), s.ignore_left(s.symbol("retval"), s.type_name(names)))
+    s.iso(iso::inst_retval(), s.ignore_left(s.keyword("retval"), s.type_name(names)))
 }
 fn syntax_fncall<S: Syntax>(s: &S, names: &NameMap) -> S::Output<Instruction> {
     s.iso(
         iso::inst_fncall(),
         s.ignore_left(
-            s.symbol("call"),
+            s.keyword("call"),
             s.product(s.func_name(names), s.between(("(", ")"), s.sep_by(s.inst_name(names), s.symbol(",")))),
         ),
     )
@@ -1202,7 +1179,7 @@ fn syntax_phi<S: Syntax>(s: &S, names: &NameMap) -> S::Output<Instruction> {
     s.iso(
         iso::inst_phi(),
         s.ignore_left(
-            s.symbol("phi"),
+            s.keyword("phi"),
             s.sep_by(
                 s.between(
                     ("[", "]"),
@@ -1245,7 +1222,7 @@ fn syntax_unop<S: Syntax>(s: &S, names: &NameMap) -> S::Output<Instruction> {
 fn syntax_load_element<S: Syntax>(s: &S, names: &NameMap) -> S::Output<Instruction> {
     s.iso(
         iso::inst_load_element(),
-        s.ignore_left(s.symbol("load_element"), s.product(s.ignore_right(s.uint(), s.whitespace()), s.inst_name(names))),
+        s.ignore_left(s.keyword("load_element"), s.product(s.ignore_right(s.uint(), s.whitespace()), s.inst_name(names))),
     )
 }
 fn syntax_inst<S: Syntax>(s: &S, names: &NameMap) -> S::Output<Instruction> {
@@ -1274,14 +1251,14 @@ pub(crate) fn syntax_named_inst<S: Syntax>(s: &S, names: &NameMap) -> S::Output<
 }
 
 fn syntax_return<S: Syntax>(s: &S, names: &NameMap) -> S::Output<TerminatorInst> {
-    s.iso(iso::term_return(), s.ignore_left(s.symbol("return"), s.inst_name(names)))
+    s.iso(iso::term_return(), s.ignore_left(s.keyword("return"), s.inst_name(names)))
 }
 
 fn syntax_branch<S: Syntax>(s: &S, names: &NameMap) -> S::Output<TerminatorInst> {
     s.iso(
         iso::term_branch(),
         s.ignore_left(
-            s.symbol("branch"),
+            s.keyword("branch"),
             s.product3(
                 s.ignore_right(s.inst_name(names), s.opt_whitespace()),
                 s.ignore_left(s.symbol(","), s.block_name(names)),
@@ -1292,7 +1269,7 @@ fn syntax_branch<S: Syntax>(s: &S, names: &NameMap) -> S::Output<TerminatorInst>
 }
 
 fn syntax_jump<S: Syntax>(s: &S, names: &NameMap) -> S::Output<TerminatorInst> {
-    s.iso(iso::term_jump(), s.ignore_left(s.symbol("jump"), s.block_name(names)))
+    s.iso(iso::term_jump(), s.ignore_left(s.keyword("jump"), s.block_name(names)))
 }
 
 pub fn syntax_term<S: Syntax>(s: &S, names: &NameMap) -> S::Output<TerminatorInst> {
@@ -1338,8 +1315,8 @@ fn syntax_raw_block<S: Syntax>(s: &S, names: &NameMap) -> S::Output<RawBlock> {
         iso,
         s.product3(
             s.ignore_right(s.ignore_left(s.opt_whitespace(), s.block_name(names)), s.ignore_right(s.symbol(":"), s.newline())),
-            s.sep_by(s.ignore_right(syntax_raw_inst(s, names), s.newline()), s.opt_whitespace()),
-            s.ignore_right(syntax_term(s, names), s.newline()),
+            s.sep_by(s.ignore_left(s.indent(), s.ignore_right(syntax_raw_inst(s, names), s.newline())), s.opt_whitespace()),
+            s.ignore_left(s.indent(), s.ignore_right(syntax_term(s, names), s.newline())),
         ),
     )
 }
@@ -1353,7 +1330,7 @@ fn syntax_raw_function<S: Syntax>(s: &S, names: &NameMap) -> S::Output<RawFuncti
         iso,
         s.product(
             s.ignore_left(
-                s.symbol("fn"),
+                s.keyword("fn"),
                 s.product3(
                     s.identifier(),
                     s.ignore_left(s.symbol(":"), s.type_name(names)),
@@ -1369,7 +1346,7 @@ fn syntax_raw_function<S: Syntax>(s: &S, names: &NameMap) -> S::Output<RawFuncti
 }
 
 fn syntax_top_level<S: Syntax>(s: &S, names: &NameMap) -> S::Output<Vec<RawFunction>> {
-    s.ignore_left(s.opt_whitespace(), s.sep_by(syntax_raw_function(s, names), s.ignore_left(s.newline(), s.opt_whitespace())))
+    s.ignore_right(s.sep_by(syntax_raw_function(s, names), s.ignore_left(s.newline(), s.opt_whitespace())), s.opt_whitespace())
 }
 
 fn collect_tuple_type(name: &str, arena: &mut IrArena, names: &mut NameMap) {

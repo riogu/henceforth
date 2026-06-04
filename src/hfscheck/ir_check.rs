@@ -49,14 +49,21 @@ impl IrCheck {
 
     pub fn generate_test(
         path: &PathBuf,
-        content: &str,
         name: String,
         checks: Vec<CheckKind>,
         pipelines: Vec<(Box<dyn OptPipeline + Send + Sync>, bool)>,
     ) -> IrTest {
-        let fn_line = IrCheck::find_function(content, &name).expect(&format!("function {} not found in {:?}", name, path));
-
+        let path_clone = path.clone();
+        let name_clone = name.clone();
         let code_check: Box<dyn Fn(Vec<String>) -> bool + Send + Sync> = Box::new(move |lines: Vec<String>| {
+            let current_content = lines.join("\n");
+            let fn_line = match IrCheck::find_function(&current_content, &name_clone) {
+                Some(idx) => idx,
+                None => {
+                    eprintln!("[ERROR] function {} not found in optimized output for {:?}", name_clone, path_clone);
+                    return false;
+                },
+            };
             let mut previous = fn_line;
             for check in &checks {
                 match check {
@@ -203,7 +210,7 @@ mod tests {
 
     #[test]
     fn test_o0_is_parsed() {
-        let mut pipeline = IrCheck::parse_pipeline(&String::from("-O0"));
+        let pipeline = IrCheck::parse_pipeline(&String::from("-O0"));
         assert_eq!(pipeline.1, false);
         assert_eq!(pipeline.0.get_pass_names(), vec!["Mem2Reg", "DeadCodeElimination"]);
     }
@@ -273,36 +280,30 @@ mod tests {
     fn test_checks_match_only_below_fn() {
         let message = "fn other: () -> () {\nphi [...]\n}\nfn main: () -> () {\nbranch %0, a, b\n}";
         let path = PathBuf::new();
-        let plain =
-            IrCheck::generate_test(&path, message, String::from("main"), vec![CheckKind::Plain(String::from("phi"))], vec![(
-                Box::new(O0::new()),
-                false,
-            )]);
-        let not =
-            IrCheck::generate_test(&path, message, String::from("main"), vec![CheckKind::Not(String::from("branch"))], vec![(
-                Box::new(O0::new()),
-                false,
-            )]);
-        let next =
-            IrCheck::generate_test(&path, message, String::from("main"), vec![CheckKind::Next(String::from("phi"))], vec![(
-                Box::new(O0::new()),
-                false,
-            )]);
-        let same =
-            IrCheck::generate_test(&path, message, String::from("main"), vec![CheckKind::Same(String::from("phi"))], vec![(
-                Box::new(O0::new()),
-                false,
-            )]);
-        let count =
-            IrCheck::generate_test(&path, message, String::from("main"), vec![CheckKind::Count(1, String::from("phi"))], vec![(
-                Box::new(O0::new()),
-                false,
-            )]);
-        let block =
-            IrCheck::generate_test(&path, message, String::from("main"), vec![CheckKind::Block(String::from("phi"))], vec![(
-                Box::new(O0::new()),
-                false,
-            )]);
+        let plain = IrCheck::generate_test(&path, String::from("main"), vec![CheckKind::Plain(String::from("phi"))], vec![(
+            Box::new(O0::new()),
+            false,
+        )]);
+        let not = IrCheck::generate_test(&path, String::from("main"), vec![CheckKind::Not(String::from("branch"))], vec![(
+            Box::new(O0::new()),
+            false,
+        )]);
+        let next = IrCheck::generate_test(&path, String::from("main"), vec![CheckKind::Next(String::from("phi"))], vec![(
+            Box::new(O0::new()),
+            false,
+        )]);
+        let same = IrCheck::generate_test(&path, String::from("main"), vec![CheckKind::Same(String::from("phi"))], vec![(
+            Box::new(O0::new()),
+            false,
+        )]);
+        let count = IrCheck::generate_test(&path, String::from("main"), vec![CheckKind::Count(1, String::from("phi"))], vec![(
+            Box::new(O0::new()),
+            false,
+        )]);
+        let block = IrCheck::generate_test(&path, String::from("main"), vec![CheckKind::Block(String::from("phi"))], vec![(
+            Box::new(O0::new()),
+            false,
+        )]);
         assert!(!plain.check(TestInput::Ir(message.to_string())));
         assert!(!not.check(TestInput::Ir(message.to_string())));
         assert!(!next.check(TestInput::Ir(message.to_string())));
@@ -317,7 +318,6 @@ mod tests {
         let path = PathBuf::new();
         let test = IrCheck::generate_test(
             &path,
-            message,
             String::from("main"),
             vec![CheckKind::Plain(String::from("i32 %arg{{[0-9]}}")), CheckKind::Plain(String::from("branch"))],
             vec![(Box::new(O0::new()), false)],
@@ -331,7 +331,6 @@ mod tests {
         let path = PathBuf::new();
         let test = IrCheck::generate_test(
             &path,
-            message,
             String::from("main"),
             vec![CheckKind::Plain(String::from("i32 %arg{{[0-9]}}")), CheckKind::Not(String::from("branch"))],
             vec![(Box::new(O0::new()), false)],
@@ -344,16 +343,14 @@ mod tests {
         let message1 = "fn main: () -> () {\nlabel:      \n}";
         let message2 = "fn main: () -> () {\nlabel      \n}";
         let path = PathBuf::new();
-        let test1 =
-            IrCheck::generate_test(&path, message1, String::from("main"), vec![CheckKind::Block(String::from("label"))], vec![(
-                Box::new(O0::new()),
-                false,
-            )]);
-        let test2 =
-            IrCheck::generate_test(&path, message2, String::from("main"), vec![CheckKind::Block(String::from("label"))], vec![(
-                Box::new(O0::new()),
-                false,
-            )]);
+        let test1 = IrCheck::generate_test(&path, String::from("main"), vec![CheckKind::Block(String::from("label"))], vec![(
+            Box::new(O0::new()),
+            false,
+        )]);
+        let test2 = IrCheck::generate_test(&path, String::from("main"), vec![CheckKind::Block(String::from("label"))], vec![(
+            Box::new(O0::new()),
+            false,
+        )]);
         assert!(test1.check(TestInput::Ir(message1.to_string())));
         assert!(!test2.check(TestInput::Ir(message2.to_string())));
     }
@@ -363,16 +360,14 @@ mod tests {
         let message1 = "fn main: () -> () {\nbranch %0, a, b\n}";
         let message2 = "fn main: () -> () {\nphi [a, b]\nbranch %0, a, b\n}";
         let path = PathBuf::new();
-        let test1 =
-            IrCheck::generate_test(&path, message1, String::from("main"), vec![CheckKind::Next(String::from("branch"))], vec![(
-                Box::new(O0::new()),
-                false,
-            )]);
-        let test2 =
-            IrCheck::generate_test(&path, message2, String::from("main"), vec![CheckKind::Next(String::from("branch"))], vec![(
-                Box::new(O0::new()),
-                false,
-            )]);
+        let test1 = IrCheck::generate_test(&path, String::from("main"), vec![CheckKind::Next(String::from("branch"))], vec![(
+            Box::new(O0::new()),
+            false,
+        )]);
+        let test2 = IrCheck::generate_test(&path, String::from("main"), vec![CheckKind::Next(String::from("branch"))], vec![(
+            Box::new(O0::new()),
+            false,
+        )]);
         assert!(test1.check(TestInput::Ir(message1.to_string())));
         assert!(!test2.check(TestInput::Ir(message2.to_string())));
     }
@@ -383,27 +378,21 @@ mod tests {
         let message2 = "fn main: () -> () {\nbranch %0, a, c\nbranch %0, a, b\n}";
         let message3 = "fn main: () -> () {\nbranch %0, a, c\nbranch %0, a, b\nbranch %1, a, c\n}";
         let path = PathBuf::new();
-        let test1 = IrCheck::generate_test(
-            &path,
-            message1,
-            String::from("main"),
-            vec![CheckKind::Count(2, String::from("branch"))],
-            vec![(Box::new(O0::new()), false)],
-        );
-        let test2 = IrCheck::generate_test(
-            &path,
-            message2,
-            String::from("main"),
-            vec![CheckKind::Count(2, String::from("branch"))],
-            vec![(Box::new(O0::new()), false)],
-        );
-        let test3 = IrCheck::generate_test(
-            &path,
-            message3,
-            String::from("main"),
-            vec![CheckKind::Count(2, String::from("branch"))],
-            vec![(Box::new(O0::new()), false)],
-        );
+        let test1 =
+            IrCheck::generate_test(&path, String::from("main"), vec![CheckKind::Count(2, String::from("branch"))], vec![(
+                Box::new(O0::new()),
+                false,
+            )]);
+        let test2 =
+            IrCheck::generate_test(&path, String::from("main"), vec![CheckKind::Count(2, String::from("branch"))], vec![(
+                Box::new(O0::new()),
+                false,
+            )]);
+        let test3 =
+            IrCheck::generate_test(&path, String::from("main"), vec![CheckKind::Count(2, String::from("branch"))], vec![(
+                Box::new(O0::new()),
+                false,
+            )]);
         assert!(!test1.check(TestInput::Ir(message1.to_string())));
         assert!(test2.check(TestInput::Ir(message2.to_string())));
         assert!(!test3.check(TestInput::Ir(message3.to_string())));
@@ -413,16 +402,14 @@ mod tests {
         let message1 = "fn main: () -> () {}";
         let message2 = "fn other: () -> () {\nmain\n}";
         let path = PathBuf::new();
-        let test1 =
-            IrCheck::generate_test(&path, message1, String::from("main"), vec![CheckKind::Same(String::from("main"))], vec![(
-                Box::new(O0::new()),
-                false,
-            )]);
-        let test2 =
-            IrCheck::generate_test(&path, message2, String::from("other"), vec![CheckKind::Same(String::from("main"))], vec![(
-                Box::new(O0::new()),
-                false,
-            )]);
+        let test1 = IrCheck::generate_test(&path, String::from("main"), vec![CheckKind::Same(String::from("main"))], vec![(
+            Box::new(O0::new()),
+            false,
+        )]);
+        let test2 = IrCheck::generate_test(&path, String::from("other"), vec![CheckKind::Same(String::from("main"))], vec![(
+            Box::new(O0::new()),
+            false,
+        )]);
         assert!(test1.check(TestInput::Ir(message1.to_string())));
         assert!(!test2.check(TestInput::Ir(message2.to_string())));
     }

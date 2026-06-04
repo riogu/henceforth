@@ -1,7 +1,7 @@
 use std::{error::Error, fs, io, path::PathBuf, rc::Rc};
 
 use henceforth::{
-    hfs::{error::DiagnosticInfo, parse, print, IrArena, IrFuncId, SourceInfo},
+    hfs::{error::DiagnosticInfo, parse, prettify_ir, print, IrArena, IrFuncId, SourceInfo},
     hfscheck::{
         hfscheck::{generate_ir_tests, Test, TestInput},
         ir_check::IrTest,
@@ -39,7 +39,7 @@ pub fn generate_test_function(test: Box<IrTest>) -> Box<dyn Fn() -> Result<(), F
         if test.check(input) {
             Ok(())
         } else {
-            Err(format!("invalid assertions\noptimized output:\n{}", optimized_output).into())
+            Err(format!("invalid assertions\noptimized output:\n{}", prettify_ir(optimized_output)).into())
         }
     })
 }

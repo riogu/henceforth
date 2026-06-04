@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use indexmap::IndexSet;
-use slotmap::{Key, SlotMap, new_key_type};
+use slotmap::{new_key_type, Key, SlotMap};
 
 use crate::hfs::{BlockId, InstId, InstOrTermId, Instruction, IrArena, IrFuncId};
 
@@ -508,7 +508,7 @@ impl LoopInfo {
 
 #[cfg(test)]
 mod tests {
-    use crate::hfs::{IrArena, LoopId, LoopInfo, utils::*};
+    use crate::hfs::{utils::*, IrArena, LoopId, LoopInfo};
 
     fn check_while_helper(outer_id: LoopId, loop_info: &LoopInfo) {
         // outer's blocks include both sub-loops' blocks
@@ -524,7 +524,7 @@ mod tests {
 
     #[test]
     fn test_nested_loops() {
-        let ir_arena = run_until("tests/opt-tests/natural-loop.hfs", Phase::CfgAnalyzer).expect("compilation failed");
+        let ir_arena = run_until("tests/opt_tests/natural-loop.hfs", Phase::CfgAnalyzer, None).expect("compilation failed");
         let ir_arena = ir_arena.as_any().downcast_ref::<IrArena>().unwrap();
 
         // only one function
@@ -561,7 +561,7 @@ mod tests {
     }
     #[test]
     fn test_multiple_latches() {
-        let ir_arena = run_until("tests/opt-tests/natural-loop2.hfs", Phase::CfgAnalyzer).expect("compilation failed");
+        let ir_arena = run_until("tests/opt_tests/natural-loop2.hfs", Phase::CfgAnalyzer, None).expect("compilation failed");
         let ir_arena = ir_arena.as_any().downcast_ref::<IrArena>().unwrap();
 
         for (func_id, _) in &ir_arena.functions {
@@ -579,7 +579,7 @@ mod tests {
     }
     #[test]
     fn test_multiple_sub_loops() {
-        let ir_arena = run_until("tests/opt-tests/natural-loop3.hfs", Phase::CfgAnalyzer).expect("compilation failed");
+        let ir_arena = run_until("tests/opt_tests/natural-loop3.hfs", Phase::CfgAnalyzer, None).expect("compilation failed");
         let ir_arena = ir_arena.as_any().downcast_ref::<IrArena>().unwrap();
 
         for (func_id, _) in &ir_arena.functions {

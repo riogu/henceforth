@@ -1,0 +1,49 @@
+//? OPT [DCE, Mem2Reg] -iterative
+//? OPT [DCE, CleanCFG] -iterative
+//? OPT -O0 -iterative
+fn fizz_buzz: (i32) -> (str) {                                                             
+  start_2:                                                                                 
+    %2 = i32 %arg0                                                                         
+    %3 = i32 15                                                                            
+    %4 = i32 %2 % %3                                                                       
+    %5 = i32 0                                                                             
+    %6 = bool %4 == %5                                                                     
+    branch %6, if_body_3 else_if_cond_5                                                    
+  else_if_cond_5:                                                                          
+    %10 = i32 3                                                                            
+    %11 = i32 %2 % %10                                                                     
+    %12 = i32 0                                                                            
+    %13 = bool %11 == %12                                                                  
+    branch %13, if_body_6 else_if_cond_7                                                   
+  else_if_cond_7:                                                                          
+    %15 = i32 5                                                                            
+    %16 = i32 %2 % %15                                                                     
+    %17 = i32 0                                                                            
+    %18 = bool %16 == %17                                                                  
+    branch %18, if_body_8 else_body_9                                                      
+  if_body_8:                                                                               
+    %19 = str "buzz"                                                                       
+    jump if_end_4                                                                          
+  else_body_9:                                                                             
+    %20 = str "no fizzbuzz"                                                                
+    jump if_end_4                                                                          
+  if_body_6:                                                                               
+    %14 = str "fizz"                                                                       
+    jump if_end_4                                                                          
+  if_body_3:                                                                               
+    %7 = str "fizzbuzz"                                                                    
+    jump if_end_4                                                                          
+  if_end_4:                                                                                
+    %8 = str phi [if_body_3: %7], [if_body_6: %14], [if_body_8: %19], [else_body_9: %20]   
+    %9 = (str) (%8)                                                                        
+    return %9     
+}
+
+//? CHECK FN "fizz_buzz"
+//? CHECK BLOCK "start_2"
+//? CHECK "phi" 
+//? CHECK NEXT "branch"
+//? CHECK SAME "%[[X:*]], {{*}} {{*}}"
+//? CHECK NOT "dead_code:"
+//? CHECK DAG "load"
+//? CHECK COUNT 3 "store"

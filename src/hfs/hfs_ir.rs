@@ -3,7 +3,7 @@ use std::{collections::HashSet, fmt::Display, vec};
 use indexmap::IndexMap;
 use slotmap::new_key_type;
 
-use crate::hfs::{ast::*, ir_pretty_printing::prettify_ir, print, IrArena, Literal, SourceInfo};
+use crate::hfs::{ast::*, ir_pretty_printing::prettify_ir, print, syntax_term, IrArena, Literal, SourceInfo};
 /*
 =================================================================================================
 Control Flow Graph IR Pass (HFS MIR - Medium-level IR)
@@ -398,7 +398,7 @@ impl IrArena {
 
                 if let Some(term_id) = terminator {
                     let term = self.get_term(term_id).clone();
-                    let term_syntax = crate::hfs::ir_syntax::syntax_term(&printer, &names);
+                    let term_syntax = syntax_term(&printer, &names);
                     let text = (term_syntax.0)(term).unwrap_or_else(|| "<unprintable terminator>".to_string());
                     lines.push(format!("  {}", text));
                 }

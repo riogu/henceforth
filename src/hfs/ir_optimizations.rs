@@ -15,8 +15,8 @@ pub trait IrPass {
 }
 pub trait OptPipeline {
     fn name(&self) -> &str;
-    fn get_opt_passes(&mut self) -> &mut [Box<dyn IrPass + Send + Sync>];
-    fn get_pass_names(&mut self) -> Vec<&str> {
+    fn get_opt_passes(&self) -> &[Box<dyn IrPass + Send + Sync>];
+    fn get_pass_names(&self) -> Vec<&str> {
         self.get_opt_passes().iter().map(|p| p.short_name()).collect()
     }
 
@@ -60,7 +60,7 @@ impl O0 {
 
 impl OptPipeline for O0 {
     fn name(&self) -> &str { "-O0: Basic Optimizations" }
-    fn get_opt_passes(&mut self) -> &mut [Box<dyn IrPass + Send + Sync>] { &mut self.opt_passes }
+    fn get_opt_passes(&self) -> &[Box<dyn IrPass + Send + Sync>] { &self.opt_passes }
 }
 
 // ======================================================================================

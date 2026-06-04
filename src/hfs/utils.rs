@@ -1,9 +1,9 @@
 use std::{any::Any, path::PathBuf, rc::Rc};
 
 use crate::hfs::{
-    AstArena, IrLowerer, File, IrArena, Lexer, O0, OptPipeline, Parser, StackAnalyzer, Token, UnresolvedAstArena,
     error::{CompileError, DiagnosticInfo},
-    get_eof_source_info,
+    get_eof_source_info, AstArena, File, IrArena, IrLowerer, Lexer, OptPipeline, Parser, StackAnalyzer, Token,
+    UnresolvedAstArena, O0,
 };
 
 pub trait Byproduct {
@@ -36,7 +36,11 @@ pub enum Phase {
     Interpreter,
 }
 
-pub fn run_until(filename: &str, phase: Phase) -> Result<Rc<dyn Byproduct>, Box<dyn CompileError>> {
+pub fn run_until(
+    filename: &str,
+    phase: Phase,
+    opts: Option<Box<dyn OptPipeline>>,
+) -> Result<Rc<dyn Byproduct>, Box<dyn CompileError>> {
     let path = PathBuf::from(filename);
 
     let file = File::new(path);
@@ -67,7 +71,11 @@ pub fn run_until(filename: &str, phase: Phase) -> Result<Rc<dyn Byproduct>, Box<
         return Ok(Rc::new(ir_arena));
     }
 
-    OptPipeline::run_iteratively(&mut O0::new(), &mut ir_arena);
+    if let Some(mut opts) = opts {
+        OptPipeline::run_iteratively(&mut *opts, &mut ir_arena);
+    } else {
+        OptPipeline::run_iteratively(&mut O0::new(), &mut ir_arena);
+    }
 
     if phase == Phase::Optimizer {
         return Ok(Rc::new(ir_arena));

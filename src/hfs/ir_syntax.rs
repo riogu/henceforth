@@ -30,7 +30,11 @@
 // Additionally, since this IR can have forward references to registers and blocks, we need a pass
 // that collects names
 
-use std::collections::HashMap;
+use std::{
+    cell::{Cell, RefCell},
+    collections::HashMap,
+    rc::Rc,
+};
 
 use crate::hfs::{
     BlockId, InstId, Instruction, IrArena, IrFuncId, IrFunction, Literal, SourceInfo, TerminatorInst, Type, TypeId,
@@ -136,6 +140,8 @@ pub trait Syntax {
 
     fn many<A>(&self, item: Self::Output<A>) -> Self::Output<Vec<A>>;
 
+    fn many1<A: 'static>(&self, item: Self::Output<A>) -> Self::Output<Vec<A>>;
+
     fn sep_by<A>(&self, item: Self::Output<A>, sep: Self::Output<()>) -> Self::Output<Vec<A>>;
 
     fn whitespace(&self) -> Self::Output<()>;
@@ -178,12 +184,12 @@ pub trait Syntax {
     fn lexeme<A: 'static>(&self, p: Self::Output<A>) -> Self::Output<A> { self.ignore_left(self.whitespace(), p) }
 
     fn inst_name(&self, names: &NameMap) -> Self::Output<InstId> {
-        self.iso(iso::inst_id(names), self.ignore_left(self.literal_str("%"), self.uint()))
+        self.iso(iso::inst_id(names), self.ignore_left(self.symbol("%"), self.uint()))
     }
 
     fn identifier(&self) -> Self::Output<String>;
 
-    fn type_name(&self, names: &NameMap) -> Self::Output<TypeId> { self.iso(iso::type_id(names), self.identifier()) }
+    fn type_name(&self, names: &NameMap) -> Self::Output<TypeId> { self.iso(iso::type_id(names), self.type_name_str()) }
 
     fn func_name(&self, names: &NameMap) -> Self::Output<IrFuncId> { self.iso(iso::func_id(names), self.identifier()) }
 
@@ -211,7 +217,12 @@ pub trait Syntax {
     }
 
     fn indent(&self) -> Self::Output<()> { self.opt_whitespace() }
+
     fn double_indent(&self) -> Self::Output<()> { self.opt_whitespace() }
+
+    fn line_comment(&self) -> Self::Output<()>;
+
+    fn type_name_str(&self) -> Self::Output<String> { self.identifier() }
 }
 
 // Printer implementation
@@ -298,6 +309,10 @@ impl Syntax for Printer {
 
     fn indent(&self) -> PrinterSyntax<()> { PrinterSyntax(Box::new(|()| Some("\t".into()))) }
     fn double_indent(&self) -> PrinterSyntax<()> { PrinterSyntax(Box::new(|()| Some("\t\t".into()))) }
+
+    fn line_comment(&self) -> Self::Output<()> { PrinterSyntax(Box::new(|()| Some("".into()))) }
+
+    fn many1<A: 'static>(&self, item: Self::Output<A>) -> Self::Output<Vec<A>> { self.many(item) }
 }
 
 // Parser implementation
@@ -305,150 +320,294 @@ impl Syntax for Printer {
 // Implementation of the Syntax Trait for the parser, this corresponds to applying an isomorphism
 // A combinatorial parser works by trying to consume a prefix and returning the rest (`&str -> Option<(A, &str)>`)
 
-pub struct IrParser;
-pub struct IrParserSyntax<A>(pub Box<dyn Fn(&str) -> Option<(A, &str)>>);
+pub struct IrParser {
+    pub furthest: Rc<Cell<usize>>,
+    pub furthest_expected: Rc<RefCell<Vec<String>>>,
+    pub furthest_context: Rc<RefCell<Vec<String>>>,
+    pub context_stack: Rc<RefCell<Vec<String>>>,
+}
+
+impl IrParser {
+    pub fn new() -> Self {
+        Self {
+            furthest: Rc::new(Cell::new(0)),
+            furthest_expected: Rc::new(RefCell::new(vec![])),
+            furthest_context: Rc::new(RefCell::new(vec![])),
+            context_stack: Rc::new(RefCell::new(vec![])),
+        }
+    }
+}
+
+pub struct IrParserSyntax<A>(pub Box<dyn Fn(&str, usize) -> Option<(A, &str, usize)>>);
+
+fn do_advance(furthest: &Cell<usize>, furthest_expected: &RefCell<Vec<String>>, offset: usize, expected: &str) {
+    if offset > furthest.get() {
+        furthest.set(offset);
+        *furthest_expected.borrow_mut() = vec![expected.to_string()];
+    } else if offset == furthest.get() {
+        furthest_expected.borrow_mut().push(expected.to_string());
+    }
+}
 
 impl Syntax for IrParser {
     type Output<A: 'static> = IrParserSyntax<A>;
 
-    fn iso<A: 'static, B: 'static>(&self, iso: Iso<A, B>, inner: Self::Output<A>) -> Self::Output<B> {
-        IrParserSyntax(Box::new(move |input| {
-            // Parses the input, then applies the isomorphism and returns the result + the remaining string
-            let (a, rest) = (inner.0)(input)?;
-            let b = (iso.apply)(a)?;
-            Some((b, rest))
+    fn type_name_str(&self) -> IrParserSyntax<String> {
+        let furthest = self.furthest.clone();
+        let furthest_expected = self.furthest_expected.clone();
+        let identifier = self.identifier();
+        IrParserSyntax(Box::new(move |input, offset| {
+            if input.starts_with('(') {
+                let end = match input.find(')') {
+                    Some(e) => e,
+                    None => {
+                        do_advance(&furthest, &furthest_expected, offset, "type");
+                        return None;
+                    },
+                };
+                let s = input[..=end].to_string();
+                Some((s, &input[end + 1..], offset + end + 1))
+            } else {
+                (identifier.0)(input, offset)
+            }
+        }))
+    }
+
+    fn iso<A: 'static, B: 'static>(&self, iso: Iso<A, B>, inner: IrParserSyntax<A>) -> IrParserSyntax<B> {
+        let furthest = self.furthest.clone();
+        let furthest_expected = self.furthest_expected.clone();
+        IrParserSyntax(Box::new(move |input, offset| {
+            let (a, rest, new_offset) = (inner.0)(input, offset)?;
+            match (iso.apply)(a) {
+                Some(b) => Some((b, rest, new_offset)),
+                None => {
+                    do_advance(&furthest, &furthest_expected, new_offset, "<iso conversion failed>");
+                    None
+                },
+            }
         }))
     }
 
     fn product<A: 'static, B: 'static>(&self, left: Self::Output<A>, right: Self::Output<B>) -> Self::Output<(A, B)> {
-        IrParserSyntax(Box::new(move |input| {
-            let (a, rest) = (left.0)(input)?;
-            let (b, rest2) = (right.0)(rest)?;
-            Some(((a, b), rest2))
+        IrParserSyntax(Box::new(move |input, offset| {
+            let (a, rest, offset) = (left.0)(input, offset)?;
+            let (b, rest2, offset) = (right.0)(rest, offset)?;
+            Some(((a, b), rest2, offset))
         }))
     }
 
-    fn alt<A: Clone + 'static>(&self, left: Self::Output<A>, right: Self::Output<A>) -> Self::Output<A> {
-        IrParserSyntax(Box::new(move |input| {
-            let snapshot = input;
-
-            if let Some(res) = (left.0)(input) {
+    fn alt<A: Clone + 'static>(&self, left: IrParserSyntax<A>, right: IrParserSyntax<A>) -> IrParserSyntax<A> {
+        IrParserSyntax(Box::new(move |input, offset| {
+            // both failures automatically update furthest_expected via advance()
+            // no extra work needed here
+            if let Some(res) = (left.0)(input, offset) {
                 return Some(res);
             }
-
-            (right.0)(snapshot)
+            (right.0)(input, offset)
         }))
     }
 
-    fn empty<A: 'static>(&self) -> Self::Output<A> { IrParserSyntax(Box::new(|_| None)) }
+    fn empty<A: 'static>(&self) -> Self::Output<A> { IrParserSyntax(Box::new(|_, _| None)) }
 
-    fn literal_str(&self, s: &'static str) -> Self::Output<()> {
-        IrParserSyntax(Box::new(move |input| input.strip_prefix(s).map(|rest| ((), rest))))
+    fn literal_str(&self, s: &'static str) -> IrParserSyntax<()> {
+        let furthest = self.furthest.clone();
+        let furthest_expected = self.furthest_expected.clone();
+        IrParserSyntax(Box::new(move |input, offset| match input.strip_prefix(s) {
+            Some(rest) => Some(((), rest, offset + s.len())),
+            None => {
+                if offset > furthest.get() {
+                    furthest.set(offset);
+                    *furthest_expected.borrow_mut() = vec![format!("{:?}", s)];
+                } else if offset == furthest.get() {
+                    furthest_expected.borrow_mut().push(format!("{:?}", s));
+                }
+                None
+            },
+        }))
     }
 
-    fn many<A: 'static>(&self, item: Self::Output<A>) -> Self::Output<Vec<A>> {
-        IrParserSyntax(Box::new(move |mut input| {
+    fn many<A: 'static>(&self, item: IrParserSyntax<A>) -> IrParserSyntax<Vec<A>> {
+        IrParserSyntax(Box::new(move |mut input, mut offset| {
             let mut results = Vec::new();
-            while let Some((x, rest)) = (item.0)(input) {
+            while let Some((x, rest, new_offset)) = (item.0)(input, offset) {
                 results.push(x);
                 input = rest;
+                offset = new_offset;
             }
-            Some((results, input))
+            Some((results, input, offset))
         }))
     }
 
-    fn sep_by<A: 'static>(&self, item: Self::Output<A>, sep: Self::Output<()>) -> Self::Output<Vec<A>> {
-        IrParserSyntax(Box::new(move |input| {
-            let Some((first, mut rest)) = (item.0)(input) else {
-                return Some((vec![], input));
+    fn sep_by<A: 'static>(&self, item: IrParserSyntax<A>, sep: IrParserSyntax<()>) -> IrParserSyntax<Vec<A>> {
+        IrParserSyntax(Box::new(move |input, offset| {
+            let Some((first, mut rest, mut offset)) = (item.0)(input, offset) else {
+                return Some((vec![], input, offset));
             };
 
             let mut results = vec![first];
 
             loop {
                 let before = rest;
-
-                let Some((_, after_sep)) = (sep.0)(rest) else {
+                let Some((_, after_sep, sep_offset)) = (sep.0)(rest, offset) else {
                     break;
                 };
-
-                if let Some((x, new_rest)) = (item.0)(after_sep) {
+                if let Some((x, new_rest, new_offset)) = (item.0)(after_sep, sep_offset) {
                     results.push(x);
                     rest = new_rest;
+                    offset = new_offset;
                 } else {
                     break;
                 }
-
                 if rest == before {
                     break;
                 }
             }
 
-            Some((results, rest))
+            Some((results, rest, offset))
         }))
     }
 
-    fn whitespace(&self) -> Self::Output<()> {
-        IrParserSyntax(Box::new(|input| {
+    fn opt_whitespace(&self) -> IrParserSyntax<()> {
+        IrParserSyntax(Box::new(|input, offset| {
+            let mut rest = input.trim_start_matches([' ', '\t']);
+            let mut off = offset + (input.len() - rest.len());
+            loop {
+                if rest.starts_with("//") {
+                    let end = rest.find('\n').unwrap_or(rest.len());
+                    off += end;
+                    rest = &rest[end..];
+                    let after = rest.trim_start_matches([' ', '\t', '\n', '\r']);
+                    off += rest.len() - after.len();
+                    rest = after;
+                } else {
+                    break;
+                }
+            }
+            Some(((), rest, off))
+        }))
+    }
+
+    fn whitespace(&self) -> IrParserSyntax<()> {
+        IrParserSyntax(Box::new(|input, offset| {
             let trimmed = input.trim_start_matches([' ', '\t']);
-            if trimmed.len() < input.len() {
-                Some(((), trimmed))
+            let skipped = input.len() - trimmed.len();
+            if skipped == 0 && !trimmed.starts_with("//") {
+                return None;
+            }
+            let mut rest = trimmed;
+            let mut off = offset + skipped;
+            loop {
+                if rest.starts_with("//") {
+                    let end = rest.find('\n').unwrap_or(rest.len());
+                    off += end;
+                    rest = &rest[end..];
+                    let after = rest.trim_start_matches([' ', '\t', '\n', '\r']);
+                    off += rest.len() - after.len();
+                    rest = after;
+                } else {
+                    break;
+                }
+            }
+            Some(((), rest, off))
+        }))
+    }
+
+    fn newline(&self) -> IrParserSyntax<()> {
+        IrParserSyntax(Box::new(|input, offset| {
+            let (input, offset) = if input.starts_with("//") {
+                let end = input.find('\n').unwrap_or(input.len());
+                (&input[end..], offset + end)
+            } else {
+                (input, offset)
+            };
+            let trimmed = input.trim_start_matches([' ', '\t']);
+            let skipped = input.len() - trimmed.len();
+            if let Some(rest) = trimmed.strip_prefix('\n') {
+                Some(((), rest, offset + skipped + 1))
+            } else if let Some(rest) = trimmed.strip_prefix("\r\n") {
+                Some(((), rest, offset + skipped + 2))
             } else {
                 None
             }
         }))
     }
 
-    fn opt_whitespace(&self) -> Self::Output<()> {
-        IrParserSyntax(Box::new(|input| Some(((), input.trim_start_matches([' ', '\t'])))))
-    }
-
-    fn newline(&self) -> Self::Output<()> {
-        IrParserSyntax(Box::new(|input| input.strip_prefix('\n').or_else(|| input.strip_prefix("\r\n")).map(|r| ((), r))))
-    }
-
-    fn token(&self) -> Self::Output<char> {
-        IrParserSyntax(Box::new(|input| {
+    fn token(&self) -> IrParserSyntax<char> {
+        IrParserSyntax(Box::new(|input, offset| {
             let mut chars = input.chars();
             let c = chars.next()?;
-            Some((c, chars.as_str()))
+            Some((c, chars.as_str(), offset + c.len_utf8()))
+        }))
+    }
+    fn keyword(&self, s: &'static str) -> IrParserSyntax<()> {
+        let furthest = self.furthest.clone();
+        let furthest_expected = self.furthest_expected.clone();
+        IrParserSyntax(Box::new(move |input, offset| {
+            let trimmed = input.trim_start_matches([' ', '\t']);
+            let skipped = input.len() - trimmed.len();
+            match trimmed.strip_prefix(s) {
+                Some(rest) => Some(((), rest, offset + skipped + s.len())),
+                None => {
+                    let off = offset + skipped;
+                    if off > furthest.get() {
+                        furthest.set(off);
+                        *furthest_expected.borrow_mut() = vec![format!("keyword `{}`", s)];
+                    } else if off == furthest.get() {
+                        furthest_expected.borrow_mut().push(format!("keyword `{}`", s));
+                    }
+                    None
+                },
+            }
         }))
     }
 
-    fn keyword(&self, s: &'static str) -> IrParserSyntax<()> {
-        self.ignore_left(self.opt_whitespace(), self.ignore_right(self.literal_str(s), self.opt_whitespace()))
-    }
-
-    fn uint(&self) -> Self::Output<usize> {
-        IrParserSyntax(Box::new(|input| {
+    fn uint(&self) -> IrParserSyntax<usize> {
+        let furthest = self.furthest.clone();
+        let furthest_expected = self.furthest_expected.clone();
+        IrParserSyntax(Box::new(move |input, offset| {
             let end = input.find(|c: char| !c.is_ascii_digit()).unwrap_or(input.len());
             if end == 0 {
+                if offset > furthest.get() {
+                    furthest.set(offset);
+                    *furthest_expected.borrow_mut() = vec!["unsigned integer".to_string()];
+                } else if offset == furthest.get() {
+                    furthest_expected.borrow_mut().push("unsigned integer".to_string());
+                }
                 return None;
             }
             let n = input[..end].parse().ok()?;
-            Some((n, &input[end..]))
+            Some((n, &input[end..], offset + end))
         }))
     }
-    fn integer(&self) -> Self::Output<i32> {
-        IrParserSyntax(Box::new(|input| {
+
+    fn integer(&self) -> IrParserSyntax<i32> {
+        let furthest = self.furthest.clone();
+        let furthest_expected = self.furthest_expected.clone();
+        IrParserSyntax(Box::new(move |input, offset| {
             let start = if input.starts_with('-') { 1 } else { 0 };
             let end = input[start..].find(|c: char| !c.is_ascii_digit()).unwrap_or(input[start..].len()) + start;
             if end == start {
+                if offset > furthest.get() {
+                    furthest.set(offset);
+                    *furthest_expected.borrow_mut() = vec!["integer".to_string()];
+                } else if offset == furthest.get() {
+                    furthest_expected.borrow_mut().push("integer".to_string());
+                }
                 return None;
             }
             let n = input[..end].parse().ok()?;
-            Some((n, &input[end..]))
+            Some((n, &input[end..], offset + end))
         }))
     }
 
-    fn float(&self) -> Self::Output<f32> {
-        IrParserSyntax(Box::new(|input| {
+    fn float(&self) -> IrParserSyntax<f32> {
+        let furthest = self.furthest.clone();
+        let furthest_expected = self.furthest_expected.clone();
+        IrParserSyntax(Box::new(move |input, offset| {
             let mut i = 0;
             if input.starts_with('-') {
                 i += 1;
             }
-
-            // parse integer part
             let start_digits = i;
             while let Some(c) = input[i..].chars().next() {
                 if c.is_ascii_digit() {
@@ -457,16 +616,15 @@ impl Syntax for IrParser {
                     break;
                 }
             }
-
             if i == start_digits {
+                do_advance(&furthest, &furthest_expected, offset, "float");
                 return None;
             }
-
             if !input[i..].starts_with('.') {
+                do_advance(&furthest, &furthest_expected, offset, "float");
                 return None;
             }
             i += 1;
-
             let frac_start = i;
             while let Some(c) = input[i..].chars().next() {
                 if c.is_ascii_digit() {
@@ -475,32 +633,48 @@ impl Syntax for IrParser {
                     break;
                 }
             }
-
             if i == frac_start {
+                do_advance(&furthest, &furthest_expected, offset, "float");
                 return None;
             }
-
             let n: f32 = input[..i].parse().ok()?;
-            Some((n, &input[i..]))
+            Some((n, &input[i..], offset + i))
         }))
     }
 
-    fn string(&self) -> Self::Output<String> {
-        IrParserSyntax(Box::new(|input| {
-            let input = input.strip_prefix('"')?;
+    fn string(&self) -> IrParserSyntax<String> {
+        let furthest = self.furthest.clone();
+        let furthest_expected = self.furthest_expected.clone();
+        IrParserSyntax(Box::new(move |input, offset| {
+            let inner = match input.strip_prefix('"') {
+                Some(s) => s,
+                None => {
+                    do_advance(&furthest, &furthest_expected, offset, "string");
+                    return None;
+                },
+            };
             let mut result = String::new();
-            let mut chars = input.char_indices();
+            let mut chars = inner.char_indices();
             loop {
-                let (i, c) = chars.next()?;
+                let (i, c) = match chars.next() {
+                    Some(v) => v,
+                    None => {
+                        do_advance(&furthest, &furthest_expected, offset, "string");
+                        return None;
+                    },
+                };
                 match c {
-                    '"' => return Some((result, &input[i + 1..])),
-                    '\\' => match chars.next()?.1 {
-                        'n' => result.push('\n'),
-                        't' => result.push('\t'),
-                        'r' => result.push('\r'),
-                        '\\' => result.push('\\'),
-                        '"' => result.push('"'),
-                        _ => return None,
+                    '"' => return Some((result, &inner[i + 1..], offset + i + 2)), // +2 for both quotes
+                    '\\' => match chars.next().map(|(_, c)| c) {
+                        Some('n') => result.push('\n'),
+                        Some('t') => result.push('\t'),
+                        Some('r') => result.push('\r'),
+                        Some('\\') => result.push('\\'),
+                        Some('"') => result.push('"'),
+                        _ => {
+                            do_advance(&furthest, &furthest_expected, offset, "string");
+                            return None;
+                        },
                     },
                     c => result.push(c),
                 }
@@ -508,8 +682,10 @@ impl Syntax for IrParser {
         }))
     }
 
-    fn identifier(&self) -> Self::Output<String> {
-        IrParserSyntax(Box::new(|input| {
+    fn identifier(&self) -> IrParserSyntax<String> {
+        let furthest = self.furthest.clone();
+        let furthest_expected = self.furthest_expected.clone();
+        IrParserSyntax(Box::new(move |input, offset| {
             let end = input
                 .char_indices()
                 .take_while(|(_, c)| c.is_ascii_alphanumeric() || *c == '_')
@@ -518,9 +694,33 @@ impl Syntax for IrParser {
                 .map(|i| i + 1)
                 .unwrap_or(0);
             if end == 0 {
+                do_advance(&furthest, &furthest_expected, offset, "identifier");
                 return None;
             }
-            Some((input[..end].to_string(), &input[end..]))
+            Some((input[..end].to_string(), &input[end..], offset + end))
+        }))
+    }
+
+    fn line_comment(&self) -> IrParserSyntax<()> {
+        IrParserSyntax(Box::new(move |input, offset| {
+            let input = input.strip_prefix("//")?;
+            let end = input.find('\n').unwrap_or(input.len());
+            Some(((), &input[end..], offset + 2 + end))
+        }))
+    }
+
+    fn many1<A: 'static>(&self, item: Self::Output<A>) -> Self::Output<Vec<A>> {
+        IrParserSyntax(Box::new(move |mut input, mut offset| {
+            let (first, rest, new_offset) = (item.0)(input, offset)?;
+            let mut results = vec![first];
+            input = rest;
+            offset = new_offset;
+            while let Some((x, rest, new_offset)) = (item.0)(input, offset) {
+                results.push(x);
+                input = rest;
+                offset = new_offset;
+            }
+            Some((results, input, offset))
         }))
     }
 }
@@ -724,13 +924,25 @@ mod iso {
     pub fn inst_id(names: &NameMap) -> Iso<usize, InstId> {
         let name_to_inst = names.name_to_inst.clone();
         let inst_to_name = names.inst_to_name.clone();
-        Iso::new(move |name| name_to_inst.get(&name).copied(), move |id| inst_to_name.get(&id).cloned())
+        Iso::new(
+            move |name| {
+                let result = name_to_inst.get(&name).copied();
+                result
+            },
+            move |id| inst_to_name.get(&id).cloned(),
+        )
     }
 
     pub fn block_id(names: &NameMap) -> Iso<String, BlockId> {
         let unmangled_to_block = names.unmangled_to_block.clone();
         let block_to_name = names.block_to_name.clone();
-        Iso::new(move |name| unmangled_to_block.get(&name).copied(), move |id| block_to_name.get(&id).cloned())
+        Iso::new(
+            move |name| {
+                let result = unmangled_to_block.get(&name).copied();
+                result
+            },
+            move |id| block_to_name.get(&id).cloned(),
+        )
     }
 
     pub fn term_jump() -> Iso<BlockId, TerminatorInst> {
@@ -807,18 +1019,6 @@ mod iso {
             |inst| {
                 if let Instruction::Alloca { type_id, .. } = inst {
                     Some(type_id)
-                } else {
-                    None
-                }
-            },
-        )
-    }
-    pub fn inst_parameter() -> Iso<(TypeId, usize), Instruction> {
-        Iso::new(
-            |(type_id, index)| Some(Instruction::Parameter { source_info: SourceInfo::default(), index, type_id }),
-            |inst| {
-                if let Instruction::Parameter { index, type_id, .. } = inst {
-                    Some((type_id, index))
                 } else {
                     None
                 }
@@ -957,34 +1157,43 @@ fn syntax_literal<S: Syntax>(s: &S) -> S::Output<Instruction> {
 }
 
 fn syntax_load<S: Syntax>(s: &S, names: &NameMap) -> S::Output<Instruction> {
-    s.iso(iso::inst_load(), s.ignore_left(s.keyword("load"), s.inst_name(names)))
+    s.iso(iso::inst_load(), s.ignore_left(s.symbol("load"), s.inst_name(names)))
 }
 
 fn syntax_store<S: Syntax>(s: &S, names: &NameMap) -> S::Output<Instruction> {
     s.iso(
         iso::inst_store(),
-        s.ignore_left(s.keyword("store"), s.product(s.inst_name(names), s.ignore_left(s.symbol(","), s.inst_name(names)))),
+        s.ignore_left(s.symbol("store"), s.product(s.inst_name(names), s.ignore_left(s.symbol(","), s.inst_name(names)))),
     )
 }
 
-fn syntax_parameter<S: Syntax>(s: &S, names: &NameMap) -> S::Output<Instruction> {
+fn syntax_parameter<S: Syntax>(s: &S) -> S::Output<Instruction> {
     s.iso(
-        iso::inst_parameter(),
-        s.product(s.ignore_right(s.type_name(names), s.whitespace()), s.ignore_left(s.literal_str("%arg"), s.uint())),
+        Iso::new(
+            |index| Some(Instruction::Parameter { source_info: SourceInfo::default(), index, type_id: TypeId::default() }),
+            |inst| {
+                if let Instruction::Parameter { index, .. } = inst {
+                    Some(index)
+                } else {
+                    None
+                }
+            },
+        ),
+        s.ignore_left(s.literal_str("%arg"), s.uint()),
     )
 }
 
 fn syntax_alloca<S: Syntax>(s: &S, names: &NameMap) -> S::Output<Instruction> {
-    s.iso(iso::inst_alloca(), s.ignore_left(s.keyword("alloca"), s.type_name(names)))
+    s.iso(iso::inst_alloca(), s.ignore_left(s.symbol("alloca"), s.type_name(names)))
 }
 fn syntax_retval<S: Syntax>(s: &S, names: &NameMap) -> S::Output<Instruction> {
-    s.iso(iso::inst_retval(), s.ignore_left(s.keyword("retval"), s.type_name(names)))
+    s.iso(iso::inst_retval(), s.ignore_left(s.symbol("retval"), s.type_name(names)))
 }
 fn syntax_fncall<S: Syntax>(s: &S, names: &NameMap) -> S::Output<Instruction> {
     s.iso(
         iso::inst_fncall(),
         s.ignore_left(
-            s.keyword("call"),
+            s.symbol("call"),
             s.product(s.func_name(names), s.between(("(", ")"), s.sep_by(s.inst_name(names), s.symbol(",")))),
         ),
     )
@@ -993,13 +1202,13 @@ fn syntax_phi<S: Syntax>(s: &S, names: &NameMap) -> S::Output<Instruction> {
     s.iso(
         iso::inst_phi(),
         s.ignore_left(
-            s.keyword("phi"),
+            s.symbol("phi"),
             s.sep_by(
                 s.between(
                     ("[", "]"),
                     s.product(
                         s.block_name(names),
-                        s.ignore_left(s.ignore_right(s.literal_str(":"), s.whitespace()), s.inst_name(names)),
+                        s.ignore_left(s.ignore_right(s.symbol(":"), s.opt_whitespace()), s.inst_name(names)),
                     ),
                 ),
                 s.symbol(","),
@@ -1008,7 +1217,7 @@ fn syntax_phi<S: Syntax>(s: &S, names: &NameMap) -> S::Output<Instruction> {
     )
 }
 fn syntax_tuple<S: Syntax>(s: &S, names: &NameMap) -> S::Output<Instruction> {
-    s.iso(iso::inst_tuple(), s.between(("(", ")"), s.sep_by(s.inst_name(names), s.symbol(","))))
+    s.iso(iso::inst_tuple(), s.between(("(", ")"), s.sep_by(s.inst_name(names), s.symbol(", "))))
 }
 fn syntax_binop<S: Syntax>(s: &S, names: &NameMap) -> S::Output<Instruction> {
     let op = s.choice(vec![
@@ -1036,7 +1245,7 @@ fn syntax_unop<S: Syntax>(s: &S, names: &NameMap) -> S::Output<Instruction> {
 fn syntax_load_element<S: Syntax>(s: &S, names: &NameMap) -> S::Output<Instruction> {
     s.iso(
         iso::inst_load_element(),
-        s.ignore_left(s.keyword("load_element"), s.product(s.ignore_right(s.uint(), s.whitespace()), s.inst_name(names))),
+        s.ignore_left(s.symbol("load_element"), s.product(s.ignore_right(s.uint(), s.whitespace()), s.inst_name(names))),
     )
 }
 fn syntax_inst<S: Syntax>(s: &S, names: &NameMap) -> S::Output<Instruction> {
@@ -1047,7 +1256,7 @@ fn syntax_inst<S: Syntax>(s: &S, names: &NameMap) -> S::Output<Instruction> {
         syntax_alloca(s, names),
         syntax_binop(s, names),
         syntax_unop(s, names),
-        syntax_parameter(s, names),
+        syntax_parameter(s),
         syntax_retval(s, names),
         syntax_fncall(s, names),
         syntax_phi(s, names),
@@ -1065,16 +1274,16 @@ pub(crate) fn syntax_named_inst<S: Syntax>(s: &S, names: &NameMap) -> S::Output<
 }
 
 fn syntax_return<S: Syntax>(s: &S, names: &NameMap) -> S::Output<TerminatorInst> {
-    s.iso(iso::term_return(), s.ignore_left(s.keyword("return"), s.inst_name(names)))
+    s.iso(iso::term_return(), s.ignore_left(s.symbol("return"), s.inst_name(names)))
 }
 
 fn syntax_branch<S: Syntax>(s: &S, names: &NameMap) -> S::Output<TerminatorInst> {
     s.iso(
         iso::term_branch(),
         s.ignore_left(
-            s.keyword("branch"),
+            s.symbol("branch"),
             s.product3(
-                s.ignore_right(s.inst_name(names), s.whitespace()),
+                s.ignore_right(s.inst_name(names), s.opt_whitespace()),
                 s.ignore_left(s.symbol(","), s.block_name(names)),
                 s.ignore_left(s.whitespace(), s.block_name(names)),
             ),
@@ -1083,9 +1292,10 @@ fn syntax_branch<S: Syntax>(s: &S, names: &NameMap) -> S::Output<TerminatorInst>
 }
 
 fn syntax_jump<S: Syntax>(s: &S, names: &NameMap) -> S::Output<TerminatorInst> {
-    s.iso(iso::term_jump(), s.ignore_left(s.keyword("jump"), s.block_name(names)))
+    s.iso(iso::term_jump(), s.ignore_left(s.symbol("jump"), s.block_name(names)))
 }
-pub(crate) fn syntax_term<S: Syntax>(s: &S, names: &NameMap) -> S::Output<TerminatorInst> {
+
+pub fn syntax_term<S: Syntax>(s: &S, names: &NameMap) -> S::Output<TerminatorInst> {
     s.choice(vec![syntax_return(s, names), syntax_branch(s, names), syntax_jump(s, names)])
 }
 
@@ -1120,19 +1330,14 @@ fn syntax_raw_inst<S: Syntax>(s: &S, names: &NameMap) -> S::Output<RawInst> {
 }
 
 fn syntax_raw_block<S: Syntax>(s: &S, names: &NameMap) -> S::Output<RawBlock> {
-    let iso = Iso::new(|(id, insts, term)| Some(RawBlock { id, insts, term }), |rb| Some((rb.id, rb.insts, rb.term)));
+    let iso = Iso::new(
+        |(id, insts, term): (BlockId, Vec<RawInst>, TerminatorInst)| Some(RawBlock { id, insts, term }),
+        |rb| Some((rb.id, rb.insts, rb.term)),
+    );
     s.iso(
         iso,
-        // s.product3(
-        //     s.ignore_right(s.ignore_left(s.indent(), s.block_name(names)), s.ignore_right(s.symbol(":"), s.newline())),
-        //     s.sep_by(
-        //         s.ignore_right(s.ignore_left(s.double_indent(), syntax_named_inst(s, names)), s.newline()),
-        //         s.opt_whitespace(),
-        //     ),
-        //     s.ignore_right(s.ignore_left(s.double_indent(), syntax_term(s, names)), s.newline()),
-        // ),
         s.product3(
-            s.ignore_right(s.block_name(names), s.ignore_right(s.literal_str(":"), s.newline())),
+            s.ignore_right(s.ignore_left(s.opt_whitespace(), s.block_name(names)), s.ignore_right(s.symbol(":"), s.newline())),
             s.sep_by(s.ignore_right(syntax_raw_inst(s, names), s.newline()), s.opt_whitespace()),
             s.ignore_right(syntax_term(s, names), s.newline()),
         ),
@@ -1148,7 +1353,7 @@ fn syntax_raw_function<S: Syntax>(s: &S, names: &NameMap) -> S::Output<RawFuncti
         iso,
         s.product(
             s.ignore_left(
-                s.keyword("fn"),
+                s.symbol("fn"),
                 s.product3(
                     s.identifier(),
                     s.ignore_left(s.symbol(":"), s.type_name(names)),
@@ -1157,7 +1362,7 @@ fn syntax_raw_function<S: Syntax>(s: &S, names: &NameMap) -> S::Output<RawFuncti
             ),
             s.between(
                 ("{", "}"),
-                s.ignore_left(s.newline(), s.ignore_right(s.many(syntax_raw_block(s, names)), s.opt_whitespace())),
+                s.ignore_left(s.newline(), s.ignore_right(s.many1(syntax_raw_block(s, names)), s.opt_whitespace())),
             ),
         ),
     )
@@ -1165,6 +1370,24 @@ fn syntax_raw_function<S: Syntax>(s: &S, names: &NameMap) -> S::Output<RawFuncti
 
 fn syntax_top_level<S: Syntax>(s: &S, names: &NameMap) -> S::Output<Vec<RawFunction>> {
     s.ignore_left(s.opt_whitespace(), s.sep_by(syntax_raw_function(s, names), s.ignore_left(s.newline(), s.opt_whitespace())))
+}
+
+fn collect_tuple_type(name: &str, arena: &mut IrArena, names: &mut NameMap) {
+    if !name.starts_with('(') || !name.ends_with(')') {
+        return;
+    }
+    if names.name_to_type.contains_key(name) {
+        return;
+    }
+    let inner = &name[1..name.len() - 1];
+    let inner_names: Vec<&str> = inner.split_whitespace().collect();
+    let inner_ids: Vec<TypeId> = inner_names.iter().filter_map(|n| names.name_to_type.get(*n).copied()).collect();
+    if inner_ids.len() != inner_names.len() {
+        return;
+    }
+    let type_id = arena.alloc_type(Type::Tuple { type_ids: inner_ids, ptr_count: 0 }, SourceInfo::new(0, 0, 0));
+    names.type_to_name.insert(type_id, name.to_string());
+    names.name_to_type.insert(name.to_string(), type_id);
 }
 
 // Name collection pass
@@ -1186,6 +1409,7 @@ fn collect_names(input: &str, arena: &mut IrArena, names: &mut NameMap) {
         // collect func_ids
         if let Some(rest) = line.strip_prefix("fn ") {
             let name = rest.split_whitespace().next().unwrap_or("").trim_end_matches(':').to_string();
+            let joined = rest.split_whitespace().skip(1).collect::<Vec<_>>().join(" ");
             let func_id = arena.alloc_function(IrFunction {
                 source_info: SourceInfo::default(),
                 name: name.clone(),
@@ -1197,6 +1421,12 @@ fn collect_names(input: &str, arena: &mut IrArena, names: &mut NameMap) {
             names.func_to_name.insert(func_id, name.clone());
             names.name_to_func.insert(name, func_id);
             current_func = Some(func_id);
+            if let Some((param, ret)) = joined.split_once("->") {
+                let param = param.trim();
+                let ret = ret.trim().trim_end_matches('{').trim();
+                collect_tuple_type(param, arena, names);
+                collect_tuple_type(ret, arena, names);
+            }
             continue;
         }
 
@@ -1252,14 +1482,17 @@ fn collect_parameter_insts(func_id: IrFuncId, arena: &mut IrArena) {
     arena.get_func_mut(func_id).parameter_insts = params;
 }
 
-fn parse_function<'a>(input: &'a str, names: &NameMap, arena: &mut IrArena) -> Option<(&'a str, IrFuncId)> {
-    let parser = IrParser;
+fn parse_function<'a>(
+    input: &'a str,
+    offset: usize,
+    names: &NameMap,
+    parser: &IrParser,
+    arena: &mut IrArena,
+) -> Option<(&'a str, IrFuncId)> {
+    let syntax = syntax_raw_function(parser, names);
 
-    let syntax = syntax_raw_function(&parser, names);
-
-    let result = (syntax.0)(input);
-
-    let (raw, rest) = match result {
+    let result = (syntax.0)(input, offset);
+    let (raw, rest, _offset) = match result {
         Some(v) => v,
         None => {
             return None;
@@ -1311,8 +1544,31 @@ fn parse_function<'a>(input: &'a str, names: &NameMap, arena: &mut IrArena) -> O
     Some((rest, func_id))
 }
 
+fn offset_to_line_col(input: &str, offset: usize) -> (usize, usize) {
+    let offset = offset.min(input.len());
+    let before = &input[..offset];
+    let line = before.chars().filter(|&c| c == '\n').count() + 1;
+    let col = before.rfind('\n').map(|i| offset - i - 1).unwrap_or(offset) + 1;
+    (line, col)
+}
+
+fn skip_whitespace_and_comments(input: &str) -> &str {
+    let mut rest = input;
+    loop {
+        rest = rest.trim_start_matches([' ', '\t', '\n', '\r']);
+        if rest.starts_with("//") {
+            let end = rest.find('\n').unwrap_or(rest.len());
+            rest = &rest[end..];
+        } else {
+            break;
+        }
+    }
+    rest
+}
+
 // Top-level parser and printer functions
 pub fn parse(input: &str, arena: &mut IrArena) -> Option<Vec<IrFuncId>> {
+    let parser = IrParser::new();
     let mut names = NameMap {
         inst_to_name: HashMap::new(),
         name_to_inst: HashMap::new(),
@@ -1335,18 +1591,45 @@ pub fn parse(input: &str, arena: &mut IrArena) -> Option<Vec<IrFuncId>> {
     names.name_to_type.insert("str".to_string(), TypeId(3));
 
     collect_names(input, arena, &mut names);
+
+    eprintln!("=== collected names ===");
+    eprintln!("funcs: {:?}", names.name_to_func.keys().collect::<Vec<_>>());
+    eprintln!("blocks: {:?}", names.name_to_block.keys().collect::<Vec<_>>());
+    eprintln!("types: {:?}", names.name_to_type.keys().collect::<Vec<_>>());
+    eprintln!("insts: {:?}", names.name_to_inst.keys().collect::<Vec<_>>());
+    eprintln!("======================");
     let mut func_ids = vec![];
     let mut rest = input;
+    let mut offset = 0usize;
     loop {
-        rest = rest.trim_start_matches([' ', '\t', '\n', '\r']);
+        let trimmed = skip_whitespace_and_comments(rest);
+        offset += rest.len() - trimmed.len();
+        rest = trimmed;
         if rest.is_empty() {
             break;
         }
-        let result = parse_function(rest, &names, arena);
-        let (remaining, func_id) = result?;
-        func_ids.push(func_id);
+        let result = parse_function(rest, offset, &names, &parser, arena);
+        let (remaining, func_id) = match result {
+            Some(v) => v,
+            None => {
+                let offset = parser.furthest.get();
+                let (line, col) = offset_to_line_col(input, offset);
+                let expected = parser.furthest_expected.borrow();
+                let context = parser.furthest_context.borrow();
+                eprintln!("Parse error at line {}, col {}:", line, col);
+                eprintln!("  expected one of: {}", expected.join(", "));
+                eprintln!("  while parsing: {}", context.join(" > "));
+                let bad_line = input.lines().nth(line - 1).unwrap_or("");
+                eprintln!("  {}", bad_line);
+                eprintln!("  {}^", " ".repeat(col - 1));
+                return None;
+            },
+        };
+        offset += rest.len() - remaining.len();
         rest = remaining;
+        func_ids.push(func_id);
     }
+
     Some(func_ids)
 }
 

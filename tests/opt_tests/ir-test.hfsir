@@ -1,5 +1,3 @@
-//? OPT [DCE, Mem2Reg] -iterative
-//? OPT [DCE, CleanCFG] -iterative
 //? OPT -O0 -iterative
 fn fizz_buzz: (i32) -> (str) {                                                             
   start_2:                                                                                 

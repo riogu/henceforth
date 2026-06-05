@@ -209,7 +209,19 @@ pub fn find_assertions<'a>(path: &'a PathBuf, text: String) -> Vec<Assertion<'a>
                                                         rest.trim_matches('"').trim().to_string(),
                                                     )
                                                 },
-                                                _ => CheckKind::Plain(check_kind.trim_matches('"').trim().to_string()),
+                                                _ =>
+                                                    if msg.len() > 0 {
+                                                        CheckKind::Plain(
+                                                            (check_kind.to_string() + " " + msg)
+                                                                .trim_matches('"')
+                                                                .trim()
+                                                                .to_string(),
+                                                        )
+                                                    } else {
+                                                        CheckKind::Plain(
+                                                            (check_kind.to_string()).trim_matches('"').trim().to_string(),
+                                                        )
+                                                    },
                                             };
                                             if let Some(Assertion::CheckFn { checks, .. }) = curr_check_fn.as_mut() {
                                                 checks.push(kind);

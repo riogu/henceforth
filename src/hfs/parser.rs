@@ -156,7 +156,6 @@ impl Parser {
         let (name, token) = self.expect_identifier()?;
         self.expect(TokenKind::Colon)?;
         let hfs_type = self.expect_type()?;
-        self.expect(TokenKind::Semicolon)?;
         Ok(self.arena.alloc_unresolved_var(UnresolvedVarDeclaration { name, hfs_type }, token))
     }
     // <signature> ::= "(" <type_list>? ")" "->" "(" <type_list>? ")"
@@ -259,7 +258,6 @@ impl Parser {
                     Some(token) => token,
                     None => panic!("[internal error] peeked token but couldn't next it"),
                 };
-                self.expect(TokenKind::Semicolon)?;
                 match token.kind {
                     TokenKind::Break => Ok(self.arena.alloc_unresolved_stmt(UnresolvedStatement::Break, token)),
                     TokenKind::Continue => Ok(self.arena.alloc_unresolved_stmt(UnresolvedStatement::Continue, token)),
@@ -475,7 +473,6 @@ impl Parser {
         let deref_count = self.consume_token_chain(TokenKind::Dereference);
         let identifier = self.arena.alloc_unresolved_expr(UnresolvedExpression::Identifier(name), token);
 
-        self.expect(TokenKind::Semicolon)?;
         Ok(self.arena.alloc_unresolved_stmt(UnresolvedStatement::Assignment { identifier, is_move, deref_count }, assign_tkn))
     }
 
@@ -487,7 +484,6 @@ impl Parser {
         let (name, token) = self.expect_identifier()?;
         let identifier = self.arena.alloc_unresolved_expr(UnresolvedExpression::Identifier(name), token);
 
-        self.expect(TokenKind::Semicolon)?;
         Ok(self.arena.alloc_unresolved_stmt(UnresolvedStatement::FunctionCall { identifier, is_move }, assign_tkn))
     }
 

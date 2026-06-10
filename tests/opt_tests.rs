@@ -16,11 +16,22 @@ fn run_with_opts(test: &mut IrTest) -> (IrArena, Vec<IrFuncId>) {
 
     let mut arena = IrArena::new(Rc::new(DiagnosticInfo::new(PathBuf::new(), SourceInfo::new(0, 0, 0))));
     if let Some(funcs) = parse(&contents, &mut arena) {
+        if test.settings.dump {
+            if let Some(dump) = print(&funcs, &arena) {
+                println!("Before optimizations:\n{}", prettify_ir(dump));
+            }
+        }
         for (pipeline, iterative) in test.settings.pipelines.iter_mut() {
+            println!("Running pipeline {}", pipeline.name());
             if *iterative {
                 pipeline.run_iteratively(&mut arena);
             } else {
                 pipeline.run(&mut arena);
+            }
+        }
+        if test.settings.dump {
+            if let Some(dump) = print(&funcs, &arena) {
+                println!("After optimizations:\n{}", prettify_ir(dump));
             }
         }
         (arena, funcs)
@@ -51,8 +62,9 @@ fn get_tests() -> Result<Vec<Trial>, Box<dyn Error>> {
         for entry in entries {
             let tests = generate_ir_tests(&entry);
             for test in tests {
+                let name = entry.to_str().unwrap().to_string() + ":" + &test.func_name;
                 let trial = generate_test_function(test);
-                trials.push(Trial::test(entry.to_str().unwrap(), trial));
+                trials.push(Trial::test(name, trial));
             }
         }
     }

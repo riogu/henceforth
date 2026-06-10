@@ -256,12 +256,19 @@ pub fn generate_tests(path: &PathBuf) -> Vec<Box<dyn Test + Send + Sync>> {
         match assertion {
             Assertion::Error(path, line, error) => tests.push(Box::new(ErrorParser::generate_test(path, line, error))),
             Assertion::CheckFn { path, name, checks, pipelines } => {
-                let mut parsed_pipelines: Vec<(Box<dyn OptPipeline + Send + Sync>, bool)> =
-                    pipelines.iter().map(IrCheck::parse_pipeline).collect();
+                let mut dump = false;
+                let mut parsed_pipelines: Vec<(Box<dyn OptPipeline + Send + Sync>, bool)> = pipelines
+                    .iter()
+                    .map(IrCheck::parse_pipeline)
+                    .map(|(pipeline, iterative, dump_)| {
+                        dump |= dump_; // if any are true, dump
+                        (pipeline, iterative)
+                    })
+                    .collect();
                 if parsed_pipelines.len() == 0 {
                     parsed_pipelines = vec![(Box::new(O0::new()), false)]
                 }
-                tests.push(Box::new(IrCheck::generate_test(path, name, checks, parsed_pipelines)));
+                tests.push(Box::new(IrCheck::generate_test(path, name, checks, parsed_pipelines, dump)));
             },
         }
     }
@@ -273,12 +280,19 @@ pub fn generate_ir_tests(path: &PathBuf) -> Vec<Box<IrTest>> {
     let mut tests = Vec::new();
     for assertion in assertions {
         if let Assertion::CheckFn { path, name, checks, pipelines } = assertion {
-            let mut parsed_pipelines: Vec<(Box<dyn OptPipeline + Send + Sync>, bool)> =
-                pipelines.iter().map(IrCheck::parse_pipeline).collect();
+            let mut dump = false;
+            let mut parsed_pipelines: Vec<(Box<dyn OptPipeline + Send + Sync>, bool)> = pipelines
+                .iter()
+                .map(IrCheck::parse_pipeline)
+                .map(|(pipeline, iterative, dump_)| {
+                    dump |= dump_; // if any are true, dump
+                    (pipeline, iterative)
+                })
+                .collect();
             if parsed_pipelines.len() == 0 {
                 parsed_pipelines = vec![(Box::new(O0::new()), false)];
             }
-            tests.push(Box::new(IrCheck::generate_test(path, name, checks, parsed_pipelines)));
+            tests.push(Box::new(IrCheck::generate_test(path, name, checks, parsed_pipelines, dump)));
         }
     }
     tests

@@ -1,7 +1,7 @@
 use std::{fs, path::PathBuf};
 
 use crate::{
-    hfs::{OptPipeline, O0},
+    hfs::{O0, OptPipeline},
     hfscheck::{
         error_parser::ErrorParser,
         ir_check::{IrCheck, IrTest},
@@ -22,6 +22,7 @@ pub enum CheckKind {
 pub enum Assertion<'a> {
     Error(&'a PathBuf, usize, String),
     CheckFn { path: &'a PathBuf, name: String, checks: Vec<CheckKind>, pipelines: Vec<String> },
+    Compile(&'a PathBuf),
 }
 
 #[derive(Debug)]
@@ -36,6 +37,7 @@ pub enum HfsRegex {
 pub enum TestInput {
     Error(String, usize),
     Ir(String),
+    Compile,
 }
 
 pub trait Test {
@@ -179,9 +181,10 @@ pub fn find_assertions<'a>(path: &'a PathBuf, text: String) -> Vec<Assertion<'a>
                             match char {
                                 '?' => {
                                     let rest = &line_string[line_column..].trim_start_matches(' ');
-                                    let (kind, msg) = rest.split_once(' ').unwrap_or(("", ""));
+                                    let (kind, msg) = rest.split_once(' ').unwrap_or((rest, ""));
                                     match kind {
                                         "ERROR" => assertions.push(Assertion::Error(path, line_number + 1, msg.to_string())),
+                                        "COMPILE" => assertions.push(Assertion::Compile(path)),
                                         "CHECK" => {
                                             let (check_kind, msg) = msg.split_once(' ').unwrap_or((msg, ""));
                                             let kind = match check_kind {
@@ -249,6 +252,18 @@ pub fn find_assertions<'a>(path: &'a PathBuf, text: String) -> Vec<Assertion<'a>
     return assertions;
 }
 
+pub struct CompileTest {
+    path: PathBuf,
+}
+
+impl Test for CompileTest {
+    // check is unused by CompileTest, we don't actually want to check for
+    // conditions other than it compiling (this part is done in the trial generation)
+    fn check(&self, _: TestInput) -> bool { true }
+
+    fn path(&self) -> &PathBuf { &self.path }
+}
+
 pub fn generate_tests(path: &PathBuf) -> Vec<Box<dyn Test + Send + Sync>> {
     let assertions = find_assertions(path, fs::read_to_string(path).expect("Could not read file."));
     let mut tests: Vec<Box<dyn Test + Send + Sync>> = Vec::new();
@@ -270,6 +285,7 @@ pub fn generate_tests(path: &PathBuf) -> Vec<Box<dyn Test + Send + Sync>> {
                 }
                 tests.push(Box::new(IrCheck::generate_test(path, name, checks, parsed_pipelines, dump)));
             },
+            Assertion::Compile(path) => tests.push(Box::new(CompileTest { path: path.clone() })),
         }
     }
     tests
@@ -302,7 +318,7 @@ pub fn generate_ir_tests(path: &PathBuf) -> Vec<Box<IrTest>> {
 mod assertion_tests {
     use std::{fs, path::PathBuf};
 
-    use crate::hfscheck::hfscheck::{find_assertions, Assertion, CheckKind};
+    use crate::hfscheck::hfscheck::{Assertion, CheckKind, find_assertions};
 
     #[test]
     fn test_finds_error() {

@@ -1,3 +1,4 @@
+//? COMPILE
 fn id: (bool) -> (bool) {}
 
 fn main: () -> () {

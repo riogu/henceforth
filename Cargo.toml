@@ -26,3 +26,8 @@ harness = false
 name = "opt_tests"
 path = "tests/opt_tests.rs"
 harness = false
+
+[[test]]
+name = "compile_tests"
+path = "tests/compile_tests.rs"
+harness = false

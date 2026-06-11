@@ -1,3 +1,4 @@
+//? COMPILE
 fn print: (str) -> () { @pop; }
 fn player_win : (str) -> (bool) {
     @("O" ==)

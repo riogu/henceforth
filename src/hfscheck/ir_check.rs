@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use crate::{
-    hfs::{CleanCFG, DeadCodeElimination, IrPass, Mem2Reg, OptPipeline, RemoveStaleIR, O0},
+    hfs::{CleanCFG, DeadCodeElimination, IrPass, Mem2Reg, O0, OptPipeline, RemoveStaleIR},
     hfscheck::hfscheck::{CheckKind, HfsRegex, Test, TestInput},
 };
 

@@ -1,13 +1,16 @@
 use std::{iter::Peekable, rc::Rc, vec::IntoIter};
 
-use crate::{hfs::{
-    ScopeKind,
-    ast::*,
-    error::{CompileError, DiagnosticInfo},
-    parser_errors::{Expectable, ParserError, ParserErrorKind},
-    token::*,
-    unresolved_ast::*,
-}, parser_error};
+use crate::{
+    hfs::{
+        ScopeKind,
+        ast::*,
+        error::{CompileError, DiagnosticInfo},
+        parser_errors::{Expectable, ParserError, ParserErrorKind},
+        token::*,
+        unresolved_ast::*,
+    },
+    parser_error,
+};
 
 pub struct Parser {
     tokens: Peekable<IntoIter<Token>>, // Own the tokens, iterate by value
@@ -23,11 +26,10 @@ impl Parser {
                 &self.arena,
                 vec![found.source_info]
             ),
-            None => parser_error!(
-                ParserErrorKind::ExpectedButFound(vec![Expectable::Token(token_kind)], None),
-                &self.arena,
-                vec![self.arena.diagnostic_info.eof_pos.clone()]
-            ),
+            None =>
+                parser_error!(ParserErrorKind::ExpectedButFound(vec![Expectable::Token(token_kind)], None), &self.arena, vec![
+                    self.arena.diagnostic_info.eof_pos.clone()
+                ]),
         }
     }
 
@@ -35,11 +37,9 @@ impl Parser {
         let token = match self.tokens.next() {
             Some(token) => token,
             None =>
-                return parser_error!(
-                    ParserErrorKind::ExpectedButFound(vec![Expectable::Identifier], None),
-                    &self.arena,
-                    vec![self.arena.diagnostic_info.eof_pos.clone()]
-                ),
+                return parser_error!(ParserErrorKind::ExpectedButFound(vec![Expectable::Identifier], None), &self.arena, vec![
+                    self.arena.diagnostic_info.eof_pos.clone()
+                ]),
         };
         match &token.kind {
             TokenKind::Identifier(name) => Ok((name.clone(), token)),
@@ -55,11 +55,9 @@ impl Parser {
         let token = match self.tokens.next() {
             Some(token) => token,
             None =>
-                return parser_error!(
-                    ParserErrorKind::ExpectedButFound(vec![Expectable::StackKeyword], None),
-                    &self.arena,
-                    vec![self.arena.diagnostic_info.eof_pos.clone()]
-                ),
+                return parser_error!(ParserErrorKind::ExpectedButFound(vec![Expectable::StackKeyword], None), &self.arena, vec![
+                    self.arena.diagnostic_info.eof_pos.clone()
+                ]),
         };
         match &token.kind {
             TokenKind::StackKeyword(name) => Ok((name.clone(), token)),
@@ -86,11 +84,9 @@ impl Parser {
         let token = match self.tokens.peek() {
             Some(token) => token.clone(),
             None =>
-                return parser_error!(
-                    ParserErrorKind::ExpectedButFound(vec![Expectable::Type], None),
-                    &self.arena,
-                    vec![self.arena.diagnostic_info.eof_pos.clone()]
-                ),
+                return parser_error!(ParserErrorKind::ExpectedButFound(vec![Expectable::Type], None), &self.arena, vec![
+                    self.arena.diagnostic_info.eof_pos.clone()
+                ]),
         };
         match &token.kind {
             kind if kind.is_type() => {
@@ -112,11 +108,9 @@ impl Parser {
                     token,
                 ))
             },
-            _ => parser_error!(
-                ParserErrorKind::ExpectedButFound(vec![Expectable::Type], Some(token.kind)),
-                &self.arena,
-                vec![token.source_info]
-            ),
+            _ => parser_error!(ParserErrorKind::ExpectedButFound(vec![Expectable::Type], Some(token.kind)), &self.arena, vec![
+                token.source_info
+            ]),
         }
     }
 
@@ -134,7 +128,6 @@ impl Parser {
         }
         Ok(types)
     }
-
 }
 
 // Declarations
@@ -178,12 +171,10 @@ impl Parser {
         tokens: Vec<Token>,
         diagnostic_info: Rc<DiagnosticInfo>,
     ) -> Result<(Vec<UnresolvedTopLevelId>, UnresolvedAstArena), Box<dyn CompileError>> {
-        let mut parser = Parser {
-            tokens: tokens.into_iter().peekable(),
-            arena: UnresolvedAstArena::new(diagnostic_info.clone()),
-        };
+        let mut parser =
+            Parser { tokens: tokens.into_iter().peekable(), arena: UnresolvedAstArena::new(diagnostic_info.clone()) };
         let mut top_level = Vec::<UnresolvedTopLevelId>::new();
-        
+
         while let Some(token) = parser.tokens.peek() {
             match &token.kind {
                 TokenKind::Let => top_level.push(UnresolvedTopLevelId::VariableDecl(parser.variable_declaration()?)),
@@ -242,11 +233,9 @@ impl Parser {
         let token = match self.tokens.peek() {
             Some(token) => token,
             None =>
-                return parser_error!(
-                    ParserErrorKind::ExpectedButFound(vec![Expectable::Statement], None),
-                    &self.arena,
-                    vec![self.arena.diagnostic_info.eof_pos.clone()]
-                ),
+                return parser_error!(ParserErrorKind::ExpectedButFound(vec![Expectable::Statement], None), &self.arena, vec![
+                    self.arena.diagnostic_info.eof_pos.clone()
+                ]),
         };
         match token.kind {
             TokenKind::If => Ok(self.if_statement()?),
@@ -290,10 +279,10 @@ impl Parser {
     // <if_stmt> ::= "if" <stack_block> "{" <block_scope> "}" <else_stmt>?
     fn if_statement(&mut self) -> Result<UnresolvedStmtId, Box<dyn CompileError>> {
         let token = self.expect(TokenKind::If)?;
-        let cond = self.stack_block()?;
+        let condition = self.condition()?;
         let body = self.block_scope(ScopeKind::IfStmt)?;
         let else_stmt = self.else_statement()?;
-        Ok(self.arena.alloc_unresolved_stmt(UnresolvedStatement::If { cond, body, else_stmt }, token))
+        Ok(self.arena.alloc_unresolved_stmt(UnresolvedStatement::If { cond: condition, body, else_stmt }, token))
     }
 
     // <else_stmt> ::= "else" "if" <stack_block>  <block_scope> <else_stmt>?
@@ -302,11 +291,9 @@ impl Parser {
         let token = match self.tokens.peek() {
             Some(token) => token,
             None =>
-                return parser_error!(
-                    ParserErrorKind::ExpectedButFound(vec![Expectable::AnyToken], None),
-                    &self.arena,
-                    vec![self.arena.diagnostic_info.eof_pos.clone()]
-                ),
+                return parser_error!(ParserErrorKind::ExpectedButFound(vec![Expectable::AnyToken], None), &self.arena, vec![
+                    self.arena.diagnostic_info.eof_pos.clone()
+                ]),
         };
         match token.kind {
             TokenKind::Else => {
@@ -323,7 +310,7 @@ impl Parser {
                 if token.kind == TokenKind::If {
                     // TODO: check this part of the code
                     let token = self.expect(TokenKind::If)?;
-                    let cond = self.stack_block()?;
+                    let cond = self.condition()?;
                     let body = self.block_scope(ScopeKind::IfStmt)?;
                     let else_stmt = self.else_statement()?;
                     Ok(Some(self.arena.alloc_unresolved_stmt(UnresolvedStatement::ElseIf { cond, body, else_stmt }, token)))
@@ -340,7 +327,7 @@ impl Parser {
     // <while_stmt> ::= "while" <stack_block> "{" <scope_block> "}"
     fn while_statement(&mut self) -> Result<UnresolvedStmtId, Box<dyn CompileError>> {
         let token = self.expect(TokenKind::While)?;
-        let cond = self.stack_block()?;
+        let cond = self.condition()?;
         let body = self.block_scope(ScopeKind::WhileLoop)?;
         Ok(self.arena.alloc_unresolved_stmt(UnresolvedStatement::While { cond, body }, token))
     }
@@ -502,5 +489,32 @@ impl Parser {
         let (name, token) = self.expect_stack_keyword()?;
         Ok(self.arena.alloc_unresolved_expr(UnresolvedExpression::StackKeyword(name), token))
     }
-}
 
+    fn condition(&mut self) -> Result<Vec<UnresolvedStmtId>, Box<dyn CompileError>> {
+        let cond_stack = self.stack_block()?;
+        let mut condition_statements = vec![cond_stack];
+        match self.tokens.peek().map(|token| token.kind.clone()) {
+            Some(TokenKind::CopyCall) | Some(TokenKind::MoveCall) => {
+                while self.tokens.peek().map(|t| matches!(t.kind, TokenKind::CopyCall | TokenKind::MoveCall)).unwrap_or(false) {
+                    let is_move = self.tokens.peek().unwrap().kind == TokenKind::MoveCall;
+                    condition_statements.push(self.function_call(is_move)?);
+                }
+                return Ok(condition_statements);
+            },
+            Some(TokenKind::LeftBrace) => return Ok(condition_statements),
+            Some(_) => todo!(),
+            None => parser_error!(
+                ParserErrorKind::ExpectedButFound(
+                    vec![
+                        Expectable::Token(TokenKind::CopyCall),
+                        Expectable::Token(TokenKind::MoveCall),
+                        Expectable::Token(TokenKind::LeftBrace),
+                    ],
+                    None
+                ),
+                &self.arena,
+                vec![self.arena.diagnostic_info.eof_pos]
+            ),
+        }
+    }
+}

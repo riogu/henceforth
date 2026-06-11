@@ -3,9 +3,9 @@ use std::{error::Error, fmt::Display, fs, path::PathBuf};
 use colored::{ColoredString, Colorize, CustomColor};
 
 use crate::hfs::{
-    error::{number_length, CompileError, DebugInfo, Dumpable},
     SourceInfo, TokenKind, Type, UnresolvedAstArena, UnresolvedExpression, UnresolvedFunctionDeclaration, UnresolvedOperation,
     UnresolvedStatement, UnresolvedTopLevelId, UnresolvedVarDeclaration,
+    error::{CompileError, DebugInfo, Dumpable, number_length},
 };
 
 #[derive(Debug)]
@@ -89,9 +89,7 @@ impl ParserError {
 }
 
 impl CompileError for ParserError {
-    fn get_line(&self) -> usize {
-        return self.source_info.line_number;
-    }
+    fn get_line(&self) -> usize { return self.source_info.line_number; }
 
     fn message(&self) -> (String, String) {
         match &self.kind {
@@ -114,9 +112,7 @@ impl CompileError for ParserError {
         }
     }
 
-    fn header(&self) -> ColoredString {
-        format!("{} {}", "error:".red().bold(), self.message().0.bold()).into()
-    }
+    fn header(&self) -> ColoredString { format!("{} {}", "error:".red().bold(), self.message().0.bold()).into() }
 
     fn location(&self) -> ColoredString {
         format!(
@@ -179,9 +175,7 @@ impl Display for ParserError {
     }
 }
 
-fn indent(s: &ColoredString) -> ColoredString {
-    ColoredString::from(s.trim_start_matches('\n').replace('\n', "\n\t"))
-}
+fn indent(s: &ColoredString) -> ColoredString { ColoredString::from(s.trim_start_matches('\n').replace('\n', "\n\t")) }
 
 fn indent_list(items: &[ColoredString]) -> ColoredString {
     ColoredString::from(items.iter().map(|s| format!("\t{}", indent(s))).collect::<Vec<String>>().join(",\n"))
@@ -252,12 +246,10 @@ impl Dumpable for UnresolvedExpression {
                 "Operation:".red().bold(),
                 indent(&unresolved_operation.dump(arena)).yellow()
             )),
-            UnresolvedExpression::Identifier(name) => {
-                ColoredString::from(format!("{} {}", "Identifier".red().bold(), format!("({name})").green()))
-            },
-            UnresolvedExpression::Literal(literal) => {
-                ColoredString::from(format!("{} {}", "Literal: ".red().bold(), format!("{}", literal).green()))
-            },
+            UnresolvedExpression::Identifier(name) =>
+                ColoredString::from(format!("{} {}", "Identifier".red().bold(), format!("({name})").green())),
+            UnresolvedExpression::Literal(literal) =>
+                ColoredString::from(format!("{} {}", "Literal: ".red().bold(), format!("{}", literal).green())),
             UnresolvedExpression::Tuple { expressions } => {
                 let items: Vec<ColoredString> =
                     expressions.iter().map(|expr| arena.get_unresolved_expr(*expr).dump(arena)).collect();
@@ -269,9 +261,8 @@ impl Dumpable for UnresolvedExpression {
                     "]".custom_color(CustomColor::new(129, 137, 150))
                 ))
             },
-            UnresolvedExpression::StackKeyword(name) => {
-                ColoredString::from(format!("{} {}", "Stack Keyword".red().bold(), format!("({name})").green()))
-            },
+            UnresolvedExpression::StackKeyword(name) =>
+                ColoredString::from(format!("{} {}", "Stack Keyword".red().bold(), format!("({name})").green())),
         }
     }
 }
@@ -297,7 +288,10 @@ impl Dumpable for UnresolvedStatement {
                 "\n{}\n\t{} {}\n\t{} {}{}",
                 "Else-If Statement:".red().bold(),
                 "Condition:".blue(),
-                indent(&arena.get_unresolved_stmt(*cond).dump(arena)),
+                cond.iter()
+                    .map(|stmt| indent(&arena.get_unresolved_stmt(*stmt).dump(arena)).to_string())
+                    .collect::<Vec<_>>()
+                    .join("\n"),
                 "Body:".blue(),
                 indent(&arena.get_unresolved_stmt(*body).dump(arena)),
                 match else_stmt {
@@ -316,7 +310,10 @@ impl Dumpable for UnresolvedStatement {
                 "\n{}\n\t{} {}\n\t{} {}{}",
                 "If Statement:".red().bold(),
                 "Condition:".blue(),
-                indent(&arena.get_unresolved_stmt(*cond).dump(arena)),
+                cond.iter()
+                    .map(|stmt| indent(&arena.get_unresolved_stmt(*stmt).dump(arena)).to_string())
+                    .collect::<Vec<_>>()
+                    .join("\n"),
                 "Body:".blue(),
                 indent(&arena.get_unresolved_stmt(*body).dump(arena)),
                 match else_stmt {
@@ -329,7 +326,10 @@ impl Dumpable for UnresolvedStatement {
                 "\n{}\n\t{} {}\n\t{} {}",
                 "While Loop:".red().bold(),
                 "Condition:".blue(),
-                indent(&arena.get_unresolved_stmt(*cond).dump(arena)),
+                cond.iter()
+                    .map(|stmt| indent(&arena.get_unresolved_stmt(*stmt).dump(arena)).to_string())
+                    .collect::<Vec<_>>()
+                    .join("\n"),
                 "Body:".blue(),
                 indent(&arena.get_unresolved_stmt(*body).dump(arena)),
             )),
@@ -385,7 +385,5 @@ impl Dumpable for UnresolvedStatement {
 impl Dumpable for Type {
     type Arena = UnresolvedAstArena;
 
-    fn dump(&self, arena: &Self::Arena) -> ColoredString {
-        ColoredString::from(format!("{}", self.get_repr_unresolved(arena)))
-    }
+    fn dump(&self, arena: &Self::Arena) -> ColoredString { ColoredString::from(format!("{}", self.get_repr_unresolved(arena))) }
 }

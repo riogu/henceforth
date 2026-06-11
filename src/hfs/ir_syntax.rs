@@ -1661,8 +1661,8 @@ pub fn print(func_ids: &[IrFuncId], arena: &IrArena) -> Option<String> {
 
         for block_id in arena.get_blocks_in(*func_id) {
             let block = arena.get_block(block_id);
-            names.block_to_name.insert(block_id, block.display_name.clone());
-            names.name_to_block.insert(block.display_name.clone(), block_id);
+            names.block_to_name.insert(block_id, block.name.clone());
+            names.name_to_block.insert(block.name.clone(), block_id);
             names.unmangled_to_block.insert(block.name.clone(), block_id);
 
             for inst_id in &block.instructions {

@@ -1,0 +1,2 @@
+fn main: () -> () {
+	if @(0) //? ERROR "expected '{{..}}' or '{{..}}' or '{{.}}'"

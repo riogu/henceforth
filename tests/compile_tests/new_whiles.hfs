@@ -1,0 +1,13 @@
+fn id: (bool) -> (bool) {}
+fn print: (str) -> () {
+	@pop
+}
+
+
+fn main: () -> () {
+	let i: i32;
+	@(5) &= i;
+	while @(true) &> id {
+		@("infinite loop\n") &> print;
+	}
+}

@@ -1,6 +1,6 @@
 use std::{collections::HashMap, fmt::Display, rc::Rc};
 
-use crate::hfs::{error::DiagnosticInfo, token::*, ScopeKind, UnresolvedAstArena};
+use crate::hfs::{ScopeKind, UnresolvedAstArena, error::DiagnosticInfo, token::*};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct VarId(pub usize);
@@ -122,19 +122,19 @@ pub struct StackKeyword {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Statement {
     ElseIf {
-        condition: StmtId,
+        condition: Vec<StmtId>,
         body: StmtId, // points to BlockScope
         else_stmt: Option<StmtId>,
     },
     Else(StmtId), // Points to a BlockScope
     If {
-        condition: StmtId, // boolean from the stack or operation
-        body: StmtId,      // points to BlockScope
+        condition: Vec<StmtId>, // boolean from the stack or operation
+        body: StmtId,           // points to BlockScope
         else_stmt: Option<StmtId>,
     },
     While {
-        cond: ExprId, // boolean from the stack or operation
-        body: StmtId, // points to BlockScope
+        cond: Vec<StmtId>, // boolean from the stack or operation
+        body: StmtId,      // points to BlockScope
     },
     StackBlock {
         expr_ids: Vec<ExprId>,

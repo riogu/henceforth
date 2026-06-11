@@ -3,8 +3,8 @@ use std::{fmt::Display, fs, path::PathBuf};
 use colored::{ColoredString, Colorize, CustomColor};
 
 use crate::hfs::{
-    error::{number_length, CompileError, DebugInfo, Dumpable},
     AstArena, Expression, FunctionDeclaration, Identifier, Operation, SourceInfo, Statement, TopLevelId, Type, VarDeclaration,
+    error::{CompileError, DebugInfo, Dumpable, number_length},
 };
 
 #[derive(Debug)]
@@ -478,7 +478,11 @@ impl Dumpable for Statement {
                 "\n{}\n\t{} {}\n\t{} {}{}",
                 "Else-If Statement:".red().bold(),
                 "Condition:".blue(),
-                indent(&arena.get_stmt(*cond_stack_block).dump(arena)),
+                cond_stack_block
+                    .iter()
+                    .map(|stmt| indent(&arena.get_stmt(*stmt).dump(arena)).to_string())
+                    .collect::<Vec<_>>()
+                    .join("\n"),
                 "Body:".blue(),
                 indent(&arena.get_stmt(*body).dump(arena)),
                 match else_stmt {
@@ -496,7 +500,11 @@ impl Dumpable for Statement {
                 "\n{}\n\t{} {}\n\t{} {}{}",
                 "If Statement:".red().bold(),
                 "Condition:".blue(),
-                indent(&arena.get_stmt(*cond_stack_block).dump(arena)),
+                cond_stack_block
+                    .iter()
+                    .map(|stmt| indent(&arena.get_stmt(*stmt).dump(arena)).to_string())
+                    .collect::<Vec<_>>()
+                    .join("\n"),
                 "Body:".blue(),
                 indent(&arena.get_stmt(*body).dump(arena)),
                 match else_stmt {
@@ -508,7 +516,7 @@ impl Dumpable for Statement {
                 "\n{}\n\t{} {}\n\t{} {}",
                 "While Loop:".red().bold(),
                 "Condition:".blue(),
-                indent(&arena.get_expr(*cond).dump(arena)),
+                cond.iter().map(|stmt| indent(&arena.get_stmt(*stmt).dump(arena)).to_string()).collect::<Vec<_>>().join("\n"),
                 "Body:".blue(),
                 indent(&arena.get_stmt(*body).dump(arena)),
             )),

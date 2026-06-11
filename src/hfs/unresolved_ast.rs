@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use crate::hfs::{ast::*, error::DiagnosticInfo, token::*, ScopeKind};
+use crate::hfs::{ScopeKind, ast::*, error::DiagnosticInfo, token::*};
 
 // ============================================================================
 // First-pass AST (no stack resolution)
@@ -54,18 +54,18 @@ pub enum UnresolvedExpression {
 #[derive(Debug, Clone, PartialEq)]
 pub enum UnresolvedStatement {
     ElseIf {
-        cond: UnresolvedStmtId,
+        cond: Vec<UnresolvedStmtId>,
         body: UnresolvedStmtId,
         else_stmt: Option<UnresolvedStmtId>,
     },
     Else(UnresolvedStmtId), // Points to a UnresolvedBlockScope
     If {
-        cond: UnresolvedStmtId,
+        cond: Vec<UnresolvedStmtId>,
         body: UnresolvedStmtId,
         else_stmt: Option<UnresolvedStmtId>,
     },
     While {
-        cond: UnresolvedStmtId,
+        cond: Vec<UnresolvedStmtId>,
         body: UnresolvedStmtId,
     },
     StackBlock(Vec<UnresolvedExprId>),
@@ -208,46 +208,26 @@ impl UnresolvedAstArena {
     }
 
     // Immutable accessor methods
-    pub fn get_unresolved_expr(&self, id: UnresolvedExprId) -> &UnresolvedExpression {
-        &self.unresolved_exprs[id.0]
-    }
+    pub fn get_unresolved_expr(&self, id: UnresolvedExprId) -> &UnresolvedExpression { &self.unresolved_exprs[id.0] }
 
-    pub fn get_unresolved_stmt(&self, id: UnresolvedStmtId) -> &UnresolvedStatement {
-        &self.unresolved_stmts[id.0]
-    }
+    pub fn get_unresolved_stmt(&self, id: UnresolvedStmtId) -> &UnresolvedStatement { &self.unresolved_stmts[id.0] }
 
-    pub fn get_unresolved_var(&self, id: UnresolvedVarId) -> &UnresolvedVarDeclaration {
-        &self.unresolved_vars[id.0]
-    }
+    pub fn get_unresolved_var(&self, id: UnresolvedVarId) -> &UnresolvedVarDeclaration { &self.unresolved_vars[id.0] }
 
-    pub fn get_unresolved_func(&self, id: UnresolvedFuncId) -> &UnresolvedFunctionDeclaration {
-        &self.unresolved_functions[id.0]
-    }
+    pub fn get_unresolved_func(&self, id: UnresolvedFuncId) -> &UnresolvedFunctionDeclaration { &self.unresolved_functions[id.0] }
 
-    pub fn get_type(&self, id: TypeId) -> &Type {
-        &self.types[id.0]
-    }
+    pub fn get_type(&self, id: TypeId) -> &Type { &self.types[id.0] }
 
     // Token accessor methods
-    pub fn get_unresolved_expr_token(&self, id: UnresolvedExprId) -> Token {
-        self.unresolved_expr_tokens[id.0].clone()
-    }
+    pub fn get_unresolved_expr_token(&self, id: UnresolvedExprId) -> Token { self.unresolved_expr_tokens[id.0].clone() }
 
-    pub fn get_unresolved_stmt_token(&self, id: UnresolvedStmtId) -> Token {
-        self.unresolved_stmt_tokens[id.0].clone()
-    }
+    pub fn get_unresolved_stmt_token(&self, id: UnresolvedStmtId) -> Token { self.unresolved_stmt_tokens[id.0].clone() }
 
-    pub fn get_unresolved_var_token(&self, id: UnresolvedVarId) -> Token {
-        self.unresolved_var_tokens[id.0].clone()
-    }
+    pub fn get_unresolved_var_token(&self, id: UnresolvedVarId) -> Token { self.unresolved_var_tokens[id.0].clone() }
 
-    pub fn get_unresolved_func_token(&self, id: UnresolvedFuncId) -> Token {
-        self.unresolved_function_tokens[id.0].clone()
-    }
+    pub fn get_unresolved_func_token(&self, id: UnresolvedFuncId) -> Token { self.unresolved_function_tokens[id.0].clone() }
 
-    pub fn get_type_token(&self, id: TypeId) -> Token {
-        self.type_tokens[id.0].clone()
-    }
+    pub fn get_type_token(&self, id: TypeId) -> Token { self.type_tokens[id.0].clone() }
 
     pub fn to_type(&mut self, token: Token, ptr_count: usize) -> TypeId {
         match token.kind {

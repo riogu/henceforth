@@ -259,10 +259,13 @@ impl StackAnalyzer {
         let token = self.unresolved_arena.get_unresolved_stmt_token(id);
         let unresolved_stmt = self.unresolved_arena.get_unresolved_stmt(id).clone();
         match unresolved_stmt {
-            UnresolvedStatement::ElseIf { cond, body, else_stmt } | UnresolvedStatement::If { cond, body, else_stmt } => {
+            UnresolvedStatement::ElseIf { ref cond, body, else_stmt } | UnresolvedStatement::If { ref cond, body, else_stmt } => {
                 let stack_before_branches = self.arena.hfs_stack.clone();
                 // actually adds the condition to the hfs_stack, because the stack analyzer only "sees" the if statement itself
-                let cond_stack_block = self.resolve_stmt(cond)?;
+                let mut condition_statements = Vec::new();
+                for stmt in cond {
+                    condition_statements.push(self.resolve_stmt(*stmt)?);
+                }
                 // condition isnt included in the stack depth count
                 let cond = self.arena.pop_or_error(vec![self.unresolved_arena.get_unresolved_stmt_token(body)])?;
                 let cond_type = self.arena.get_type_id_of_expr(cond)?;
@@ -366,13 +369,16 @@ impl StackAnalyzer {
                     },
                 };
                 if matches!(unresolved_stmt, UnresolvedStatement::ElseIf { .. }) {
-                    Ok(self.arena.alloc_stmt(Statement::ElseIf { condition: cond_stack_block, body, else_stmt }, token))
+                    Ok(self.arena.alloc_stmt(Statement::ElseIf { condition: condition_statements, body, else_stmt }, token))
                 } else {
-                    Ok(self.arena.alloc_stmt(Statement::If { condition: cond_stack_block, body, else_stmt }, token))
+                    Ok(self.arena.alloc_stmt(Statement::If { condition: condition_statements, body, else_stmt }, token))
                 }
             },
             UnresolvedStatement::While { body, cond } => {
-                self.resolve_stmt(cond)?;
+                let mut condition_statements = Vec::new();
+                for stmt in cond {
+                    condition_statements.push(self.resolve_stmt(stmt)?);
+                }
 
                 let cond = self.arena.pop_or_error(vec![self.unresolved_arena.get_unresolved_stmt_token(body)])?;
                 // condition isnt included in the stack depth count since its popped when entering
@@ -410,7 +416,7 @@ impl StackAnalyzer {
                     }
                 }
 
-                Ok(self.arena.alloc_stmt(Statement::While { cond, body }, token))
+                Ok(self.arena.alloc_stmt(Statement::While { cond: condition_statements, body }, token))
             },
             UnresolvedStatement::StackBlock(unresolved_expr_ids) => {
                 let stack_start = self.arena.hfs_stack.clone();

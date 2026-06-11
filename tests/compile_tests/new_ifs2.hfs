@@ -1,0 +1,11 @@
+fn id: (bool) -> (bool) {}
+
+fn main: () -> () {
+	if @(false) &> id &> id &> id {
+		return
+	} else if @(false) &> id &> id {
+		return
+	} else {
+		return
+	}
+}

@@ -5,11 +5,11 @@ use slotmap::Key;
 
 use crate::{
     hfs::{
+        BlockId, GlobalIrVarDeclaration, GlobalIrVarId, InstId, Instruction, IrArena, IrFuncId, IrFunction, IrOperation,
+        IrTopLevelId, PRIMITIVE_TYPE_COUNT, SourceInfo, TerminatorInst,
         ast::*,
         error::{CompileError, DiagnosticInfo},
         ir_lowerer_errors::IrLowererErrorKind,
-        BlockId, GlobalIrVarDeclaration, GlobalIrVarId, InstId, Instruction, IrArena, IrFuncId, IrFunction, IrOperation,
-        IrTopLevelId, SourceInfo, TerminatorInst, PRIMITIVE_TYPE_COUNT,
     },
     ir_lowerer_error,
 };
@@ -136,7 +136,7 @@ impl IrLowerer {
             parameter_insts: vec![],
             entry_block: BlockId::null(),
         }; // needs to be here because we need to set self.arena.curr_function correctly
-           // id like it to not require exposing a mutable method but it has to be this way
+        // id like it to not require exposing a mutable method but it has to be this way
         let new_id = self.arena.alloc_function(cfg_function);
         self.func_id_map.insert(id, new_id);
         self.ir_context.curr_func = new_id;
@@ -212,14 +212,16 @@ impl IrLowerer {
 
     pub fn lower_if_condition(
         &mut self,
-        cond_stack_block: StmtId,
+        condition_statements: Vec<StmtId>,
         body: StmtId,
         curr_block_context: &BlockContext,
     ) -> Result<(InstId, BlockId, BlockId), Box<dyn CompileError>> {
         //
         let block_before_if = self.ir_context.curr_insert_block;
 
-        self.lower_stmt(cond_stack_block, curr_block_context.clone())?;
+        for stmt in condition_statements {
+            self.lower_stmt(stmt, curr_block_context.clone())?;
+        }
 
         let if_body_block = self.arena.alloc_block("if_body", self.ir_context.curr_func);
         self.ir_context.curr_insert_block = if_body_block;
@@ -228,11 +230,9 @@ impl IrLowerer {
         let cond = match self.arena.pop_hfs_stack() {
             Some(cond) => cond,
             None =>
-                return ir_lowerer_error!(IrLowererErrorKind::StackUnderflow, &self.arena, Some(&self.ast_arena), vec![self
-                    .ast_arena
-                    .get_stmt_token(body)
-                    .source_info
-                    .clone()]),
+                return ir_lowerer_error!(IrLowererErrorKind::StackUnderflow, &self.arena, Some(&self.ast_arena), vec![
+                    self.ast_arena.get_stmt_token(body).source_info.clone()
+                ]),
         };
         let cond_type = self.arena.get_type_id_of_inst(cond)?;
         self.arena.compare_types(cond_type, self.arena.bool_type(), vec![self.arena.get_inst(cond).get_source_info()])?;
@@ -303,14 +303,14 @@ impl IrLowerer {
 
         match self.ast_arena.get_stmt(id).clone() {
             Statement::Else(stmt_id) => self.lower_stmt(stmt_id, curr_block_context),
-            if_stmt @ Statement::ElseIf { condition: cond_stack_block, body, else_stmt }
-            | if_stmt @ Statement::If { condition: cond_stack_block, body, else_stmt } => {
+            ref if_stmt @ Statement::ElseIf { condition: ref cond_stack_block, body, else_stmt }
+            | ref if_stmt @ Statement::If { condition: ref cond_stack_block, body, else_stmt } => {
                 // means we are starting a new chain of ifs
                 let mut stack_snapshots = curr_block_context.stack_snapshots.clone();
                 let stack_before_branches = self.arena.hfs_stack.clone();
 
                 let (cond, block_before_if, if_body_block) =
-                    self.lower_if_condition(cond_stack_block, body, &curr_block_context)?;
+                    self.lower_if_condition(cond_stack_block.clone(), body, &curr_block_context)?;
 
                 let (if_end_block, stack_after_if_body) =
                     self.lower_if_body(body, &curr_block_context, matches!(if_stmt, Statement::If { .. }))?;
@@ -418,13 +418,20 @@ impl IrLowerer {
                 //--------------------------------------------------------------------------
                 // set up the context for lowering the while body
                 self.ir_context.curr_insert_block = while_cond_block;
-                let cond = self.lower_expr(cond)?;
-                let cond_type = self.arena.get_type_id_of_inst(cond)?;
-                self.arena.compare_types(cond_type, self.arena.bool_type(), vec![self.arena.get_inst(cond).get_source_info()])?;
+                for stmt in &cond {
+                    self.lower_stmt(*stmt, curr_block_context.clone())?;
+                }
+                let cond_inst = self.arena.pop_or_error(
+                    cond.iter().map(|stmt| self.ast_arena.get_stmt_token(*stmt).source_info).collect(),
+                    &self.ast_arena,
+                )?;
+                let cond_type = self.arena.get_type_id_of_inst(cond_inst)?;
+                self.arena
+                    .compare_types(cond_type, self.arena.bool_type(), vec![self.arena.get_inst(cond_inst).get_source_info()])?;
                 self.arena.alloc_terminator_for(
                     TerminatorInst::Branch {
                         source_info: source_info.clone(),
-                        cond,
+                        cond: cond_inst,
                         true_block: while_body_block,
                         false_block: while_end_block,
                     },
@@ -621,9 +628,9 @@ impl IrLowerer {
                     inst_args.push(arg_inst);
                 }
                 inst_args.reverse(); // we reverse because we were popping the stack
-                                     // and we want the syntax to work left->right to be more readable and match the
-                                     // expectations of the stated type of the function that works as a "view" into the
-                                     // stack, not as a popped argments mechanics
+                // and we want the syntax to work left->right to be more readable and match the
+                // expectations of the stated type of the function that works as a "view" into the
+                // stack, not as a popped argments mechanics
 
                 if !is_move {
                     // restore the stack

@@ -1,0 +1,15 @@
+fn print: (str) -> () { @pop; }
+fn player_win : (str) -> (bool) {
+    @("O" ==)
+}
+
+fn main : () -> () {
+    if @("X") &> player_win {
+        @("winner!\n")
+    } else if @("O") &> player_win {
+        @("not winner!\n")
+    } else {
+        @("no winner\n")
+    }
+    &> print;
+}

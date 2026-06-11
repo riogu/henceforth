@@ -1,5 +1,4 @@
 # rustfmt.toml - Mirroring C++ clang-format style
-
 # Basic formatting
 max_width = 130
 hard_tabs = false
@@ -64,7 +63,7 @@ match_block_trailing_comma = true
 match_arm_leading_pipes = "Never"
 
 # Miscellaneous
-edition = "2021"  # Or "2024" if you're using Rust 2024
+edition = "2024"  # Or "2024" if you're using Rust 2024
 newline_style = "Unix"
 remove_nested_parens = true
 reorder_impl_items = false  # Keep items in order you wrote them

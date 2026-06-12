@@ -235,6 +235,7 @@ impl Dumpable for UnresolvedOperation {
             UnresolvedOperation::Not => ColoredString::from(format!("Not")),
             UnresolvedOperation::AddressOf => ColoredString::from(format!("AdressOf")),
             UnresolvedOperation::Dereference => ColoredString::from(format!("Dereference")),
+            UnresolvedOperation::ArrayAccess => ColoredString::from(format!("ArrayAccess")),
         };
         op.yellow()
     }
@@ -365,6 +366,16 @@ impl Dumpable for UnresolvedStatement {
             UnresolvedStatement::Continue => "Continue".red().bold(),
             UnresolvedStatement::Empty => format!("Empty").red().bold(),
             UnresolvedStatement::Assignment { identifier, is_move, deref_count } => ColoredString::from(format!(
+                "\n{}\n\t{} {}\n\t{} {}\n\t{} {}",
+                "Assignment:".red().bold(),
+                "Identifier:".blue(),
+                indent(&arena.get_unresolved_expr(*identifier).dump(arena)),
+                "Is Move:".blue(),
+                format!("{}", is_move).green(),
+                "Deref Count:".blue(),
+                format!("{}", deref_count).green(),
+            )),
+            UnresolvedStatement::ArrayAssignment { identifier, is_move, deref_count } => ColoredString::from(format!(
                 "\n{}\n\t{} {}\n\t{} {}\n\t{} {}",
                 "Assignment:".red().bold(),
                 "Identifier:".blue(),

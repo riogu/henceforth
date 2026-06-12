@@ -322,6 +322,7 @@ impl TokenKind {
             | TokenKind::GreaterEqual
             | TokenKind::And
             | TokenKind::Or
+            | TokenKind::LeftBracket
             | TokenKind::Not => true,
             _ => false,
         }
@@ -340,6 +341,7 @@ impl TokenKind {
             | TokenKind::Greater
             | TokenKind::GreaterEqual
             | TokenKind::And
+            | TokenKind::LeftBracket
             | TokenKind::Or => true,
             _ => false,
         }

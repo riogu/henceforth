@@ -26,6 +26,7 @@ pub enum UnresolvedOperation {
     Not,
     AddressOf,
     Dereference,
+    ArrayAccess,
 }
 
 impl UnresolvedOperation {
@@ -84,6 +85,11 @@ pub enum UnresolvedStatement {
         identifier: UnresolvedExprId,
         is_move: bool, // true for &>, false for :>
                        // value comes from stack
+    },
+    ArrayAssignment {
+        identifier: UnresolvedExprId,
+        is_move: bool,
+        deref_count: usize,
     },
 }
 

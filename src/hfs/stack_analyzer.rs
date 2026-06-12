@@ -570,6 +570,7 @@ impl StackAnalyzer {
                 Ok(self.arena.alloc_stmt(Statement::FunctionCall { arg_count, func_id, is_move, return_values }, token))
             },
             UnresolvedStatement::Else(_) => panic!("[internal error] else statements are not solved here"),
+            UnresolvedStatement::ArrayAssignment { identifier, is_move, deref_count } => todo!(),
         }
     }
 

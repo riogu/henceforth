@@ -31,7 +31,7 @@ fn player_win: ([]str str) -> (bool) {
      )
 }
 
-fn get_winner: ([]str /* board */ ) -> (str) {
+fn get_winner: ([]str) -> (str) {
     if @("X") &> player_win {
         @("the winner was player 'X'!\n") 
     } else if @("O") &> player_win {

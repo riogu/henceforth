@@ -1,6 +1,6 @@
 use std::{collections::HashMap, fmt::Display, rc::Rc};
 
-use crate::hfs::{ScopeKind, UnresolvedAstArena, error::DiagnosticInfo, token::*};
+use crate::hfs::{ScopeKind, UnresolvedAstArena, UnresolvedExprId, error::DiagnosticInfo, token::*};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct VarId(pub usize);
@@ -173,7 +173,7 @@ pub enum Type {
     Bool { ptr_count: usize },
     Float { ptr_count: usize },
     Tuple { type_ids: Vec<TypeId>, ptr_count: usize },
-    Array { hfs_type: TypeId, length: Option<usize>, ptr_count: usize },
+    Array { hfs_type: TypeId, length: Option<UnresolvedExprId>, ptr_count: usize },
 }
 
 impl Display for Type {
@@ -200,7 +200,8 @@ impl Type {
                 "Tuple<{}>",
                 type_ids.iter().map(|id| arena.get_type(*id).get_repr_unresolved(arena)).collect::<Vec<String>>().join(", ")
             ),
-            Type::Array { hfs_type: _, length: _, ptr_count: _ } => todo!(),
+            Type::Array { hfs_type, length: _, ptr_count: _ } =>
+                format!("[]{}", arena.get_type(*hfs_type).get_repr_unresolved(arena)),
         }
     }
     pub fn get_repr_resolved(&self, arena: &AstArena) -> String {
@@ -226,7 +227,7 @@ impl Type {
             Type::Bool { ptr_count } => ptr_count,
             Type::Float { ptr_count } => ptr_count,
             Type::Tuple { ptr_count, .. } => ptr_count,
-            Type::Array { hfs_type: _, length: _, ptr_count: _ } => todo!(),
+            Type::Array { hfs_type: _, length: _, ptr_count } => ptr_count,
         }
     }
     pub fn new_int(ptr_count: usize) -> Self { Type::Int { ptr_count } }

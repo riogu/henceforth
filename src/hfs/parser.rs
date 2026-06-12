@@ -134,26 +134,38 @@ impl Parser {
         Ok(types)
     }
 
-    fn array_type(&mut self) -> Result<(TypeId, Option<usize>), Box<dyn CompileError>> {
+    fn array_type(&mut self) -> Result<(TypeId, Option<UnresolvedExprId>), Box<dyn CompileError>> {
         self.expect(TokenKind::LeftBracket)?;
         let length = match self.tokens.peek() {
             Some(t) if matches!(t.kind, TokenKind::Literal(_)) => {
                 let t = self.tokens.next().unwrap();
                 match t.kind {
-                    TokenKind::Literal(Literal::Integer(n)) => Some(n as usize),
+                    TokenKind::Literal(Literal::Integer(n)) =>
+                        Some(self.arena.alloc_unresolved_expr(UnresolvedExpression::Literal(Literal::Integer(n)), t)),
                     _ =>
                         return parser_error!(
-                            ParserErrorKind::ExpectedButFound(vec![Expectable::IntegerLiteral], Some(t.kind)),
+                            ParserErrorKind::ExpectedButFound(
+                                vec![
+                                    Expectable::IntegerLiteral,
+                                    Expectable::Token(TokenKind::RightBracket),
+                                    Expectable::Identifier
+                                ],
+                                Some(t.kind)
+                            ),
                             &self.arena,
                             vec![t.source_info]
                         ),
                 }
             },
+            Some(t) if matches!(t.kind, TokenKind::Identifier(_)) => {
+                let (name, token) = self.expect_identifier()?;
+                Some(self.arena.alloc_unresolved_expr(UnresolvedExpression::Identifier(name), token))
+            },
             Some(t) if matches!(t.kind, TokenKind::RightBracket) => None,
             Some(t) =>
                 return parser_error!(
                     ParserErrorKind::ExpectedButFound(
-                        vec![Expectable::Literal, Expectable::Token(TokenKind::RightBracket)],
+                        vec![Expectable::Literal, Expectable::Token(TokenKind::RightBracket), Expectable::Identifier],
                         Some(t.kind.clone())
                     ),
                     &self.arena,
@@ -162,7 +174,7 @@ impl Parser {
             None =>
                 return parser_error!(
                     ParserErrorKind::ExpectedButFound(
-                        vec![Expectable::Literal, Expectable::Token(TokenKind::RightBracket)],
+                        vec![Expectable::Literal, Expectable::Token(TokenKind::RightBracket), Expectable::Identifier],
                         None
                     ),
                     &self.arena,
@@ -308,6 +320,8 @@ impl Parser {
             },
             TokenKind::CopyAssign => Ok(self.assignment(false)?),
             TokenKind::MoveAssign => Ok(self.assignment(true)?),
+            TokenKind::CopyArrayAssignment => Ok(self.array_assignment(false)?),
+            TokenKind::MoveArrayAssignment => Ok(self.array_assignment(true)?),
             TokenKind::CopyCall => Ok(self.function_call(false)?),
             TokenKind::MoveCall => Ok(self.function_call(true)?),
             TokenKind::StackKeyword(_) => Ok(self.stack_keyword_outside_stack_block()?),
@@ -466,6 +480,29 @@ impl Parser {
                     Ok(self.arena.alloc_unresolved_expr(UnresolvedExpression::Operation(UnresolvedOperation::And), token)),
                 TokenKind::Or =>
                     Ok(self.arena.alloc_unresolved_expr(UnresolvedExpression::Operation(UnresolvedOperation::Or), token)),
+                TokenKind::LeftBracket => match self.tokens.peek() {
+                    Some(t) if matches!(t.kind, TokenKind::RightBracket) => {
+                        self.expect(TokenKind::RightBracket)?;
+                        Ok(self
+                            .arena
+                            .alloc_unresolved_expr(UnresolvedExpression::Operation(UnresolvedOperation::ArrayAccess), token))
+                    },
+                    Some(t) => {
+                        parser_error!(
+                            ParserErrorKind::ExpectedButFound(
+                                vec![Expectable::Token(TokenKind::RightBracket),],
+                                Some(t.kind.clone())
+                            ),
+                            &self.arena,
+                            vec![t.source_info]
+                        )
+                    },
+                    None => parser_error!(
+                        ParserErrorKind::ExpectedButFound(vec![Expectable::Token(TokenKind::RightBracket),], None),
+                        &self.arena,
+                        vec![self.arena.diagnostic_info.eof_pos]
+                    ),
+                },
                 _ => unreachable!(),
             },
             TokenKind::Not =>
@@ -506,6 +543,20 @@ impl Parser {
         let identifier = self.arena.alloc_unresolved_expr(UnresolvedExpression::Identifier(name), token);
 
         Ok(self.arena.alloc_unresolved_stmt(UnresolvedStatement::Assignment { identifier, is_move, deref_count }, assign_tkn))
+    }
+
+    // <array_assignment> ::= "[&]=" <identifier> ";"
+    //                      | "[:]=" <identifier> ";"
+    fn array_assignment(&mut self, is_move: bool) -> Result<UnresolvedStmtId, Box<dyn CompileError>> {
+        let assign_tkn = self.tokens.next().unwrap();
+
+        let (name, token) = self.expect_identifier()?;
+        let deref_count = self.consume_token_chain(TokenKind::Dereference);
+        let identifier = self.arena.alloc_unresolved_expr(UnresolvedExpression::Identifier(name), token);
+
+        Ok(self
+            .arena
+            .alloc_unresolved_stmt(UnresolvedStatement::ArrayAssignment { identifier, is_move, deref_count }, assign_tkn))
     }
 
     // <function_call> ::= "&>" <identifier> ";"

@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{collections::HashMap, path::PathBuf};
 
 use crate::hfscheck::hfscheck::{HfsRegex, Test, TestInput};
 
@@ -26,6 +26,7 @@ impl ErrorParser {
     pub fn generate_test(path: &'_ PathBuf, line_number: usize, error: String) -> ErrorTest {
         let mut chars_iter = error.chars().peekable();
         let mut error_line_check: Box<dyn Fn(usize) -> bool + Send + Sync> = Box::new(move |l| l == line_number);
+        let mut bindings = HashMap::new();
         let mut message_check: Box<dyn Fn(String) -> bool + Send + Sync> = Box::new(|_| true);
         while let Some(char) = chars_iter.next() {
             match char {
@@ -36,7 +37,9 @@ impl ErrorParser {
                         message.push(char);
                     }
                     chars_iter.next();
-                    message_check = HfsRegex::parse(message);
+                    let local_bindings;
+                    (message_check, local_bindings) = HfsRegex::parse(message, &bindings);
+                    bindings.extend(local_bindings);
                 },
                 '@' =>
                     if let Some(_) = chars_iter.next_if_eq(&'[') {

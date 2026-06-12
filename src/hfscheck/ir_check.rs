@@ -1,4 +1,8 @@
-use std::path::PathBuf;
+use std::{
+    collections::HashMap,
+    path::PathBuf,
+    sync::{Arc, Mutex},
+};
 
 use crate::{
     hfs::{CleanCFG, DeadCodeElimination, IrPass, Mem2Reg, O0, OptPipeline, RemoveStaleIR},
@@ -58,6 +62,7 @@ impl IrCheck {
     ) -> IrTest {
         let path_clone = path.clone();
         let name_clone = name.clone();
+        let bindings = Arc::new(Mutex::new(HashMap::new()));
         let code_check: Box<dyn Fn(Vec<String>) -> bool + Send + Sync> = Box::new(move |lines: Vec<String>| {
             let current_content = lines.join("\n");
             let fn_line = match IrCheck::find_function(&current_content, &name_clone) {
@@ -71,7 +76,8 @@ impl IrCheck {
             for check in &checks {
                 match check {
                     CheckKind::Plain(regex) => {
-                        let regex = HfsRegex::parse(regex.clone());
+                        let (regex, local_bindings) = HfsRegex::parse(regex.clone(), &bindings.lock().unwrap());
+                        bindings.lock().unwrap().extend(local_bindings);
 
                         let matched = lines[previous..].iter().position(|line| regex(line.clone()));
                         if matched.is_none() {
@@ -81,7 +87,8 @@ impl IrCheck {
                         }
                     },
                     CheckKind::Not(regex) => {
-                        let regex = HfsRegex::parse(regex.clone());
+                        let (regex, local_bindings) = HfsRegex::parse(regex.clone(), &bindings.lock().unwrap());
+                        bindings.lock().unwrap().extend(local_bindings);
 
                         let matched = lines[previous..].iter().position(|line| regex(line.clone()));
                         if matched.is_some() {
@@ -89,7 +96,8 @@ impl IrCheck {
                         }
                     },
                     CheckKind::Block(regex) => {
-                        let regex = HfsRegex::parse(regex.clone());
+                        let (regex, local_bindings) = HfsRegex::parse(regex.clone(), &bindings.lock().unwrap());
+                        bindings.lock().unwrap().extend(local_bindings);
 
                         let matched = lines[previous..].iter().position(|line| {
                             let t = line.trim().trim_end_matches(':');
@@ -102,21 +110,24 @@ impl IrCheck {
                         }
                     },
                     CheckKind::Next(regex) => {
-                        let regex = HfsRegex::parse(regex.clone());
+                        let (regex, local_bindings) = HfsRegex::parse(regex.clone(), &bindings.lock().unwrap());
+                        bindings.lock().unwrap().extend(local_bindings);
 
                         if !regex(lines[previous + 1].clone()) {
                             return false;
                         }
                     },
                     CheckKind::Same(regex) => {
-                        let regex = HfsRegex::parse(regex.clone());
+                        let (regex, local_bindings) = HfsRegex::parse(regex.clone(), &bindings.lock().unwrap());
+                        bindings.lock().unwrap().extend(local_bindings);
 
                         if !regex(lines[previous].clone()) {
                             return false;
                         }
                     },
                     CheckKind::Count(count, regex) => {
-                        let regex = HfsRegex::parse(regex.clone());
+                        let (regex, local_bindings) = HfsRegex::parse(regex.clone(), &bindings.lock().unwrap());
+                        bindings.lock().unwrap().extend(local_bindings);
 
                         let mut matched_count = 0;
                         let mut last_match = None;

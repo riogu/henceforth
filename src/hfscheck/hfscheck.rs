@@ -1,4 +1,4 @@
-use std::{fs, path::PathBuf};
+use std::{collections::HashMap, fs, path::PathBuf};
 
 use crate::{
     hfs::{O0, OptPipeline},
@@ -25,7 +25,7 @@ pub enum Assertion<'a> {
     Compile(&'a PathBuf),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum HfsRegex {
     Text(String),
     SingleChar,
@@ -45,6 +45,8 @@ pub trait Test {
     fn path(&self) -> &PathBuf;
 }
 
+type HfsRegexFn = Box<dyn Fn(String) -> bool + Send + Sync + 'static>;
+
 impl HfsRegex {
     fn new(pattern: &str) -> Self {
         match pattern {
@@ -58,7 +60,7 @@ impl HfsRegex {
                     _ => panic!("invalid range syntax"),
                 }
             },
-            text if text.starts_with('<') && text.ends_with('>') => {
+            text if text.starts_with('{') && text.ends_with('}') => {
                 let inner = &text[1..text.len() - 1];
                 let chars: Vec<char> = inner.split(',').map(|s| s.chars().next().expect("empty list item")).collect();
                 HfsRegex::List(chars)
@@ -76,32 +78,72 @@ impl HfsRegex {
             HfsRegex::List(items) => msg.chars().position(|c| items.contains(&c)).map(|i| i + 1),
         }
     }
-    pub fn parse(message: String) -> Box<dyn Fn(String) -> bool + Send + Sync> {
+    pub fn parse(
+        message: String,
+        current_bindings: &HashMap<String, Vec<HfsRegex>>,
+    ) -> (HfsRegexFn, HashMap<String, Vec<HfsRegex>>) {
         let mut patterns: Vec<HfsRegex> = Vec::new();
         let mut chars = message.chars().peekable();
+        let mut bindings = HashMap::new();
         while let Some(ch) = chars.next() {
             match ch {
                 ' ' => continue,
-                '[' =>
-                    if chars.next_if(|c| c == &'[').is_some() {
-                        let mut inner = String::new();
-                        while let Some(c) = chars.next_if(|c| c != &']') {
-                            inner.push(c);
+                '[' if chars.next_if(|c| c == &'[').is_some() => {
+                    let mut inner = String::new();
+                    let mut depth = 1;
+                    loop {
+                        match chars.next() {
+                            Some('[') => {
+                                depth += 1;
+                                inner.push('[');
+                            },
+                            Some(']') => {
+                                if depth == 1 {
+                                    chars.next();
+                                    break;
+                                }
+                                depth -= 1;
+                                inner.push(']');
+                            },
+                            Some(c) => inner.push(c),
+                            None => break,
                         }
-                        chars.next();
-                        chars.next();
-                        todo!("[[]] variable handling")
-                    },
+                    }
+                    match inner.split_once(":") {
+                        Some((var, regex)) => {
+                            let binding_pats = HfsRegex::parse_inner(regex.to_string());
+                            patterns.extend(binding_pats.iter().cloned());
+                            bindings.insert(var.to_string(), binding_pats);
+                        },
+                        // [[VAR]] corresponds to the usage of the binding, so we replace it with its patterns
+                        None => match current_bindings.get(&inner) {
+                            Some(regex) => patterns.extend(regex.iter().cloned()),
+                            None => match bindings.get(&inner) {
+                                Some(regex) => patterns.extend(regex.iter().cloned()),
+                                None => panic!("invalid binding: {}", inner),
+                            },
+                        },
+                    }
+                },
 
                 '{' =>
                     if chars.next_if(|c| c == &'{').is_some() {
                         let inner_chars = {
                             let mut inner = String::new();
+                            let mut depth = 1;
                             loop {
                                 match chars.next() {
-                                    Some('}') if chars.peek() == Some(&'}') => {
-                                        chars.next();
-                                        break;
+                                    Some('{') => {
+                                        depth += 1;
+                                        inner.push('{');
+                                    },
+                                    Some('}') => {
+                                        if depth == 1 {
+                                            chars.next();
+                                            break;
+                                        }
+                                        depth -= 1;
+                                        inner.push('}');
                                     },
                                     Some(c) => inner.push(c),
                                     None => break,
@@ -109,37 +151,7 @@ impl HfsRegex {
                             }
                             inner
                         };
-                        let mut inner = inner_chars.chars().peekable();
-                        while let Some(ch) = inner.next() {
-                            match ch {
-                                ' ' => continue,
-                                '*' => patterns.push(HfsRegex::Wildcard),
-                                '.' => patterns.push(HfsRegex::SingleChar),
-                                '[' => {
-                                    let mut range = String::new();
-                                    while let Some(c) = inner.next_if(|c| c != &']') {
-                                        range.push(c);
-                                    }
-                                    inner.next();
-                                    patterns.push(HfsRegex::new(&format!("[{}]", range)));
-                                },
-                                '<' => {
-                                    let mut list = String::new();
-                                    while let Some(c) = inner.next_if(|c| c != &'>') {
-                                        list.push(c);
-                                    }
-                                    inner.next();
-                                    patterns.push(HfsRegex::new(&format!("<{}>", list)));
-                                },
-                                c => {
-                                    let mut text = String::from(c);
-                                    while let Some(c) = inner.next_if(|c| !matches!(c, ' ' | '[' | '*' | '.')) {
-                                        text.push(c);
-                                    }
-                                    patterns.push(HfsRegex::new(&text));
-                                },
-                            }
-                        }
+                        patterns.append(&mut HfsRegex::parse_inner(inner_chars));
                     },
                 c => {
                     let mut text = String::from(c);
@@ -150,7 +162,48 @@ impl HfsRegex {
                 },
             }
         }
-        Box::new(move |msg| {
+        let regex_fn = HfsRegex::generate_regex_function(patterns);
+        return (regex_fn, bindings);
+    }
+
+    fn parse_inner(inner_chars: String) -> Vec<HfsRegex> {
+        let mut patterns = Vec::new();
+        let mut inner = inner_chars.chars().peekable();
+        while let Some(ch) = inner.next() {
+            match ch {
+                ' ' => continue,
+                '*' => patterns.push(HfsRegex::Wildcard),
+                '.' => patterns.push(HfsRegex::SingleChar),
+                '[' => {
+                    let mut range = String::new();
+                    while let Some(c) = inner.next_if(|c| c != &']') {
+                        range.push(c);
+                    }
+                    inner.next();
+                    patterns.push(HfsRegex::new(&format!("[{}]", range)));
+                },
+                '{' => {
+                    let mut list = String::new();
+                    while let Some(c) = inner.next_if(|c| c != &'}') {
+                        list.push(c);
+                    }
+                    inner.next();
+                    patterns.push(HfsRegex::new(&format!("{{{}}}", list)));
+                },
+                c => {
+                    let mut text = String::from(c);
+                    while let Some(c) = inner.next_if(|c| !matches!(c, ' ' | '[' | '*' | '.')) {
+                        text.push(c);
+                    }
+                    patterns.push(HfsRegex::new(&text));
+                },
+            }
+        }
+        return patterns;
+    }
+
+    fn generate_regex_function(patterns: Vec<HfsRegex>) -> HfsRegexFn {
+        Box::new(move |msg: String| {
             let mut last_found_pos = 0;
             for pattern in &patterns {
                 match pattern.matches(&msg[last_found_pos..]) {
@@ -471,11 +524,13 @@ mod assertion_tests {
 
 #[cfg(test)]
 mod regex_tests {
+    use std::collections::HashMap;
+
     use crate::hfscheck::hfscheck::HfsRegex;
 
     #[test]
     fn test_regex_empty_matches_any() {
-        let regex = HfsRegex::parse(String::from(""));
+        let (regex, _) = HfsRegex::parse(String::from(""), &HashMap::new());
         assert!(regex(String::from("any message")));
         assert!(regex(String::from("any message works for this")));
         assert!(regex(String::new()));
@@ -483,7 +538,7 @@ mod regex_tests {
 
     #[test]
     fn test_regex_text_works_fuzzily() {
-        let regex = HfsRegex::parse(String::from("error when stuff"));
+        let (regex, _) = HfsRegex::parse(String::from("error when stuff"), &HashMap::new());
         assert!(regex(String::from("error when performing stuff")));
         assert!(regex(String::from("error when doing stuff")));
         assert!(regex(String::from("you got an error when stuff")));
@@ -493,7 +548,7 @@ mod regex_tests {
 
     #[test]
     fn test_regex_wildcard_matches_as_much_as_necessary() {
-        let regex = HfsRegex::parse(String::from("error when {{*}} stuff"));
+        let (regex, _) = HfsRegex::parse(String::from("error when {{*}} stuff"), &HashMap::new());
         assert!(regex(String::from("error when performing stuff")));
         assert!(regex(String::from("error when doing stuff")));
         assert!(!regex(String::from("error when doing things")));
@@ -502,7 +557,7 @@ mod regex_tests {
 
     #[test]
     fn test_regex_anychar_matches_a_single_character() {
-        let regex = HfsRegex::parse(String::from("{{.}} error"));
+        let (regex, _) = HfsRegex::parse(String::from("{{.}} error"), &HashMap::new());
         assert!(regex(String::from("a error")));
         assert!(regex(String::from("b error")));
         assert!(!regex(String::from("error")));
@@ -510,7 +565,7 @@ mod regex_tests {
 
     #[test]
     fn test_regex_range_matches_only_in_range() {
-        let regex = HfsRegex::parse(String::from("{{[0-9]}}"));
+        let (regex, _) = HfsRegex::parse(String::from("{{[0-9]}}"), &HashMap::new());
         assert!(regex(String::from("0")));
         assert!(regex(String::from("9")));
         assert!(regex(String::from("5")));
@@ -518,7 +573,35 @@ mod regex_tests {
     }
     #[test]
     fn test_regex_list_matches_only_members() {
-        let regex = HfsRegex::parse(String::from("{{<a,b,c>}}"));
+        let (regex, _) = HfsRegex::parse(String::from("{{{a,b,c}}}"), &HashMap::new());
+        assert!(regex(String::from("a")));
+        assert!(regex(String::from("b")));
+        assert!(regex(String::from("c")));
+        assert!(!regex(String::from("d")));
+    }
+
+    #[test]
+    fn test_binding_matches_on_itself() {
+        let (regex, _) = HfsRegex::parse(String::from("[[X:{a,b,c}]]"), &HashMap::new());
+        assert!(regex(String::from("a")));
+        assert!(regex(String::from("b")));
+        assert!(regex(String::from("c")));
+        assert!(!regex(String::from("d")));
+    }
+
+    #[test]
+    fn test_binding_matches_on_other_same_line() {
+        let (regex, _) = HfsRegex::parse(String::from("[[X:{a,b,c}]][[X]]"), &HashMap::new());
+        assert!(regex(String::from("aa")));
+        assert!(regex(String::from("ba")));
+        assert!(regex(String::from("cb")));
+        assert!(!regex(String::from("da")));
+    }
+
+    #[test]
+    fn test_binding_matches_on_other_diff_line() {
+        let (_, bindings) = HfsRegex::parse(String::from("[[X:{a,b,c}]]"), &HashMap::new());
+        let (regex, _) = HfsRegex::parse(String::from("[[X]]"), &bindings);
         assert!(regex(String::from("a")));
         assert!(regex(String::from("b")));
         assert!(regex(String::from("c")));

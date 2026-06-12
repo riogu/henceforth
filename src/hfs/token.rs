@@ -92,6 +92,9 @@ pub enum TokenKind {
     // Call
     CopyCall, // &=
     MoveCall, // :=
+    // Array
+    CopyArrayAssignment, // &=
+    MoveArrayAssignment, // :=
     // Delimiters
     LeftParen,    // (
     RightParen,   // )
@@ -181,6 +184,8 @@ impl fmt::Display for TokenKind {
             TokenKind::StackKeyword(name) => write!(f, "{}", name),
             TokenKind::AddressOf => write!(f, "&"),
             TokenKind::Dereference => write!(f, "^"),
+            TokenKind::CopyArrayAssignment => write!(f, "[:]="),
+            TokenKind::MoveArrayAssignment => write!(f, "[&]="),
         }
     }
 }
@@ -384,6 +389,8 @@ impl TokenKind {
             | TokenKind::Dereference
             | TokenKind::Comma => 1,
             TokenKind::Newline => 0,
+            TokenKind::CopyArrayAssignment => 4,
+            TokenKind::MoveArrayAssignment => 4,
         }
     }
 }

@@ -2,10 +2,10 @@ use std::{fs, path::PathBuf};
 
 use crate::{
     hfs::{
+        VALID_STACK_KEYWORDS,
         error::CompileError,
         lexer_errors::{LexerError, LexerErrorKind},
         token::{Literal, SourceInfo, Token, TokenKind},
-        VALID_STACK_KEYWORDS,
     },
     lexer_error,
 };
@@ -45,6 +45,38 @@ impl Lexer {
                     ')' => TokenKind::RightParen,
                     '{' => TokenKind::LeftBrace,
                     '}' => TokenKind::RightBrace,
+                    '[' =>
+                        if let Some(c) = chars_iter.next_if(|char| char == &':' || char == &'&') {
+                            if let Some(_) = chars_iter.next_if_eq(&']') {
+                                if let Some(_) = chars_iter.next_if_eq(&'=') {
+                                    match c {
+                                        ':' => TokenKind::CopyArrayAssignment,
+                                        '&' => TokenKind::MoveArrayAssignment,
+                                        _ => panic!(
+                                            "[internal error] found something other than '&' or ':' when lexing an array \
+                                             assignment"
+                                        ),
+                                    }
+                                } else {
+                                    return lexer_error!(
+                                        LexerErrorKind::UnexpectedChar,
+                                        file.path.clone(),
+                                        SourceInfo::new(line_number + 1, line_offset + 3, 1),
+                                        tokens
+                                    );
+                                }
+                            } else {
+                                return lexer_error!(
+                                    LexerErrorKind::UnexpectedChar,
+                                    file.path.clone(),
+                                    SourceInfo::new(line_number + 1, line_offset + 2, 1),
+                                    tokens
+                                );
+                            }
+                        } else {
+                            TokenKind::LeftBracket
+                        },
+                    ']' => TokenKind::RightBracket,
                     ';' => TokenKind::Semicolon,
                     '%' => TokenKind::Percent,
                     '@' => {
@@ -69,7 +101,7 @@ impl Lexer {
                     },
                     '+' => TokenKind::Plus,
                     '^' => TokenKind::Dereference,
-                    '.' => {
+                    '.' =>
                         if let Some(_) = chars_iter.next_if_eq(&'.') {
                             if let Some(_) = chars_iter.next_if_eq(&'.') {
                                 TokenKind::DotDotDot
@@ -88,9 +120,8 @@ impl Lexer {
                                 SourceInfo::new(line_number + 1, line_offset + 1, 1),
                                 tokens
                             );
-                        }
-                    },
-                    ':' => {
+                        },
+                    ':' =>
                         if let Some(_) = chars_iter.next_if_eq(&'=') {
                             TokenKind::CopyAssign
                         } else {
@@ -99,25 +130,22 @@ impl Lexer {
                             } else {
                                 TokenKind::Colon
                             }
-                        }
-                    },
-                    '-' => {
+                        },
+                    '-' =>
                         if let Some(_) = chars_iter.next_if_eq(&'>') {
                             TokenKind::Arrow
                         } else {
                             TokenKind::Minus
-                        }
-                    },
+                        },
                     '*' => TokenKind::Star,
-                    '/' => {
+                    '/' =>
                         if let Some(_) = chars_iter.next_if_eq(&'/') {
                             while let Some(_) = chars_iter.next_if(|char| *char != '\n') {}
                             continue;
                         } else {
                             TokenKind::Slash
-                        }
-                    },
-                    '=' => {
+                        },
+                    '=' =>
                         if let Some(_) = chars_iter.next_if_eq(&'=') {
                             TokenKind::Equal
                         } else {
@@ -127,29 +155,25 @@ impl Lexer {
                                 SourceInfo::new(line_number + 1, line_offset + 1, 1),
                                 tokens
                             );
-                        }
-                    }, // ==
-                    '!' => {
+                        }, // ==
+                    '!' =>
                         if let Some(_) = chars_iter.next_if_eq(&'=') {
                             TokenKind::NotEqual
                         } else {
                             TokenKind::Not
-                        }
-                    }, // ! or !=
-                    '<' => {
+                        }, // ! or !=
+                    '<' =>
                         if let Some(_) = chars_iter.next_if_eq(&'=') {
                             TokenKind::LessEqual
                         } else {
                             TokenKind::Less
-                        }
-                    }, // < or <=
-                    '>' => {
+                        }, // < or <=
+                    '>' =>
                         if let Some(_) = chars_iter.next_if_eq(&'=') {
                             TokenKind::GreaterEqual
                         } else {
                             TokenKind::Greater
-                        }
-                    }, // > or >=
+                        }, // > or >=
                     '&' => {
                         if let Some(_) = chars_iter.next_if_eq(&'&') {
                             TokenKind::And
@@ -165,7 +189,7 @@ impl Lexer {
                             }
                         } // &&
                     },
-                    '|' => {
+                    '|' =>
                         if let Some(_) = chars_iter.next_if_eq(&'|') {
                             TokenKind::Or
                         } else {
@@ -175,8 +199,7 @@ impl Lexer {
                                 SourceInfo::new(line_number + 1, line_offset + 1, 1),
                                 tokens
                             );
-                        }
-                    }, // ||
+                        }, // ||
 
                     '"' => {
                         let mut lit = String::new();
@@ -197,27 +220,25 @@ impl Lexer {
                                                     lit.push('\\');
                                                     lit.push(c);
                                                 }, // unknown escape
-                                                None => {
+                                                None =>
                                                     return lexer_error!(
                                                         LexerErrorKind::UnexpectedEof,
                                                         file.path.clone(),
                                                         SourceInfo::new(line_number + 1, line_offset + 1, 1),
                                                         tokens
-                                                    )
-                                                },
+                                                    ),
                                             }
                                         } else {
                                             lit.push(c);
                                         }
                                     },
-                                    None => {
+                                    None =>
                                         return lexer_error!(
                                             LexerErrorKind::UnexpectedEof,
                                             file.path.clone(),
                                             SourceInfo::new(line_number + 1, line_offset + 1, 1),
                                             tokens
-                                        )
-                                    },
+                                        ),
                                 }
                             }
                         }
@@ -269,14 +290,13 @@ impl Lexer {
                             _ => TokenKind::Identifier(lit),
                         }
                     },
-                    _ => {
+                    _ =>
                         return lexer_error!(
                             LexerErrorKind::UnexpectedChar,
                             file.path.clone(),
                             SourceInfo::new(line_number + 1, line_offset, 1),
                             tokens
-                        )
-                    },
+                        ),
                 };
                 let width = kind.get_width();
                 tokens.push(Token::new(kind.clone(), SourceInfo::new(line_number + 1, line_offset, width)));

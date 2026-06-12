@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use slotmap::Key;
 
-use crate::hfs::{ast::*, hfs_ir::*, scope_stack::*, token::*, IrArena};
+use crate::hfs::{IrArena, ast::*, hfs_ir::*, scope_stack::*, token::*};
 
 //---------------------------------------------------------------------------
 // Runtime values
@@ -24,7 +24,7 @@ impl RuntimeValue {
             Type::Bool { .. } => RuntimeValue::Bool(false),
             Type::Float { .. } => RuntimeValue::Float(0.0),
             Type::Tuple { .. } => RuntimeValue::Tuple(Vec::new()),
-            Type::Array { hfs_type: _, length: _ } => todo!(),
+            Type::Array { .. } => todo!(),
         }
     }
 }

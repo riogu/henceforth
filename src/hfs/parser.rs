@@ -108,6 +108,11 @@ impl Parser {
                     token,
                 ))
             },
+            TokenKind::LeftBracket => {
+                let (hfs_type, length) = self.array_type()?;
+                let ptr_count = self.consume_token_chain(TokenKind::Star);
+                Ok(self.arena.alloc_type(Type::Array { hfs_type, length, ptr_count }, token))
+            },
             _ => parser_error!(ParserErrorKind::ExpectedButFound(vec![Expectable::Type], Some(token.kind)), &self.arena, vec![
                 token.source_info
             ]),
@@ -127,6 +132,46 @@ impl Parser {
             types.push(self.expect_type()?);
         }
         Ok(types)
+    }
+
+    fn array_type(&mut self) -> Result<(TypeId, Option<usize>), Box<dyn CompileError>> {
+        self.expect(TokenKind::LeftBracket)?;
+        let length = match self.tokens.peek() {
+            Some(t) if matches!(t.kind, TokenKind::Literal(_)) => {
+                let t = self.tokens.next().unwrap();
+                match t.kind {
+                    TokenKind::Literal(Literal::Integer(n)) => Some(n as usize),
+                    _ =>
+                        return parser_error!(
+                            ParserErrorKind::ExpectedButFound(vec![Expectable::IntegerLiteral], Some(t.kind)),
+                            &self.arena,
+                            vec![t.source_info]
+                        ),
+                }
+            },
+            Some(t) if matches!(t.kind, TokenKind::RightBracket) => None,
+            Some(t) =>
+                return parser_error!(
+                    ParserErrorKind::ExpectedButFound(
+                        vec![Expectable::Literal, Expectable::Token(TokenKind::RightBracket)],
+                        Some(t.kind.clone())
+                    ),
+                    &self.arena,
+                    vec![t.source_info]
+                ),
+            None =>
+                return parser_error!(
+                    ParserErrorKind::ExpectedButFound(
+                        vec![Expectable::Literal, Expectable::Token(TokenKind::RightBracket)],
+                        None
+                    ),
+                    &self.arena,
+                    vec![self.arena.diagnostic_info.eof_pos]
+                ),
+        };
+        self.expect(TokenKind::RightBracket)?;
+        let hfs_type = self.expect_type()?;
+        Ok((hfs_type, length))
     }
 }
 

@@ -1,0 +1,1 @@
+fn main: () -> (["str") //? ERROR "expected integer literal found {{*}}"

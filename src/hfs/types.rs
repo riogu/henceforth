@@ -1,4 +1,4 @@
-use crate::hfs::{ast::*, error::CompileError, token::*, GlobalIrVarId, InstId, Instruction, IrArena, IrFuncId, IrOperation};
+use crate::hfs::{GlobalIrVarId, InstId, Instruction, IrArena, IrFuncId, IrOperation, ast::*, error::CompileError, token::*};
 
 pub const PRIMITIVE_TYPE_COUNT: usize = 4;
 
@@ -167,7 +167,7 @@ impl IrArena {
             Type::Bool { ptr_count } => Type::Bool { ptr_count: ptr_count - 1 },
             Type::Float { ptr_count } => Type::Float { ptr_count: ptr_count - 1 },
             Type::Tuple { ptr_count, type_ids } => Type::Tuple { ptr_count: ptr_count - 1, type_ids: type_ids.clone() },
-            Type::Array { hfs_type: _, length: _ } => todo!(),
+            Type::Array { hfs_type: _, length: _, ptr_count } => todo!(),
         };
         self.alloc_type(hfs_type, source_info)
     }

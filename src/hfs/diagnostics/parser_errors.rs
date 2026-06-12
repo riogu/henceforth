@@ -12,6 +12,8 @@ use crate::hfs::{
 pub enum Expectable {
     AnyToken,
     Token(TokenKind),
+    Literal,
+    IntegerLiteral,
     Identifier,
     StackKeyword,
     Type,
@@ -35,6 +37,8 @@ impl Display for Expectable {
             Expectable::AnyToken => write!(f, "token"),
             Expectable::StackExpression => write!(f, "stack expression"),
             Expectable::StackOperation => write!(f, "stack operation"),
+            Expectable::Literal => write!(f, "literal"),
+            Expectable::IntegerLiteral => write!(f, "integer literal"),
         }
     }
 }

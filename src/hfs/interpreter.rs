@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use slotmap::Key;
 
-use crate::hfs::{IrArena, ast::*, hfs_ir::*, scope_stack::*, token::*};
+use crate::hfs::{IrArena, IrType, ast::*, hfs_ir::*, scope_stack::*, token::*};
 
 //---------------------------------------------------------------------------
 // Runtime values
@@ -17,14 +17,14 @@ pub enum RuntimeValue {
 }
 
 impl RuntimeValue {
-    pub fn default(hfs_type: &Type) -> RuntimeValue {
+    pub fn default(hfs_type: &IrType) -> RuntimeValue {
         match hfs_type {
-            Type::Int { .. } => RuntimeValue::Integer(0),
-            Type::String { .. } => RuntimeValue::String("".to_string()),
-            Type::Bool { .. } => RuntimeValue::Bool(false),
-            Type::Float { .. } => RuntimeValue::Float(0.0),
-            Type::Tuple { .. } => RuntimeValue::Tuple(Vec::new()),
-            Type::Array { .. } => todo!(),
+            IrType::Int { .. } => RuntimeValue::Integer(0),
+            IrType::String { .. } => RuntimeValue::String("".to_string()),
+            IrType::Bool { .. } => RuntimeValue::Bool(false),
+            IrType::Float { .. } => RuntimeValue::Float(0.0),
+            IrType::Tuple { .. } => RuntimeValue::Tuple(Vec::new()),
+            IrType::Array { .. } => todo!(),
         }
     }
 }

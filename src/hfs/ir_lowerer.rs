@@ -5,8 +5,8 @@ use slotmap::Key;
 
 use crate::{
     hfs::{
-        BlockId, GlobalIrVarDeclaration, GlobalIrVarId, InstId, Instruction, IrArena, IrFuncId, IrFunction, IrOperation,
-        IrTopLevelId, PRIMITIVE_TYPE_COUNT, SourceInfo, TerminatorInst,
+        BlockId, ElaboratedType, GlobalIrVarDeclaration, GlobalIrVarId, InstId, Instruction, IrArena, IrFuncId, IrFunction,
+        IrOperation, IrTopLevelId, IrType, PRIMITIVE_TYPE_COUNT, SourceInfo, TerminatorInst, Type,
         ast::*,
         error::{CompileError, DiagnosticInfo},
         ir_lowerer_errors::IrLowererErrorKind,
@@ -48,8 +48,7 @@ pub struct IrLowerer {
 
 impl IrLowerer {
     pub fn new(ast_arena: AstArena, diagnostic_info: Rc<DiagnosticInfo>) -> Self {
-        let mut arena = IrArena::new(diagnostic_info);
-        arena.types.extend_from_slice(&ast_arena.types[PRIMITIVE_TYPE_COUNT..]);
+        let arena = IrArena::new(diagnostic_info);
         Self {
             ast_arena,
             arena,
@@ -65,7 +64,11 @@ impl IrLowerer {
         ast_arena: AstArena,
         diagnostic_info: Rc<DiagnosticInfo>,
     ) -> Result<(Vec<IrTopLevelId>, IrArena), Box<dyn CompileError>> {
-        let mut ir_lowerer = IrLowerer::new(ast_arena, diagnostic_info);
+        let mut ir_lowerer = IrLowerer::new(ast_arena.clone(), diagnostic_info);
+        for elaborated_type in ast_arena.types[PRIMITIVE_TYPE_COUNT..].iter() {
+            let lowered = ir_lowerer.lower_type(elaborated_type.clone())?;
+            ir_lowerer.arena.types.push(lowered);
+        }
         let analyzed_top_level = ir_lowerer.lower_top_level(top_level)?;
         // ir_lowerer.print_hfs_mir(analyzed_top_level);
         Ok((analyzed_top_level, ir_lowerer.arena))
@@ -235,7 +238,8 @@ impl IrLowerer {
                 ]),
         };
         let cond_type = self.arena.get_type_id_of_inst(cond)?;
-        self.arena.compare_types(cond_type, self.arena.bool_type(), vec![self.arena.get_inst(cond).get_source_info()])?;
+        self.arena
+            .compare_types(cond_type, IrType::new_bool(0).type_id(), vec![self.arena.get_inst(cond).get_source_info()])?;
 
         Ok((cond, block_before_if, if_body_block))
     }
@@ -426,8 +430,9 @@ impl IrLowerer {
                     &self.ast_arena,
                 )?;
                 let cond_type = self.arena.get_type_id_of_inst(cond_inst)?;
-                self.arena
-                    .compare_types(cond_type, self.arena.bool_type(), vec![self.arena.get_inst(cond_inst).get_source_info()])?;
+                self.arena.compare_types(cond_type, IrType::new_bool(0).type_id(), vec![
+                    self.arena.get_inst(cond_inst).get_source_info(),
+                ])?;
                 self.arena.alloc_terminator_for(
                     TerminatorInst::Branch {
                         source_info: source_info.clone(),
@@ -743,6 +748,24 @@ impl IrLowerer {
             Operation::ArrayAccess(_expr_id, _expr_id11) => todo!(),
         };
         Ok(self.arena.alloc_inst_for(Instruction::Operation { source_info, op: cfg_op }, self.ir_context.curr_insert_block))
+    }
+
+    fn lower_type(&mut self, elaborated: ElaboratedType) -> Result<IrType, Box<dyn CompileError>> {
+        match elaborated {
+            ElaboratedType::Int { ptr_count } => Ok(IrType::Int { ptr_count }),
+            ElaboratedType::String { ptr_count } => Ok(IrType::String { ptr_count }),
+            ElaboratedType::Bool { ptr_count } => Ok(IrType::Bool { ptr_count }),
+            ElaboratedType::Float { ptr_count } => Ok(IrType::Float { ptr_count }),
+            ElaboratedType::Tuple { type_ids, ptr_count } => Ok(IrType::Tuple { type_ids, ptr_count }),
+            ElaboratedType::Array { hfs_type, length, ptr_count } => Ok(IrType::Array {
+                hfs_type,
+                length: match length {
+                    Some(id) => Some(self.lower_expr(id)?),
+                    None => None,
+                },
+                ptr_count,
+            }),
+        }
     }
 }
 

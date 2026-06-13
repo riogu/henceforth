@@ -1,6 +1,10 @@
-use std::{collections::HashMap, fmt::Display, rc::Rc};
+use std::{collections::HashMap, rc::Rc};
 
-use crate::hfs::{ScopeKind, UnresolvedAstArena, UnresolvedExprId, error::DiagnosticInfo, token::*};
+use crate::hfs::{
+    ElaboratedType, ScopeKind, Type,
+    error::{CompileError, DiagnosticInfo},
+    token::*,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct VarId(pub usize);
@@ -164,89 +168,6 @@ pub enum Statement {
     },
 }
 
-// -----------------------------------------------------------
-// Types
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum Type {
-    Int { ptr_count: usize },
-    String { ptr_count: usize },
-    Bool { ptr_count: usize },
-    Float { ptr_count: usize },
-    Tuple { type_ids: Vec<TypeId>, ptr_count: usize },
-    Array { hfs_type: TypeId, length: Option<UnresolvedExprId>, ptr_count: usize },
-}
-
-impl Display for Type {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Type::Int { ptr_count: _ } => write!(f, "i32"),
-            Type::String { ptr_count: _ } => write!(f, "str"),
-            Type::Bool { ptr_count: _ } => write!(f, "bool"),
-            Type::Float { ptr_count: _ } => write!(f, "f32"),
-            Type::Tuple { type_ids: _, ptr_count: _ } => write!(f, "tuple"),
-            Type::Array { hfs_type: _, length: _, ptr_count: _ } => todo!(),
-        }
-    }
-}
-
-impl Type {
-    pub fn get_repr_unresolved(&self, arena: &UnresolvedAstArena) -> String {
-        match self {
-            Type::Int { ptr_count: _ } => format!("i32"),
-            Type::String { ptr_count: _ } => format!("str"),
-            Type::Bool { ptr_count: _ } => format!("bool"),
-            Type::Float { ptr_count: _ } => format!("f32"),
-            Type::Tuple { type_ids, ptr_count: _ } => format!(
-                "Tuple<{}>",
-                type_ids.iter().map(|id| arena.get_type(*id).get_repr_unresolved(arena)).collect::<Vec<String>>().join(", ")
-            ),
-            Type::Array { hfs_type, length: _, ptr_count: _ } =>
-                format!("[]{}", arena.get_type(*hfs_type).get_repr_unresolved(arena)),
-        }
-    }
-    pub fn get_repr_resolved(&self, arena: &AstArena) -> String {
-        match self {
-            Type::Int { ptr_count: _ } => format!("i32"),
-            Type::String { ptr_count: _ } => format!("str"),
-            Type::Bool { ptr_count: _ } => format!("bool"),
-            Type::Float { ptr_count: _ } => format!("f32"),
-            Type::Tuple { type_ids, ptr_count: _ } => format!(
-                "Tuple<{}>",
-                type_ids.iter().map(|id| arena.get_type(*id).get_repr_resolved(arena)).collect::<Vec<String>>().join(", ")
-            ),
-            Type::Array { hfs_type: _, length: _, ptr_count: _ } => todo!(),
-        }
-    }
-}
-
-impl Type {
-    pub fn get_ptr_count(&self) -> usize {
-        match *self {
-            Type::Int { ptr_count } => ptr_count,
-            Type::String { ptr_count } => ptr_count,
-            Type::Bool { ptr_count } => ptr_count,
-            Type::Float { ptr_count } => ptr_count,
-            Type::Tuple { ptr_count, .. } => ptr_count,
-            Type::Array { hfs_type: _, length: _, ptr_count } => ptr_count,
-        }
-    }
-    pub fn new_int(ptr_count: usize) -> Self { Type::Int { ptr_count } }
-    pub fn new_string(ptr_count: usize) -> Self { Type::String { ptr_count } }
-    pub fn new_bool(ptr_count: usize) -> Self { Type::Bool { ptr_count } }
-    pub fn new_float(ptr_count: usize) -> Self { Type::Float { ptr_count } }
-    pub fn new_tuple(types: Vec<TypeId>, ptr_count: usize) -> Self { Type::Tuple { type_ids: types, ptr_count } }
-    pub fn to_token(&self) -> TokenKind {
-        match self {
-            Type::Int { ptr_count: _ } => TokenKind::Int,
-            Type::String { ptr_count: _ } => TokenKind::String,
-            Type::Bool { ptr_count: _ } => TokenKind::Bool,
-            Type::Float { ptr_count: _ } => TokenKind::Float,
-            Type::Tuple { .. } => TokenKind::LeftParen,
-            Type::Array { hfs_type: _, length: _, ptr_count: _ } => todo!(),
-        }
-    }
-}
-
 // ============================================================================
 // Arena storage with token tracking
 // ============================================================================
@@ -258,7 +179,7 @@ pub struct AstArena {
     pub(crate) vars: Vec<VarDeclaration>,
     pub(crate) functions: Vec<FunctionDeclaration>,
 
-    pub(crate) types: Vec<Type>,
+    pub(crate) types: Vec<ElaboratedType>,
 
     // Token storage (parallel arrays)
     pub(crate) expr_tokens: Vec<Token>,
@@ -270,7 +191,7 @@ pub struct AstArena {
     pub(crate) hfs_stack: Vec<ExprId>, // keeps track of the state of our stack
 
     // Type deduplication cache
-    type_cache: HashMap<Type, TypeId>,
+    type_cache: HashMap<ElaboratedType, TypeId>,
     // compile-time analysis
     // expr provenances shouldn't change after creation
     pub expr_provenances: Vec<ExprProvenance>, // indexed by ExprId
@@ -297,10 +218,22 @@ impl AstArena {
     pub fn new(diagnostic_info: Rc<DiagnosticInfo>) -> Self {
         let mut arena = Self::default();
         arena.diagnostic_info = diagnostic_info;
-        arena.alloc_type_uncached(Type::new_int(0), Token { kind: TokenKind::Int, source_info: SourceInfo::new(0, 0, 0) });
-        arena.alloc_type_uncached(Type::new_float(0), Token { kind: TokenKind::Float, source_info: SourceInfo::new(0, 0, 0) });
-        arena.alloc_type_uncached(Type::new_bool(0), Token { kind: TokenKind::Bool, source_info: SourceInfo::new(0, 0, 0) });
-        arena.alloc_type_uncached(Type::new_string(0), Token { kind: TokenKind::String, source_info: SourceInfo::new(0, 0, 0) });
+        arena.alloc_type_uncached(ElaboratedType::new_int(0), Token {
+            kind: TokenKind::Int,
+            source_info: SourceInfo::new(0, 0, 0),
+        });
+        arena.alloc_type_uncached(ElaboratedType::new_float(0), Token {
+            kind: TokenKind::Float,
+            source_info: SourceInfo::new(0, 0, 0),
+        });
+        arena.alloc_type_uncached(ElaboratedType::new_bool(0), Token {
+            kind: TokenKind::Bool,
+            source_info: SourceInfo::new(0, 0, 0),
+        });
+        arena.alloc_type_uncached(ElaboratedType::new_string(0), Token {
+            kind: TokenKind::String,
+            source_info: SourceInfo::new(0, 0, 0),
+        });
         arena
     }
 
@@ -346,14 +279,14 @@ impl AstArena {
     }
 
     // Internal: allocate without checking cache
-    fn alloc_type_uncached(&mut self, hfs_type: Type, token: Token) -> TypeId {
+    fn alloc_type_uncached(&mut self, hfs_type: ElaboratedType, token: Token) -> TypeId {
         let id = TypeId(self.types.len());
         self.types.push(hfs_type.clone());
         self.type_tokens.push(token);
         self.type_cache.insert(hfs_type, id);
         id
     }
-    pub fn alloc_type(&mut self, hfs_type: Type, token: Token) -> TypeId {
+    pub fn alloc_type(&mut self, hfs_type: ElaboratedType, token: Token) -> TypeId {
         // Check if this type already exists
         if let Some(&existing_id) = self.type_cache.get(&hfs_type) {
             return existing_id;
@@ -382,7 +315,7 @@ impl AstArena {
     pub fn get_stmt(&self, id: StmtId) -> &Statement { &self.stmts[id.0] }
     pub fn get_var(&self, id: VarId) -> &VarDeclaration { &self.vars[id.0] }
     pub fn get_func(&self, id: FuncId) -> &FunctionDeclaration { &self.functions[id.0] }
-    pub fn get_type(&self, id: TypeId) -> &Type { &self.types[id.0] }
+    pub fn get_type(&self, id: TypeId) -> &ElaboratedType { &self.types[id.0] }
 
     pub fn get_stack_keyword_from_name(&self, name: &str) -> &StackKeywordDeclaration<'_> {
         if let Some(keyword) = STACK_KEYWORDS.iter().find(|keyword| keyword.name == name) {
@@ -411,15 +344,86 @@ impl AstArena {
 
     pub fn to_type(&mut self, token: Token) -> TypeId {
         match token.kind {
-            TokenKind::Int => self.alloc_type(Type::new_int(0), token),
-            TokenKind::String => self.alloc_type(Type::new_string(0), token),
-            TokenKind::Bool => self.alloc_type(Type::new_bool(0), token),
-            TokenKind::Float => self.alloc_type(Type::new_float(0), token),
+            TokenKind::Int => self.alloc_type(ElaboratedType::new_int(0), token),
+            TokenKind::String => self.alloc_type(ElaboratedType::new_string(0), token),
+            TokenKind::Bool => self.alloc_type(ElaboratedType::new_bool(0), token),
+            TokenKind::Float => self.alloc_type(ElaboratedType::new_float(0), token),
             TokenKind::Identifier(_) => {
                 panic!("[internal hfs error]: this is not how you convert identifiers to types")
             },
             _ => panic!("[internal hfs error]: expected token that has a type, got {:?}", token.kind),
         }
+    }
+}
+
+impl AstArena {
+    // Only expressions have types!
+    pub fn get_type_of_operation(&mut self, op: &Operation) -> Result<TypeId, Box<dyn CompileError>> {
+        match op {
+            Operation::Add(lhs, _rhs)
+            | Operation::Sub(lhs, _rhs)
+            | Operation::Mul(lhs, _rhs)
+            | Operation::Div(lhs, _rhs)
+            | Operation::Mod(lhs, _rhs) => {
+                let lhs_type = self.get_type_id_of_expr(*lhs)?;
+                Ok(lhs_type)
+            },
+            Operation::Or(_, _)
+            | Operation::And(_, _)
+            | Operation::Not(_)
+            | Operation::Equal(_, _)
+            | Operation::NotEqual(_, _)
+            | Operation::Less(_, _)
+            | Operation::LessEqual(_, _)
+            | Operation::Greater(_, _)
+            | Operation::GreaterEqual(_, _) => Ok(ElaboratedType::new_bool(0).type_id()),
+            Operation::AddressOf(_) => todo!(),
+            Operation::Dereference(_) => todo!(),
+            Operation::ArrayAccess(_expr_id, _expr_id1) => todo!(),
+        }
+    }
+
+    pub fn get_type_id_of_expr(&mut self, expr_id: ExprId) -> Result<TypeId, Box<dyn CompileError>> {
+        match self.get_expr(expr_id).clone() {
+            Expression::Operation(operation) => Ok(self.get_type_of_operation(&operation)?),
+            Expression::Identifier(identifier) => match identifier {
+                Identifier::GlobalVar(var_id) | Identifier::Variable(var_id) => {
+                    let var = self.get_var(var_id);
+                    Ok(var.hfs_type)
+                },
+                Identifier::Function(func_id) => {
+                    let func = self.get_func(func_id);
+                    Ok(func.return_type)
+                },
+            },
+            Expression::Literal(literal) => match literal {
+                Literal::Integer(_) => Ok(ElaboratedType::new_int(0).type_id()),
+                Literal::Float(_) => Ok(ElaboratedType::new_float(0).type_id()),
+                Literal::String(_) => Ok(ElaboratedType::new_string(0).type_id()),
+                Literal::Bool(_) => Ok(ElaboratedType::new_bool(0).type_id()),
+            },
+            Expression::Tuple { expressions } => {
+                let token = self.get_expr_token(expr_id).clone();
+                // Build tuple type from element types
+                let mut element_types = Vec::new();
+                for expr_id in expressions.clone() {
+                    let elem_type = self.get_type_id_of_expr(expr_id)?;
+                    element_types.push(elem_type);
+                }
+
+                let tuple_type = ElaboratedType::Tuple { type_ids: element_types, ptr_count: 0 };
+                Ok(self.alloc_type(tuple_type, token))
+            },
+            Expression::Parameter { index: _, type_id } => Ok(type_id),
+            Expression::ReturnValue(type_id) => Ok(type_id),
+        }
+    }
+    pub fn get_type_of_var(&self, var_id: VarId) -> &ElaboratedType { self.get_type(self.get_var(var_id).hfs_type) }
+    pub fn get_type_of_func(&self, func_id: FuncId) -> &ElaboratedType { self.get_type(self.get_func(func_id).return_type) }
+
+    pub fn get_type_of_expr(&mut self, expr_id: ExprId) -> Result<&ElaboratedType, Box<dyn CompileError>> {
+        let type_id = self.get_type_id_of_expr(expr_id)?;
+        Ok(self.get_type(type_id))
     }
 }
 

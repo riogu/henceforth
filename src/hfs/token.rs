@@ -1,3 +1,5 @@
+use std::fmt;
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Literal {
     Integer(i32),
@@ -114,23 +116,6 @@ pub enum TokenKind {
     // Special
     Newline, // if significant whitespace
 }
-
-impl From<Type> for TokenKind {
-    fn from(value: Type) -> Self {
-        match value {
-            Type::Int { .. } => TokenKind::Int,
-            Type::String { .. } => TokenKind::String,
-            Type::Bool { .. } => TokenKind::Bool,
-            Type::Float { .. } => TokenKind::Float,
-            Type::Tuple { .. } => TokenKind::LeftParen,
-            Type::Array { hfs_type: _, length: _, ptr_count: _ } => TokenKind::LeftBracket,
-        }
-    }
-}
-
-use std::fmt::{self};
-
-use crate::hfs::ast::Type;
 
 impl fmt::Display for TokenKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -275,18 +260,6 @@ impl Token {
     }
 }
 impl TokenKind {
-    pub fn to_type(&self) -> Type {
-        match self {
-            TokenKind::Int => Type::new_int(0),
-            TokenKind::String => Type::new_string(0),
-            TokenKind::Bool => Type::new_bool(0),
-            TokenKind::Float => Type::new_float(0),
-            TokenKind::Identifier(_) => {
-                panic!("[internal hfs error]: this is not how you convert identifiers to types")
-            },
-            _ => panic!("[internal hfs error]: expected token that has a type, got {:?}", self),
-        }
-    }
     pub fn is_type(&self) -> bool {
         match self {
             TokenKind::Int | TokenKind::String | TokenKind::Bool | TokenKind::Float => true,

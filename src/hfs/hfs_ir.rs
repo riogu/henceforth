@@ -3,7 +3,7 @@ use std::{collections::HashSet, fmt::Display, vec};
 use indexmap::IndexMap;
 use slotmap::new_key_type;
 
-use crate::hfs::{ast::*, ir_pretty_printing::prettify_ir, print, syntax_term, IrArena, Literal, SourceInfo};
+use crate::hfs::{IrArena, IrType, Literal, SourceInfo, ast::*, ir_pretty_printing::prettify_ir, print, syntax_term};
 /*
 =================================================================================================
 Control Flow Graph IR Pass (HFS MIR - Medium-level IR)
@@ -360,9 +360,9 @@ impl IrArena {
                 names.func_to_name.insert(fid, f.name.clone());
             }
             for (i, typ) in self.types.iter().enumerate() {
-                let tid = crate::hfs::TypeId(i);
+                let tid = TypeId(i);
                 if !names.type_to_name.contains_key(&tid) {
-                    if let crate::hfs::Type::Tuple { type_ids, .. } = typ {
+                    if let IrType::Tuple { type_ids, .. } = typ {
                         let inner: Vec<String> = type_ids
                             .iter()
                             .map(|id| names.type_to_name.get(id).cloned().unwrap_or_else(|| format!("t{}", id.0)))

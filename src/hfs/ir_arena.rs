@@ -11,11 +11,11 @@ use slotmap::SlotMap;
 
 use crate::{
     hfs::{
+        BasicBlock, BlockId, GlobalIrVarDeclaration, GlobalIrVarId, InstId, Instruction, IrFuncId, IrFunction, IrOperation,
+        IrType, Literal, SourceInfo, TermInstId, TerminatorInst, Type,
         ast::*,
         error::{CompileError, DiagnosticInfo},
         ir_lowerer_errors::IrLowererErrorKind,
-        BasicBlock, BlockId, GlobalIrVarDeclaration, GlobalIrVarId, InstId, Instruction, IrFuncId, IrFunction, SourceInfo,
-        TermInstId, TerminatorInst,
     },
     ir_lowerer_error,
 };
@@ -30,11 +30,11 @@ pub struct IrArena {
     pub instructions: SlotMap<InstId, Instruction>,
     pub terminators: SlotMap<TermInstId, TerminatorInst>,
     pub blocks: SlotMap<BlockId, BasicBlock>,
-    pub types: Vec<Type>,
+    pub types: Vec<IrType>,
     pub func_id_to_blocks: HashMap<IrFuncId, Vec<BlockId>>, // in insertion order
 
     pub type_source_infos: Vec<SourceInfo>,
-    type_cache: HashMap<Type, TypeId>,
+    type_cache: HashMap<IrType, TypeId>,
     pub hfs_stack: Vec<InstId>,
     // this is reset whenever we add a terminator instruction to the current block
     // its used to keep track of each merging stack
@@ -59,10 +59,10 @@ impl IrArena {
     pub fn new(diagnostic_info: Rc<DiagnosticInfo>) -> Self {
         let mut arena = Self::default();
         arena.diagnostic_info = diagnostic_info;
-        arena.alloc_type_uncached(Type::new_int(0), SourceInfo::new(0, 0, 0));
-        arena.alloc_type_uncached(Type::new_float(0), SourceInfo::new(0, 0, 0));
-        arena.alloc_type_uncached(Type::new_bool(0), SourceInfo::new(0, 0, 0));
-        arena.alloc_type_uncached(Type::new_string(0), SourceInfo::new(0, 0, 0));
+        arena.alloc_type_uncached(IrType::new_int(0), SourceInfo::new(0, 0, 0));
+        arena.alloc_type_uncached(IrType::new_float(0), SourceInfo::new(0, 0, 0));
+        arena.alloc_type_uncached(IrType::new_bool(0), SourceInfo::new(0, 0, 0));
+        arena.alloc_type_uncached(IrType::new_string(0), SourceInfo::new(0, 0, 0));
         arena
     }
 
@@ -95,13 +95,13 @@ impl IrArena {
         self.hfs_stack.pop()
     }
 
-    pub fn alloc_type_uncached(&mut self, hfs_type: Type, source_info: SourceInfo) -> TypeId {
+    pub fn alloc_type_uncached(&mut self, hfs_type: IrType, source_info: SourceInfo) -> TypeId {
         let id = TypeId(self.types.len());
         self.types.push(hfs_type.clone());
         self.type_source_infos.push(source_info);
         id
     }
-    pub fn alloc_type(&mut self, hfs_type: Type, source_info: SourceInfo) -> TypeId {
+    pub fn alloc_type(&mut self, hfs_type: IrType, source_info: SourceInfo) -> TypeId {
         // Check if this type already exists
         if let Some(&existing_id) = self.type_cache.get(&hfs_type) {
             return existing_id;
@@ -232,7 +232,7 @@ impl IrArena {
     pub fn get_var(&self, id: GlobalIrVarId) -> &GlobalIrVarDeclaration { &self.global_vars[id] }
     pub fn get_func(&self, func_id: IrFuncId) -> &IrFunction { &self.functions[func_id] }
     pub fn get_func_mut(&mut self, func_id: IrFuncId) -> &mut IrFunction { &mut self.functions[func_id] }
-    pub fn get_type(&self, id: TypeId) -> &Type { &self.types[id.0] }
+    pub fn get_type(&self, id: TypeId) -> &IrType { &self.types[id.0] }
     pub fn get_inst_mut(&mut self, inst_id: InstId) -> &mut Instruction { &mut self.instructions[inst_id] }
     pub fn get_inst(&self, inst_id: InstId) -> &Instruction { &self.instructions[inst_id] }
     pub fn try_get_inst(&self, inst_id: InstId) -> Option<&Instruction> {
@@ -292,8 +292,8 @@ impl IrArena {
 
         match (actual_type, expected_type) {
             (
-                Type::Tuple { type_ids: actual_types, ptr_count: actual_ptr_count },
-                Type::Tuple { type_ids: expected_types, ptr_count: expected_ptr_count },
+                IrType::Tuple { type_ids: actual_types, ptr_count: actual_ptr_count },
+                IrType::Tuple { type_ids: expected_types, ptr_count: expected_ptr_count },
             ) => {
                 if actual_types.len() != expected_types.len() {
                     return ir_lowerer_error!(
@@ -328,6 +328,147 @@ impl IrArena {
                 None,
                 source_infos
             ),
+        }
+    }
+}
+
+impl IrArena {
+    // Only expressions have types!
+    pub fn get_type_of_operation(&mut self, op: &IrOperation) -> Result<TypeId, Box<dyn CompileError>> {
+        match op {
+            // Arithmetic operations: return the operand type
+            IrOperation::Add(lhs, _rhs)
+            | IrOperation::Sub(lhs, _rhs)
+            | IrOperation::Mul(lhs, _rhs)
+            | IrOperation::Div(lhs, _rhs)
+            | IrOperation::Mod(lhs, _rhs) => {
+                let lhs_type = self.get_type_id_of_inst(*lhs)?;
+                Ok(lhs_type)
+            },
+            IrOperation::Or(_, _)
+            | IrOperation::And(_, _)
+            | IrOperation::Not(_)
+            | IrOperation::Equal(_, _)
+            | IrOperation::NotEqual(_, _)
+            | IrOperation::Less(_, _)
+            | IrOperation::LessEqual(_, _)
+            | IrOperation::Greater(_, _)
+            | IrOperation::GreaterEqual(_, _) => Ok(IrType::new_bool(0).type_id()),
+        }
+    }
+
+    pub fn get_type_id_of_inst(&mut self, inst_id: InstId) -> Result<TypeId, Box<dyn CompileError>> {
+        match self.get_inst(inst_id).clone() {
+            Instruction::Operation { source_info: _, op } => Ok(self.get_type_of_operation(&op)?),
+            Instruction::Literal { source_info: _, literal } => match literal {
+                Literal::Integer(_) => Ok(IrType::new_int(0).type_id()),
+                Literal::Float(_) => Ok(IrType::new_float(0).type_id()),
+                Literal::String(_) => Ok(IrType::new_string(0).type_id()),
+                Literal::Bool(_) => Ok(IrType::new_bool(0).type_id()),
+            },
+            Instruction::Tuple { source_info, instructions } => {
+                // Build tuple type from element types
+                let mut element_types = Vec::new();
+                for inst_id in instructions.clone() {
+                    let elem_type = self.get_type_id_of_inst(inst_id)?;
+                    element_types.push(elem_type);
+                }
+
+                let tuple_type = IrType::Tuple { type_ids: element_types, ptr_count: 0 };
+                Ok(self.alloc_type(tuple_type, source_info.clone()))
+            },
+            Instruction::Parameter { source_info: _, index: _, type_id } => Ok(type_id),
+            Instruction::FunctionCall { source_info: _, args: _, func_id, is_move: _, return_values: _ } =>
+                Ok(self.get_func(func_id).return_type),
+            Instruction::Phi { source_info: _, incoming } => Ok(self.get_type_id_of_inst(
+                *incoming.values().next().expect("[internal error] found phi with no elements in type checking"),
+            )?),
+            Instruction::LoadElement { source_info: _, index: _, tuple: _ } => todo!(),
+            Instruction::ReturnValue { source_info: _, type_id } => Ok(type_id),
+            Instruction::Load { source_info: _, address: _, type_id } => Ok(type_id),
+            Instruction::Store { source_info: _, address: _, value } => Ok(self.get_type_id_of_inst(value)?),
+            Instruction::Alloca { source_info: _, type_id: _ } => {
+                // implement this later
+                panic!("[internal error] asked for the type of an alloca instruction but i don't see why this would happen")
+            },
+            Instruction::GlobalAlloca(_) => todo!(),
+        }
+    }
+    pub fn get_type_of_var(&self, var_id: GlobalIrVarId) -> &IrType { self.get_type(self.get_var(var_id).hfs_type) }
+    pub fn get_type_of_func(&self, func_id: IrFuncId) -> &IrType { self.get_type(self.get_func(func_id).return_type) }
+
+    pub fn get_type_of_inst(&mut self, inst_id: InstId) -> Result<&IrType, Box<dyn CompileError>> {
+        let type_id = self.get_type_id_of_inst(inst_id)?;
+        Ok(self.get_type(type_id))
+    }
+
+    // returns itself with the pointer count reduced by one
+    pub fn reduce_type_ptr_count(&mut self, type_id: TypeId, source_info: SourceInfo) -> TypeId {
+        let hfs_type = match self.get_type(type_id) {
+            IrType::Int { ptr_count } => IrType::Int { ptr_count: ptr_count - 1 },
+            IrType::String { ptr_count } => IrType::String { ptr_count: ptr_count - 1 },
+            IrType::Bool { ptr_count } => IrType::Bool { ptr_count: ptr_count - 1 },
+            IrType::Float { ptr_count } => IrType::Float { ptr_count: ptr_count - 1 },
+            IrType::Tuple { ptr_count, type_ids } => IrType::Tuple { ptr_count: ptr_count - 1, type_ids: type_ids.clone() },
+            IrType::Array { hfs_type: _, length: _, ptr_count: _ } => todo!(),
+        };
+        self.alloc_type(hfs_type, source_info)
+    }
+
+    // these functions are only used for printing so we don't have to pass a mutable reference to an arena everywhere
+    pub fn get_type_of_operation_no_alloc(&self, op: &IrOperation) -> Option<TypeId> {
+        match op {
+            IrOperation::Add(lhs, _rhs)
+            | IrOperation::Sub(lhs, _rhs)
+            | IrOperation::Mul(lhs, _rhs)
+            | IrOperation::Div(lhs, _rhs)
+            | IrOperation::Mod(lhs, _rhs) => self.get_type_id_of_inst_no_alloc(*lhs),
+            IrOperation::Or(_, _)
+            | IrOperation::And(_, _)
+            | IrOperation::Not(_)
+            | IrOperation::Equal(_, _)
+            | IrOperation::NotEqual(_, _)
+            | IrOperation::Less(_, _)
+            | IrOperation::LessEqual(_, _)
+            | IrOperation::Greater(_, _)
+            | IrOperation::GreaterEqual(_, _) => Some(IrType::new_bool(0).type_id()),
+        }
+    }
+
+    pub fn get_type_id_of_inst_no_alloc(&self, inst_id: InstId) -> Option<TypeId> {
+        match self.get_inst(inst_id) {
+            Instruction::Operation { op, .. } => self.get_type_of_operation_no_alloc(op),
+            Instruction::Literal { literal, .. } => match literal {
+                Literal::Integer(_) => Some(IrType::new_int(0).type_id()),
+                Literal::Float(_) => Some(IrType::new_float(0).type_id()),
+                Literal::String(_) => Some(IrType::new_string(0).type_id()),
+                Literal::Bool(_) => Some(IrType::new_bool(0).type_id()),
+            },
+            Instruction::Tuple { instructions, .. } => {
+                let element_types: Option<Vec<TypeId>> =
+                    instructions.iter().map(|id| self.get_type_id_of_inst_no_alloc(*id)).collect();
+                let element_types = element_types?;
+                self.types.iter().enumerate().find_map(|(i, t)| {
+                    if let IrType::Tuple { type_ids, .. } = t {
+                        if *type_ids == element_types {
+                            Some(TypeId(i))
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                })
+            },
+            Instruction::Parameter { type_id, .. } => Some(*type_id),
+            Instruction::FunctionCall { func_id, .. } => Some(self.get_func(*func_id).return_type),
+            Instruction::Phi { incoming, .. } => self.get_type_id_of_inst_no_alloc(*incoming.values().next()?),
+            Instruction::ReturnValue { type_id, .. } => Some(*type_id),
+            Instruction::Load { type_id, .. } => Some(*type_id),
+            Instruction::Store { value, .. } => self.get_type_id_of_inst_no_alloc(*value),
+            Instruction::Alloca { .. } => None,
+            Instruction::LoadElement { .. } => None,
+            Instruction::GlobalAlloca(_) => None,
         }
     }
 }

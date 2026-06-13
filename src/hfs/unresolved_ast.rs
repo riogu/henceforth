@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use crate::hfs::{ScopeKind, ast::*, error::DiagnosticInfo, token::*};
+use crate::hfs::{ScopeKind, Type, UnresolvedType, ast::*, error::DiagnosticInfo, token::*};
 
 // ============================================================================
 // First-pass AST (no stack resolution)
@@ -135,7 +135,7 @@ pub struct UnresolvedAstArena {
     pub(crate) unresolved_stmts: Vec<UnresolvedStatement>,
     pub(crate) unresolved_vars: Vec<UnresolvedVarDeclaration>,
     pub(crate) unresolved_functions: Vec<UnresolvedFunctionDeclaration>,
-    pub(crate) types: Vec<Type>,
+    pub(crate) types: Vec<UnresolvedType>,
 
     // Token storage
     pub(crate) unresolved_expr_tokens: Vec<Token>,
@@ -161,14 +161,26 @@ impl UnresolvedAstArena {
     pub fn new(diagnostic_info: Rc<DiagnosticInfo>) -> Self {
         let mut arena = Self::default();
         arena.diagnostic_info = diagnostic_info;
-        arena.alloc_type_uncached(Type::new_int(0), Token { kind: TokenKind::Int, source_info: SourceInfo::new(0, 0, 0) });
-        arena.alloc_type_uncached(Type::new_float(0), Token { kind: TokenKind::Float, source_info: SourceInfo::new(0, 0, 0) });
-        arena.alloc_type_uncached(Type::new_bool(0), Token { kind: TokenKind::Bool, source_info: SourceInfo::new(0, 0, 0) });
-        arena.alloc_type_uncached(Type::new_string(0), Token { kind: TokenKind::String, source_info: SourceInfo::new(0, 0, 0) });
+        arena.alloc_type_uncached(UnresolvedType::new_int(0), Token {
+            kind: TokenKind::Int,
+            source_info: SourceInfo::new(0, 0, 0),
+        });
+        arena.alloc_type_uncached(UnresolvedType::new_float(0), Token {
+            kind: TokenKind::Float,
+            source_info: SourceInfo::new(0, 0, 0),
+        });
+        arena.alloc_type_uncached(UnresolvedType::new_bool(0), Token {
+            kind: TokenKind::Bool,
+            source_info: SourceInfo::new(0, 0, 0),
+        });
+        arena.alloc_type_uncached(UnresolvedType::new_string(0), Token {
+            kind: TokenKind::String,
+            source_info: SourceInfo::new(0, 0, 0),
+        });
         arena
     }
 
-    fn alloc_type_uncached(&mut self, hfs_type: Type, token: Token) -> TypeId {
+    fn alloc_type_uncached(&mut self, hfs_type: UnresolvedType, token: Token) -> TypeId {
         let id = TypeId(self.types.len());
         self.types.push(hfs_type.clone());
         self.type_tokens.push(token);
@@ -203,7 +215,7 @@ impl UnresolvedAstArena {
         id
     }
 
-    pub fn alloc_type(&mut self, hfs_type: Type, token: Token) -> TypeId {
+    pub fn alloc_type(&mut self, hfs_type: UnresolvedType, token: Token) -> TypeId {
         if let Some(id) = self.types.iter().position(|t| *t == hfs_type) {
             return TypeId(id);
         }
@@ -222,7 +234,7 @@ impl UnresolvedAstArena {
 
     pub fn get_unresolved_func(&self, id: UnresolvedFuncId) -> &UnresolvedFunctionDeclaration { &self.unresolved_functions[id.0] }
 
-    pub fn get_type(&self, id: TypeId) -> &Type { &self.types[id.0] }
+    pub fn get_type(&self, id: TypeId) -> &UnresolvedType { &self.types[id.0] }
 
     // Token accessor methods
     pub fn get_unresolved_expr_token(&self, id: UnresolvedExprId) -> Token { self.unresolved_expr_tokens[id.0].clone() }
@@ -237,10 +249,10 @@ impl UnresolvedAstArena {
 
     pub fn to_type(&mut self, token: Token, ptr_count: usize) -> TypeId {
         match token.kind {
-            TokenKind::Int => self.alloc_type(Type::new_int(ptr_count), token),
-            TokenKind::String => self.alloc_type(Type::new_string(ptr_count), token),
-            TokenKind::Bool => self.alloc_type(Type::new_bool(ptr_count), token),
-            TokenKind::Float => self.alloc_type(Type::new_float(ptr_count), token),
+            TokenKind::Int => self.alloc_type(UnresolvedType::new_int(ptr_count), token),
+            TokenKind::String => self.alloc_type(UnresolvedType::new_string(ptr_count), token),
+            TokenKind::Bool => self.alloc_type(UnresolvedType::new_bool(ptr_count), token),
+            TokenKind::Float => self.alloc_type(UnresolvedType::new_float(ptr_count), token),
             TokenKind::Identifier(_) => {
                 panic!("[internal hfs error]: this is not how you convert identifiers to types")
             },

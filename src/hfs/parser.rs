@@ -2,7 +2,7 @@ use std::{iter::Peekable, rc::Rc, vec::IntoIter};
 
 use crate::{
     hfs::{
-        ScopeKind,
+        ScopeKind, UnresolvedType,
         ast::*,
         error::{CompileError, DiagnosticInfo},
         parser_errors::{Expectable, ParserError, ParserErrorKind},
@@ -95,12 +95,12 @@ impl Parser {
                 Ok(self.arena.to_type(token, ptr_count))
             },
             TokenKind::LeftParen => {
-                let hfs_type = Type::Tuple { type_ids: self.type_list()?, ptr_count: 0 };
+                let hfs_type = UnresolvedType::Tuple { type_ids: self.type_list()?, ptr_count: 0 };
                 let ptr_count = self.consume_token_chain(TokenKind::Star);
                 Ok(self.arena.alloc_type(
-                    Type::Tuple {
+                    UnresolvedType::Tuple {
                         type_ids: match hfs_type {
-                            Type::Tuple { type_ids, .. } => type_ids,
+                            UnresolvedType::Tuple { type_ids, .. } => type_ids,
                             _ => unreachable!(),
                         },
                         ptr_count,
@@ -111,7 +111,7 @@ impl Parser {
             TokenKind::LeftBracket => {
                 let (hfs_type, length) = self.array_type()?;
                 let ptr_count = self.consume_token_chain(TokenKind::Star);
-                Ok(self.arena.alloc_type(Type::Array { hfs_type, length, ptr_count }, token))
+                Ok(self.arena.alloc_type(UnresolvedType::Array { hfs_type, length, ptr_count }, token))
             },
             _ => parser_error!(ParserErrorKind::ExpectedButFound(vec![Expectable::Type], Some(token.kind)), &self.arena, vec![
                 token.source_info

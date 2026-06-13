@@ -59,7 +59,7 @@ impl AstArena {
     }
 
     pub fn validate_return_stack(&mut self, return_type: TypeId, tokens: Vec<Token>) -> Result<(), Box<dyn CompileError>> {
-        let Type::Tuple { type_ids: return_types, .. } = self.get_type(return_type) else {
+        let ElaboratedType::Tuple { type_ids: return_types, .. } = self.get_type(return_type) else {
             panic!("[internal error] functions only return tuples at the moment.")
         };
         let return_types = return_types.clone();
@@ -96,10 +96,10 @@ impl AstArena {
         arg_type: TypeId,
         arg_tokens: Vec<Token>,
     ) -> Result<(), Box<dyn CompileError>> {
-        let Type::Tuple { .. } = self.get_type(arg_type) else {
+        let ElaboratedType::Tuple { .. } = self.get_type(arg_type) else {
             panic!("[internal error] expected tuple on stack before function call")
         };
-        let Type::Tuple { .. } = self.get_type(param_type) else {
+        let ElaboratedType::Tuple { .. } = self.get_type(param_type) else {
             panic!("[internal error] function parameter type must be a tuple")
         };
 
@@ -117,8 +117,8 @@ impl AstArena {
 
         match (actual_type, expected_type) {
             (
-                Type::Tuple { type_ids: actual_types, ptr_count: actual_ptr_count },
-                Type::Tuple { type_ids: expected_types, ptr_count: expected_ptr_count },
+                ElaboratedType::Tuple { type_ids: actual_types, ptr_count: actual_ptr_count },
+                ElaboratedType::Tuple { type_ids: expected_types, ptr_count: expected_ptr_count },
             ) => {
                 if actual_types.len() != expected_types.len() {
                     return stack_analyzer_error!(
@@ -168,8 +168,7 @@ pub struct StackAnalyzer {
 
 impl StackAnalyzer {
     pub fn new(unresolved: UnresolvedAstArena, diagnostic_info: Rc<DiagnosticInfo>) -> Self {
-        let mut arena = AstArena::new(diagnostic_info.clone());
-        arena.types.extend_from_slice(&unresolved.types[PRIMITIVE_TYPE_COUNT..]);
+        let arena = AstArena::new(diagnostic_info.clone());
         Self { arena, unresolved_arena: unresolved, scope_resolution_stack: ScopeStack::new(diagnostic_info) }
     }
 
@@ -178,7 +177,11 @@ impl StackAnalyzer {
         unresolved: UnresolvedAstArena,
         diagnostic_info: Rc<DiagnosticInfo>,
     ) -> Result<(Vec<TopLevelId>, AstArena, ScopeStack), Box<dyn CompileError>> {
-        let mut stack_parser = StackAnalyzer::new(unresolved, diagnostic_info);
+        let mut stack_parser = StackAnalyzer::new(unresolved.clone(), diagnostic_info);
+        for unresolved_type in unresolved.types[PRIMITIVE_TYPE_COUNT..].iter() {
+            let elaborated = stack_parser.elaborate(unresolved_type.clone())?;
+            stack_parser.arena.types.push(elaborated);
+        }
         let resolved_top_level = stack_parser.resolve_top_level(top_level)?;
         Ok((resolved_top_level, stack_parser.arena, stack_parser.scope_resolution_stack))
     }
@@ -214,7 +217,9 @@ impl StackAnalyzer {
             let unresolved_func = &self.unresolved_arena.get_unresolved_func(id);
             // deconstruct parameter tuple into Vec<Expression::Parameter>
             let mut params = Vec::<ExprId>::new();
-            if let Type::Tuple { type_ids: param_types, .. } = self.unresolved_arena.get_type(unresolved_func.param_type) {
+            if let UnresolvedType::Tuple { type_ids: param_types, .. } =
+                self.unresolved_arena.get_type(unresolved_func.param_type)
+            {
                 for (index, param_type) in param_types.iter().enumerate() {
                     // function parameter type is always a tuple
                     let token = self.unresolved_arena.get_type_token(*param_type);
@@ -269,7 +274,9 @@ impl StackAnalyzer {
                 // condition isnt included in the stack depth count
                 let cond = self.arena.pop_or_error(vec![self.unresolved_arena.get_unresolved_stmt_token(body)])?;
                 let cond_type = self.arena.get_type_id_of_expr(cond)?;
-                self.arena.compare_types(cond_type, self.arena.bool_type(), vec![self.arena.get_expr_token(cond).clone()])?;
+                self.arena.compare_types(cond_type, ElaboratedType::new_bool(0).type_id(), vec![
+                    self.arena.get_expr_token(cond).clone(),
+                ])?;
 
                 // Analyze if body
                 let if_depth_before = self.arena.hfs_stack.len();
@@ -386,7 +393,9 @@ impl StackAnalyzer {
                 let stack_depth_before = self.arena.hfs_stack.len();
 
                 let cond_type = self.arena.get_type_id_of_expr(cond)?;
-                self.arena.compare_types(cond_type, self.arena.bool_type(), vec![self.arena.get_expr_token(cond).clone()])?;
+                self.arena.compare_types(cond_type, ElaboratedType::new_bool(0).type_id(), vec![
+                    self.arena.get_expr_token(cond).clone(),
+                ])?;
 
                 // Analyze the body
                 let body = self.resolve_stmt(body)?;
@@ -518,7 +527,7 @@ impl StackAnalyzer {
                     self.resolve_func_call_identifier(identifier, self.unresolved_arena.get_unresolved_stmt_token(id))?;
                 let func_decl = self.arena.get_func(func_id).clone(); // make borrow checker happy
 
-                let Type::Tuple { type_ids: param_types, .. } = self.arena.get_type(func_decl.param_type) else {
+                let ElaboratedType::Tuple { type_ids: param_types, .. } = self.arena.get_type(func_decl.param_type) else {
                     panic!("[internal error] functions only recieve tuples at the moment.")
                 };
                 let mut arg_count = 0;
@@ -539,7 +548,7 @@ impl StackAnalyzer {
                 // from what the type was written as (this is the language semantics of a "stack view")
                 arg_types.reverse();
                 arg_expr_tokens.reverse();
-                let arg_type_id = self.arena.alloc_type(Type::Tuple { type_ids: arg_types, ptr_count: 0 }, Token {
+                let arg_type_id = self.arena.alloc_type(ElaboratedType::Tuple { type_ids: arg_types, ptr_count: 0 }, Token {
                     kind: TokenKind::LeftParen,
                     source_info: SourceInfo::new(0, 0, 0),
                 });
@@ -554,7 +563,7 @@ impl StackAnalyzer {
                 self.arena.validate_func_call(func_decl.param_type, arg_type_id, arg_expr_tokens)?;
 
                 // now make sure the stack is updated based on the return type of the function
-                let Type::Tuple { type_ids: return_types, .. } = self.arena.get_type(func_decl.return_type) else {
+                let ElaboratedType::Tuple { type_ids: return_types, .. } = self.arena.get_type(func_decl.return_type) else {
                     panic!("[internal error] functions only return tuples at the moment.")
                 };
                 let mut return_values = Vec::new();
@@ -928,35 +937,43 @@ impl StackAnalyzer {
             | UnresolvedOperation::Mul
             | UnresolvedOperation::Div => {
                 self.arena
-                    .compare_types(lhs_type, self.arena.int_type(), vec![self.arena.get_expr_token(lhs_expr).clone()])
-                    .or(self
-                        .arena
-                        .compare_types(lhs_type, self.arena.float_type(), vec![self.arena.get_expr_token(lhs_expr).clone()]))?;
+                    .compare_types(lhs_type, ElaboratedType::new_int(0).type_id(), vec![
+                        self.arena.get_expr_token(lhs_expr).clone(),
+                    ])
+                    .or(self.arena.compare_types(lhs_type, ElaboratedType::new_float(0).type_id(), vec![
+                        self.arena.get_expr_token(lhs_expr).clone(),
+                    ]))?;
                 Ok(self
                     .arena
-                    .compare_types(rhs_type, self.arena.int_type(), vec![self.arena.get_expr_token(rhs_expr).clone()])
-                    .or(self
-                    .arena
-                    .compare_types(rhs_type, self.arena.float_type(), vec![self.arena.get_expr_token(rhs_expr).clone()]))?)
+                    .compare_types(rhs_type, ElaboratedType::new_int(0).type_id(), vec![
+                        self.arena.get_expr_token(rhs_expr).clone(),
+                    ])
+                    .or(self.arena.compare_types(rhs_type, ElaboratedType::new_float(0).type_id(), vec![
+                        self.arena.get_expr_token(rhs_expr).clone(),
+                    ]))?)
             },
             UnresolvedOperation::Mod => {
-                self.arena.compare_types(lhs_type, self.arena.int_type(), vec![self.arena.get_expr_token(lhs_expr).clone()])?;
-                Ok(self
-                    .arena
-                    .compare_types(rhs_type, self.arena.int_type(), vec![self.arena.get_expr_token(rhs_expr).clone()])?)
+                self.arena.compare_types(lhs_type, ElaboratedType::new_int(0).type_id(), vec![
+                    self.arena.get_expr_token(lhs_expr).clone(),
+                ])?;
+                Ok(self.arena.compare_types(rhs_type, ElaboratedType::new_int(0).type_id(), vec![
+                    self.arena.get_expr_token(rhs_expr).clone(),
+                ])?)
             },
             UnresolvedOperation::Or | UnresolvedOperation::And => {
-                self.arena.compare_types(lhs_type, self.arena.bool_type(), vec![self.arena.get_expr_token(lhs_expr).clone()])?;
-                Ok(self
-                    .arena
-                    .compare_types(rhs_type, self.arena.bool_type(), vec![self.arena.get_expr_token(rhs_expr).clone()])?)
+                self.arena.compare_types(lhs_type, ElaboratedType::new_bool(0).type_id(), vec![
+                    self.arena.get_expr_token(lhs_expr).clone(),
+                ])?;
+                Ok(self.arena.compare_types(rhs_type, ElaboratedType::new_bool(0).type_id(), vec![
+                    self.arena.get_expr_token(rhs_expr).clone(),
+                ])?)
             },
             UnresolvedOperation::NotEqual | UnresolvedOperation::Equal => Ok(()),
             UnresolvedOperation::ArrayAccess => {
                 // TODO check if lhs is an array
-                Ok(self
-                    .arena
-                    .compare_types(rhs_type, self.arena.int_type(), vec![self.arena.get_expr_token(rhs_expr).clone()])?)
+                Ok(self.arena.compare_types(rhs_type, ElaboratedType::new_bool(0).type_id(), vec![
+                    self.arena.get_expr_token(rhs_expr).clone(),
+                ])?)
             },
             _ => panic!("[internal error] unary operation being typechecked in binary context"),
         }
@@ -965,8 +982,9 @@ impl StackAnalyzer {
     fn validate_unary_operand(&mut self, expr: ExprId, op: &UnresolvedOperation) -> Result<(), Box<dyn CompileError>> {
         let lhs_type = self.arena.get_type_id_of_expr(expr)?;
         match op {
-            UnresolvedOperation::Not =>
-                Ok(self.arena.compare_types(lhs_type, self.arena.bool_type(), vec![self.arena.get_expr_token(expr).clone()])?),
+            UnresolvedOperation::Not => Ok(self
+                .arena
+                .compare_types(lhs_type, ElaboratedType::new_bool(0).type_id(), vec![self.arena.get_expr_token(expr).clone()])?),
             UnresolvedOperation::AddressOf => Ok(()),
             UnresolvedOperation::Dereference =>
                 if self.arena.get_type(lhs_type).get_ptr_count() > 0 {
@@ -979,6 +997,24 @@ impl StackAnalyzer {
                     )
                 },
             _ => panic!("[internal error] binary operation being typechecked in unary context"),
+        }
+    }
+
+    fn elaborate(&mut self, unresolved_type: UnresolvedType) -> Result<ElaboratedType, Box<dyn CompileError>> {
+        match unresolved_type {
+            UnresolvedType::Int { ptr_count } => Ok(ElaboratedType::Int { ptr_count }),
+            UnresolvedType::String { ptr_count } => Ok(ElaboratedType::String { ptr_count }),
+            UnresolvedType::Bool { ptr_count } => Ok(ElaboratedType::Bool { ptr_count }),
+            UnresolvedType::Float { ptr_count } => Ok(ElaboratedType::Float { ptr_count }),
+            UnresolvedType::Tuple { type_ids, ptr_count } => Ok(ElaboratedType::Tuple { type_ids, ptr_count }),
+            UnresolvedType::Array { hfs_type, length, ptr_count } => Ok(ElaboratedType::Array {
+                hfs_type,
+                length: match length {
+                    Some(expr) => Some(self.resolve_expr(expr)?),
+                    None => None,
+                },
+                ptr_count,
+            }),
         }
     }
 }

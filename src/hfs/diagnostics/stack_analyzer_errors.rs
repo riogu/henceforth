@@ -3,7 +3,8 @@ use std::{fmt::Display, fs, path::PathBuf};
 use colored::{ColoredString, Colorize, CustomColor};
 
 use crate::hfs::{
-    AstArena, Expression, FunctionDeclaration, Identifier, Operation, SourceInfo, Statement, TopLevelId, Type, VarDeclaration,
+    AstArena, ElaboratedType, Expression, FunctionDeclaration, Identifier, Operation, SourceInfo, Statement, TopLevelId, Type,
+    VarDeclaration,
     error::{CompileError, DebugInfo, Dumpable, number_length},
 };
 
@@ -29,8 +30,8 @@ pub enum StackAnalyzerErrorKind {
     StackUnderflow,
     ExpectedItemOnStack,
     IncorrectNumberReturnValues(usize, usize),
-    TypeMismatchReturnValues(Type, Type),
-    TypeMismatch(Type, Type),
+    TypeMismatchReturnValues(ElaboratedType, ElaboratedType),
+    TypeMismatch(ElaboratedType, ElaboratedType),
     IncorrectTupleLength(usize, usize),
     IncorrectPointerCount(usize, usize),
     MismatchingStackDepths(usize, usize),
@@ -578,8 +579,6 @@ impl Dumpable for Statement {
     }
 }
 
-impl Type {
-    fn dump_resolved(&self, arena: &AstArena) -> ColoredString {
-        ColoredString::from(format!("{}", self.get_repr_resolved(arena)))
-    }
+impl ElaboratedType {
+    fn dump_resolved(&self, arena: &AstArena) -> ColoredString { ColoredString::from(format!("{}", self.get_repr(arena))) }
 }

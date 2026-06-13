@@ -37,7 +37,7 @@ use std::{
 };
 
 use crate::hfs::{
-    BlockId, InstId, Instruction, IrArena, IrFuncId, IrFunction, Literal, SourceInfo, TerminatorInst, Type, TypeId,
+    BlockId, InstId, Instruction, IrArena, IrFuncId, IrFunction, IrType, Literal, SourceInfo, TerminatorInst, TypeId,
 };
 
 #[derive(Default)]
@@ -1362,7 +1362,7 @@ fn collect_tuple_type(name: &str, arena: &mut IrArena, names: &mut NameMap) {
     if inner_ids.len() != inner_names.len() {
         return;
     }
-    let type_id = arena.alloc_type(Type::Tuple { type_ids: inner_ids, ptr_count: 0 }, SourceInfo::new(0, 0, 0));
+    let type_id = arena.alloc_type(IrType::Tuple { type_ids: inner_ids, ptr_count: 0 }, SourceInfo::new(0, 0, 0));
     names.type_to_name.insert(type_id, name.to_string());
     names.name_to_type.insert(name.to_string(), type_id);
 }
@@ -1438,7 +1438,7 @@ fn collect_names(input: &str, arena: &mut IrArena, names: &mut NameMap) {
             if names.name_to_type.contains_key(&names.type_to_name.get(&type_id).cloned().unwrap_or_default()) {
                 continue;
             }
-            if let Type::Tuple { type_ids, .. } = typ {
+            if let IrType::Tuple { type_ids, .. } = typ {
                 let inner: Vec<String> = type_ids
                     .iter()
                     .map(|id| names.type_to_name.get(id).cloned().unwrap_or_else(|| format!("t{}", id.0)))
@@ -1640,7 +1640,7 @@ pub fn print(func_ids: &[IrFuncId], arena: &IrArena) -> Option<String> {
             continue;
         }
         let name = match typ {
-            Type::Tuple { type_ids, .. } => {
+            IrType::Tuple { type_ids, .. } => {
                 let inner: Vec<String> = type_ids
                     .iter()
                     .map(|id| names.type_to_name.get(id).cloned().unwrap_or_else(|| format!("{}", id.0)))

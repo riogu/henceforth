@@ -4,7 +4,7 @@ use colored::{ColoredString, Colorize, CustomColor};
 
 use crate::hfs::{
     SourceInfo, TokenKind, Type, UnresolvedAstArena, UnresolvedExpression, UnresolvedFunctionDeclaration, UnresolvedOperation,
-    UnresolvedStatement, UnresolvedTopLevelId, UnresolvedVarDeclaration,
+    UnresolvedStatement, UnresolvedTopLevelId, UnresolvedType, UnresolvedVarDeclaration,
     error::{CompileError, DebugInfo, Dumpable, number_length},
 };
 
@@ -397,8 +397,8 @@ impl Dumpable for UnresolvedStatement {
     }
 }
 
-impl Dumpable for Type {
+impl Dumpable for UnresolvedType {
     type Arena = UnresolvedAstArena;
 
-    fn dump(&self, arena: &Self::Arena) -> ColoredString { ColoredString::from(format!("{}", self.get_repr_unresolved(arena))) }
+    fn dump(&self, arena: &Self::Arena) -> ColoredString { ColoredString::from(format!("{}", self.get_repr(arena))) }
 }

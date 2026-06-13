@@ -1,229 +1,273 @@
-use crate::hfs::{GlobalIrVarId, InstId, Instruction, IrArena, IrFuncId, IrOperation, ast::*, error::CompileError, token::*};
+use std::fmt::Display;
+
+use crate::hfs::{InstId, IrArena, TokenKind, UnresolvedAstArena, UnresolvedExprId, ast::*};
 
 pub const PRIMITIVE_TYPE_COUNT: usize = 4;
 
-impl AstArena {
-    // Convenience methods for common types
-    pub fn int_type(&self) -> TypeId { TypeId(0) }
-    pub fn float_type(&self) -> TypeId { TypeId(1) }
-    pub fn bool_type(&self) -> TypeId { TypeId(2) }
-    pub fn string_type(&self) -> TypeId { TypeId(3) }
+pub trait Type {
+    type IndexType;
+    type Arena;
+    fn get_repr(&self, arena: &Self::Arena) -> String;
+    fn get_ptr_count(&self) -> usize;
+    fn new_int(ptr_count: usize) -> Self;
+    fn new_string(ptr_count: usize) -> Self;
+    fn new_bool(ptr_count: usize) -> Self;
+    fn new_float(ptr_count: usize) -> Self;
+    fn new_tuple(types: Vec<TypeId>, ptr_count: usize) -> Self;
+    fn new_array(hfs_type: TypeId, length: Option<Self::IndexType>, ptr_count: usize) -> Self;
+    fn type_id(&self) -> TypeId;
+    fn to_token(&self) -> TokenKind;
+}
 
-    // Only expressions have types!
-    pub fn get_type_of_operation(&mut self, op: &Operation) -> Result<TypeId, Box<dyn CompileError>> {
-        match op {
-            Operation::Add(lhs, _rhs)
-            | Operation::Sub(lhs, _rhs)
-            | Operation::Mul(lhs, _rhs)
-            | Operation::Div(lhs, _rhs)
-            | Operation::Mod(lhs, _rhs) => {
-                let lhs_type = self.get_type_id_of_expr(*lhs)?;
-                Ok(lhs_type)
-            },
-            Operation::Or(_, _)
-            | Operation::And(_, _)
-            | Operation::Not(_)
-            | Operation::Equal(_, _)
-            | Operation::NotEqual(_, _)
-            | Operation::Less(_, _)
-            | Operation::LessEqual(_, _)
-            | Operation::Greater(_, _)
-            | Operation::GreaterEqual(_, _) => Ok(self.bool_type()),
-            Operation::AddressOf(_) => todo!(),
-            Operation::Dereference(_) => todo!(),
-            Operation::ArrayAccess(_expr_id, _expr_id1) => todo!(),
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum UnresolvedType {
+    Int { ptr_count: usize },
+    String { ptr_count: usize },
+    Bool { ptr_count: usize },
+    Float { ptr_count: usize },
+    Tuple { type_ids: Vec<TypeId>, ptr_count: usize },
+    Array { hfs_type: TypeId, length: Option<UnresolvedExprId>, ptr_count: usize },
+}
+
+impl Type for UnresolvedType {
+    type IndexType = UnresolvedExprId;
+    type Arena = UnresolvedAstArena;
+
+    fn get_repr(&self, arena: &Self::Arena) -> String {
+        match self {
+            UnresolvedType::Int { ptr_count: _ } => format!("i32"),
+            UnresolvedType::String { ptr_count: _ } => format!("str"),
+            UnresolvedType::Bool { ptr_count: _ } => format!("bool"),
+            UnresolvedType::Float { ptr_count: _ } => format!("f32"),
+            UnresolvedType::Tuple { type_ids, ptr_count: _ } => format!(
+                "Tuple<{}>",
+                type_ids.iter().map(|id| arena.get_type(*id).get_repr(arena)).collect::<Vec<String>>().join(", ")
+            ),
+            UnresolvedType::Array { hfs_type, length: _, ptr_count: _ } =>
+                format!("[]{}", arena.get_type(*hfs_type).get_repr(arena)),
         }
     }
 
-    pub fn get_type_id_of_expr(&mut self, expr_id: ExprId) -> Result<TypeId, Box<dyn CompileError>> {
-        match self.get_expr(expr_id).clone() {
-            Expression::Operation(operation) => Ok(self.get_type_of_operation(&operation)?),
-            Expression::Identifier(identifier) => match identifier {
-                Identifier::GlobalVar(var_id) | Identifier::Variable(var_id) => {
-                    let var = self.get_var(var_id);
-                    Ok(var.hfs_type)
-                },
-                Identifier::Function(func_id) => {
-                    let func = self.get_func(func_id);
-                    Ok(func.return_type)
-                },
-            },
-            Expression::Literal(literal) => match literal {
-                Literal::Integer(_) => Ok(self.int_type()),
-                Literal::Float(_) => Ok(self.float_type()),
-                Literal::String(_) => Ok(self.string_type()),
-                Literal::Bool(_) => Ok(self.bool_type()),
-            },
-            Expression::Tuple { expressions } => {
-                let token = self.get_expr_token(expr_id).clone();
-                // Build tuple type from element types
-                let mut element_types = Vec::new();
-                for expr_id in expressions.clone() {
-                    let elem_type = self.get_type_id_of_expr(expr_id)?;
-                    element_types.push(elem_type);
-                }
-
-                let tuple_type = Type::Tuple { type_ids: element_types, ptr_count: 0 };
-                Ok(self.alloc_type(tuple_type, token))
-            },
-            Expression::Parameter { index: _, type_id } => Ok(type_id),
-            Expression::ReturnValue(type_id) => Ok(type_id),
+    fn get_ptr_count(&self) -> usize {
+        match self {
+            UnresolvedType::Int { ptr_count } => *ptr_count,
+            UnresolvedType::String { ptr_count } => *ptr_count,
+            UnresolvedType::Bool { ptr_count } => *ptr_count,
+            UnresolvedType::Float { ptr_count } => *ptr_count,
+            UnresolvedType::Tuple { type_ids: _, ptr_count } => *ptr_count,
+            UnresolvedType::Array { hfs_type: _, length: _, ptr_count } => *ptr_count,
         }
     }
-    pub fn get_type_of_var(&self, var_id: VarId) -> &Type { self.get_type(self.get_var(var_id).hfs_type) }
-    pub fn get_type_of_func(&self, func_id: FuncId) -> &Type { self.get_type(self.get_func(func_id).return_type) }
 
-    pub fn get_type_of_expr(&mut self, expr_id: ExprId) -> Result<&Type, Box<dyn CompileError>> {
-        let type_id = self.get_type_id_of_expr(expr_id)?;
-        Ok(self.get_type(type_id))
+    fn new_int(ptr_count: usize) -> Self { Self::Int { ptr_count } }
+
+    fn new_string(ptr_count: usize) -> Self { Self::String { ptr_count } }
+
+    fn new_bool(ptr_count: usize) -> Self { Self::Bool { ptr_count } }
+
+    fn new_float(ptr_count: usize) -> Self { Self::Float { ptr_count } }
+
+    fn new_tuple(types: Vec<TypeId>, ptr_count: usize) -> Self { Self::Tuple { type_ids: types, ptr_count } }
+
+    fn new_array(hfs_type: TypeId, length: Option<Self::IndexType>, ptr_count: usize) -> Self {
+        Self::Array { hfs_type, length, ptr_count }
+    }
+
+    fn type_id(&self) -> TypeId {
+        match self {
+            UnresolvedType::Int { ptr_count: _ } => TypeId(0),
+            UnresolvedType::String { ptr_count: _ } => TypeId(3),
+            UnresolvedType::Bool { ptr_count: _ } => TypeId(2),
+            UnresolvedType::Float { ptr_count: _ } => TypeId(1),
+            _ => panic!("[internal error] cannot get type id of non-primitive type"),
+        }
+    }
+
+    fn to_token(&self) -> TokenKind {
+        match self {
+            UnresolvedType::Int { .. } => TokenKind::Int,
+            UnresolvedType::String { .. } => TokenKind::String,
+            UnresolvedType::Bool { .. } => TokenKind::Bool,
+            UnresolvedType::Float { .. } => TokenKind::Float,
+            UnresolvedType::Tuple { .. } => TokenKind::LeftParen,
+            UnresolvedType::Array { .. } => TokenKind::LeftBracket,
+        }
     }
 }
 
-impl IrArena {
-    // Convenience methods for common types
-    pub fn int_type(&self) -> TypeId { TypeId(0) }
-    pub fn float_type(&self) -> TypeId { TypeId(1) }
-    pub fn bool_type(&self) -> TypeId { TypeId(2) }
-    pub fn string_type(&self) -> TypeId { TypeId(3) }
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum ElaboratedType {
+    Int { ptr_count: usize },
+    String { ptr_count: usize },
+    Bool { ptr_count: usize },
+    Float { ptr_count: usize },
+    Tuple { type_ids: Vec<TypeId>, ptr_count: usize },
+    Array { hfs_type: TypeId, length: Option<ExprId>, ptr_count: usize },
+}
 
-    // Only expressions have types!
-    pub fn get_type_of_operation(&mut self, op: &IrOperation) -> Result<TypeId, Box<dyn CompileError>> {
-        match op {
-            // Arithmetic operations: return the operand type
-            IrOperation::Add(lhs, rhs)
-            | IrOperation::Sub(lhs, rhs)
-            | IrOperation::Mul(lhs, rhs)
-            | IrOperation::Div(lhs, rhs)
-            | IrOperation::Mod(lhs, rhs) => {
-                let lhs_type = self.get_type_id_of_inst(*lhs)?;
-                let rhs_type = self.get_type_id_of_inst(*rhs)?;
-                self.compare_types(lhs_type, rhs_type, vec![self.get_inst(*lhs).get_source_info().clone()])?;
-                Ok(lhs_type)
-            },
-            IrOperation::Or(_, _)
-            | IrOperation::And(_, _)
-            | IrOperation::Not(_)
-            | IrOperation::Equal(_, _)
-            | IrOperation::NotEqual(_, _)
-            | IrOperation::Less(_, _)
-            | IrOperation::LessEqual(_, _)
-            | IrOperation::Greater(_, _)
-            | IrOperation::GreaterEqual(_, _) => Ok(self.bool_type()),
+impl Type for ElaboratedType {
+    type IndexType = ExprId;
+    type Arena = AstArena;
+
+    fn get_repr(&self, arena: &Self::Arena) -> String {
+        match self {
+            ElaboratedType::Int { ptr_count: _ } => format!("i32"),
+            ElaboratedType::String { ptr_count: _ } => format!("str"),
+            ElaboratedType::Bool { ptr_count: _ } => format!("bool"),
+            ElaboratedType::Float { ptr_count: _ } => format!("f32"),
+            ElaboratedType::Tuple { type_ids, ptr_count: _ } => format!(
+                "Tuple<{}>",
+                type_ids.iter().map(|id| arena.get_type(*id).get_repr(arena)).collect::<Vec<String>>().join(", ")
+            ),
+            ElaboratedType::Array { hfs_type, length: _, ptr_count: _ } =>
+                format!("[]{}", arena.get_type(*hfs_type).get_repr(arena)),
         }
     }
 
-    pub fn get_type_id_of_inst(&mut self, inst_id: InstId) -> Result<TypeId, Box<dyn CompileError>> {
-        match self.get_inst(inst_id).clone() {
-            Instruction::Operation { source_info: _, op } => Ok(self.get_type_of_operation(&op)?),
-            Instruction::Literal { source_info: _, literal } => match literal {
-                Literal::Integer(_) => Ok(self.int_type()),
-                Literal::Float(_) => Ok(self.float_type()),
-                Literal::String(_) => Ok(self.string_type()),
-                Literal::Bool(_) => Ok(self.bool_type()),
-            },
-            Instruction::Tuple { source_info, instructions } => {
-                // Build tuple type from element types
-                let mut element_types = Vec::new();
-                for inst_id in instructions.clone() {
-                    let elem_type = self.get_type_id_of_inst(inst_id)?;
-                    element_types.push(elem_type);
-                }
-
-                let tuple_type = Type::Tuple { type_ids: element_types, ptr_count: 0 };
-                Ok(self.alloc_type(tuple_type, source_info.clone()))
-            },
-            Instruction::Parameter { source_info: _, index: _, type_id } => Ok(type_id),
-            Instruction::FunctionCall { source_info: _, args: _, func_id, is_move: _, return_values: _ } =>
-                Ok(self.get_func(func_id).return_type),
-            Instruction::Phi { source_info: _, incoming } => Ok(self.get_type_id_of_inst(
-                *incoming.values().next().expect("[internal error] found phi with no elements in type checking"),
-            )?),
-            Instruction::LoadElement { source_info: _, index: _, tuple: _ } => todo!(),
-            Instruction::ReturnValue { source_info: _, type_id } => Ok(type_id),
-            Instruction::Load { source_info: _, address: _, type_id } => Ok(type_id),
-            Instruction::Store { source_info: _, address: _, value } => Ok(self.get_type_id_of_inst(value)?),
-            Instruction::Alloca { source_info: _, type_id: _ } => {
-                // implement this later
-                panic!("[internal error] asked for the type of an alloca instruction but i don't see why this would happen")
-            },
-            Instruction::GlobalAlloca(_) => todo!(),
-        }
-    }
-    pub fn get_type_of_var(&self, var_id: GlobalIrVarId) -> &Type { self.get_type(self.get_var(var_id).hfs_type) }
-    pub fn get_type_of_func(&self, func_id: IrFuncId) -> &Type { self.get_type(self.get_func(func_id).return_type) }
-
-    pub fn get_type_of_inst(&mut self, inst_id: InstId) -> Result<&Type, Box<dyn CompileError>> {
-        let type_id = self.get_type_id_of_inst(inst_id)?;
-        Ok(self.get_type(type_id))
-    }
-
-    // returns itself with the pointer count reduced by one
-    pub fn reduce_type_ptr_count(&mut self, type_id: TypeId, source_info: SourceInfo) -> TypeId {
-        let hfs_type = match self.get_type(type_id) {
-            Type::Int { ptr_count } => Type::Int { ptr_count: ptr_count - 1 },
-            Type::String { ptr_count } => Type::String { ptr_count: ptr_count - 1 },
-            Type::Bool { ptr_count } => Type::Bool { ptr_count: ptr_count - 1 },
-            Type::Float { ptr_count } => Type::Float { ptr_count: ptr_count - 1 },
-            Type::Tuple { ptr_count, type_ids } => Type::Tuple { ptr_count: ptr_count - 1, type_ids: type_ids.clone() },
-            Type::Array { hfs_type: _, length: _, ptr_count: _ } => todo!(),
-        };
-        self.alloc_type(hfs_type, source_info)
-    }
-
-    // these functions are only used for printing so we don't have to pass a mutable reference to an arena everywhere
-    pub fn get_type_of_operation_no_alloc(&self, op: &IrOperation) -> Option<TypeId> {
-        match op {
-            IrOperation::Add(lhs, _rhs)
-            | IrOperation::Sub(lhs, _rhs)
-            | IrOperation::Mul(lhs, _rhs)
-            | IrOperation::Div(lhs, _rhs)
-            | IrOperation::Mod(lhs, _rhs) => self.get_type_id_of_inst_no_alloc(*lhs),
-            IrOperation::Or(_, _)
-            | IrOperation::And(_, _)
-            | IrOperation::Not(_)
-            | IrOperation::Equal(_, _)
-            | IrOperation::NotEqual(_, _)
-            | IrOperation::Less(_, _)
-            | IrOperation::LessEqual(_, _)
-            | IrOperation::Greater(_, _)
-            | IrOperation::GreaterEqual(_, _) => Some(self.bool_type()),
+    fn get_ptr_count(&self) -> usize {
+        match self {
+            ElaboratedType::Int { ptr_count } => *ptr_count,
+            ElaboratedType::String { ptr_count } => *ptr_count,
+            ElaboratedType::Bool { ptr_count } => *ptr_count,
+            ElaboratedType::Float { ptr_count } => *ptr_count,
+            ElaboratedType::Tuple { ptr_count, .. } => *ptr_count,
+            ElaboratedType::Array { ptr_count, .. } => *ptr_count,
         }
     }
 
-    pub fn get_type_id_of_inst_no_alloc(&self, inst_id: InstId) -> Option<TypeId> {
-        match self.get_inst(inst_id) {
-            Instruction::Operation { op, .. } => self.get_type_of_operation_no_alloc(op),
-            Instruction::Literal { literal, .. } => match literal {
-                Literal::Integer(_) => Some(self.int_type()),
-                Literal::Float(_) => Some(self.float_type()),
-                Literal::String(_) => Some(self.string_type()),
-                Literal::Bool(_) => Some(self.bool_type()),
-            },
-            Instruction::Tuple { instructions, .. } => {
-                let element_types: Option<Vec<TypeId>> =
-                    instructions.iter().map(|id| self.get_type_id_of_inst_no_alloc(*id)).collect();
-                let element_types = element_types?;
-                self.types.iter().enumerate().find_map(|(i, t)| {
-                    if let Type::Tuple { type_ids, .. } = t {
-                        if *type_ids == element_types {
-                            Some(TypeId(i))
-                        } else {
-                            None
-                        }
-                    } else {
-                        None
-                    }
-                })
-            },
-            Instruction::Parameter { type_id, .. } => Some(*type_id),
-            Instruction::FunctionCall { func_id, .. } => Some(self.get_func(*func_id).return_type),
-            Instruction::Phi { incoming, .. } => self.get_type_id_of_inst_no_alloc(*incoming.values().next()?),
-            Instruction::ReturnValue { type_id, .. } => Some(*type_id),
-            Instruction::Load { type_id, .. } => Some(*type_id),
-            Instruction::Store { value, .. } => self.get_type_id_of_inst_no_alloc(*value),
-            Instruction::Alloca { .. } => None,
-            Instruction::LoadElement { .. } => None,
-            Instruction::GlobalAlloca(_) => None,
+    fn new_int(ptr_count: usize) -> Self { ElaboratedType::Int { ptr_count } }
+
+    fn new_string(ptr_count: usize) -> Self { ElaboratedType::String { ptr_count } }
+
+    fn new_bool(ptr_count: usize) -> Self { ElaboratedType::Bool { ptr_count } }
+
+    fn new_float(ptr_count: usize) -> Self { ElaboratedType::Float { ptr_count } }
+
+    fn new_tuple(types: Vec<TypeId>, ptr_count: usize) -> Self { ElaboratedType::Tuple { type_ids: types, ptr_count } }
+
+    fn new_array(hfs_type: TypeId, length: Option<Self::IndexType>, ptr_count: usize) -> Self {
+        ElaboratedType::Array { hfs_type, length, ptr_count }
+    }
+
+    fn type_id(&self) -> TypeId {
+        match self {
+            ElaboratedType::Int { ptr_count: _ } => TypeId(0),
+            ElaboratedType::String { ptr_count: _ } => TypeId(3),
+            ElaboratedType::Bool { ptr_count: _ } => TypeId(2),
+            ElaboratedType::Float { ptr_count: _ } => TypeId(1),
+            _ => panic!("[internal error] cannot get type id of non-primitive type"),
+        }
+    }
+
+    fn to_token(&self) -> TokenKind {
+        match self {
+            ElaboratedType::Int { .. } => TokenKind::Int,
+            ElaboratedType::String { .. } => TokenKind::String,
+            ElaboratedType::Bool { .. } => TokenKind::Bool,
+            ElaboratedType::Float { .. } => TokenKind::Float,
+            ElaboratedType::Tuple { .. } => TokenKind::LeftParen,
+            ElaboratedType::Array { .. } => TokenKind::LeftBracket,
+        }
+    }
+}
+
+impl Display for ElaboratedType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ElaboratedType::Int { ptr_count } => write!(f, "i32{}", "*".repeat(*ptr_count)),
+            ElaboratedType::Float { ptr_count } => write!(f, "f32{}", "*".repeat(*ptr_count)),
+            ElaboratedType::String { ptr_count } => write!(f, "str{}", "*".repeat(*ptr_count)),
+            ElaboratedType::Bool { ptr_count } => write!(f, "bool{}", "*".repeat(*ptr_count)),
+            ElaboratedType::Tuple { ptr_count, .. } => write!(f, "tuple{}", "*".repeat(*ptr_count)),
+            ElaboratedType::Array { ptr_count, .. } => write!(f, "array{}", "*".repeat(*ptr_count)),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum IrType {
+    Int { ptr_count: usize },
+    String { ptr_count: usize },
+    Bool { ptr_count: usize },
+    Float { ptr_count: usize },
+    Tuple { type_ids: Vec<TypeId>, ptr_count: usize },
+    Array { hfs_type: TypeId, length: Option<InstId>, ptr_count: usize },
+}
+
+impl Type for IrType {
+    type IndexType = InstId;
+    type Arena = IrArena;
+
+    fn get_repr(&self, arena: &Self::Arena) -> String {
+        match self {
+            IrType::Int { ptr_count: _ } => format!("i32"),
+            IrType::String { ptr_count: _ } => format!("str"),
+            IrType::Bool { ptr_count: _ } => format!("bool"),
+            IrType::Float { ptr_count: _ } => format!("f32"),
+            IrType::Tuple { type_ids, ptr_count: _ } => format!(
+                "Tuple<{}>",
+                type_ids.iter().map(|id| arena.get_type(*id).get_repr(arena)).collect::<Vec<String>>().join(", ")
+            ),
+            IrType::Array { hfs_type, length: _, ptr_count: _ } => format!("[]{}", arena.get_type(*hfs_type).get_repr(arena)),
+        }
+    }
+
+    fn get_ptr_count(&self) -> usize {
+        match self {
+            IrType::Int { ptr_count } => *ptr_count,
+            IrType::String { ptr_count } => *ptr_count,
+            IrType::Bool { ptr_count } => *ptr_count,
+            IrType::Float { ptr_count } => *ptr_count,
+            IrType::Tuple { ptr_count, .. } => *ptr_count,
+            IrType::Array { ptr_count, .. } => *ptr_count,
+        }
+    }
+
+    fn new_int(ptr_count: usize) -> Self { IrType::Int { ptr_count } }
+
+    fn new_string(ptr_count: usize) -> Self { IrType::String { ptr_count } }
+
+    fn new_bool(ptr_count: usize) -> Self { IrType::Bool { ptr_count } }
+
+    fn new_float(ptr_count: usize) -> Self { IrType::Float { ptr_count } }
+
+    fn new_tuple(types: Vec<TypeId>, ptr_count: usize) -> Self { IrType::Tuple { type_ids: types, ptr_count } }
+
+    fn new_array(hfs_type: TypeId, length: Option<Self::IndexType>, ptr_count: usize) -> Self {
+        IrType::Array { hfs_type, length, ptr_count }
+    }
+
+    fn type_id(&self) -> TypeId {
+        match self {
+            IrType::Int { ptr_count: _ } => TypeId(0),
+            IrType::String { ptr_count: _ } => TypeId(3),
+            IrType::Bool { ptr_count: _ } => TypeId(2),
+            IrType::Float { ptr_count: _ } => TypeId(1),
+            _ => panic!("[internal error] cannot get type id of non-primitive type"),
+        }
+    }
+
+    fn to_token(&self) -> TokenKind {
+        match self {
+            IrType::Int { .. } => TokenKind::Int,
+            IrType::String { .. } => TokenKind::String,
+            IrType::Bool { .. } => TokenKind::Bool,
+            IrType::Float { .. } => TokenKind::Float,
+            IrType::Tuple { .. } => TokenKind::LeftParen,
+            IrType::Array { .. } => TokenKind::LeftBracket,
+        }
+    }
+}
+
+impl Display for IrType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            IrType::Int { ptr_count } => write!(f, "i32{}", "*".repeat(*ptr_count)),
+            IrType::Float { ptr_count } => write!(f, "f32{}", "*".repeat(*ptr_count)),
+            IrType::String { ptr_count } => write!(f, "str{}", "*".repeat(*ptr_count)),
+            IrType::Bool { ptr_count } => write!(f, "bool{}", "*".repeat(*ptr_count)),
+            IrType::Tuple { ptr_count, .. } => write!(f, "tuple{}", "*".repeat(*ptr_count)),
+            IrType::Array { ptr_count, .. } => write!(f, "array{}", "*".repeat(*ptr_count)),
         }
     }
 }

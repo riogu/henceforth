@@ -379,7 +379,12 @@ impl AstArena {
             | Operation::GreaterEqual(_, _) => Ok(ElaboratedType::new_bool(0).type_id()),
             Operation::AddressOf(_) => todo!(),
             Operation::Dereference(_) => todo!(),
-            Operation::ArrayAccess(_expr_id, _expr_id1) => todo!(),
+            Operation::ArrayAccess(array, ..) => Ok(match self.get_type_of_expr(*array)? {
+                ElaboratedType::Array { hfs_type, .. } => *hfs_type,
+                _ => {
+                    panic!("[internal error] trying to index into a non-array after typechecking")
+                },
+            }),
         }
     }
 

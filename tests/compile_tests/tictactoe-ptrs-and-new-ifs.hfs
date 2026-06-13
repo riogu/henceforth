@@ -1,3 +1,4 @@
+fn print: (str) -> () { @pop; }
 fn print_board: ([]str) -> () {
     @("next move:\n") &> print;
     let board: [9]str; &= board;

@@ -114,7 +114,6 @@ impl AstArena {
     ) -> Result<(), Box<dyn CompileError>> {
         let actual_type = self.get_type(actual_type_id);
         let expected_type = self.get_type(expected_type_id);
-
         match (actual_type, expected_type) {
             (
                 ElaboratedType::Tuple { type_ids: actual_types, ptr_count: actual_ptr_count },
@@ -771,7 +770,7 @@ impl StackAnalyzer {
                         token,
                     )),
                     UnresolvedOperation::ArrayAccess => Ok(self.arena.alloc_and_push_to_hfs_stack(
-                        Expression::Operation(Operation::GreaterEqual(lhs_expr, rhs_expr)),
+                        Expression::Operation(Operation::ArrayAccess(lhs_expr, rhs_expr)),
                         provenance,
                         token,
                     )),
@@ -970,8 +969,8 @@ impl StackAnalyzer {
             },
             UnresolvedOperation::NotEqual | UnresolvedOperation::Equal => Ok(()),
             UnresolvedOperation::ArrayAccess => {
-                // TODO check if lhs is an array
-                Ok(self.arena.compare_types(rhs_type, ElaboratedType::new_bool(0).type_id(), vec![
+                // TODO check if lhs is an array and check bounds
+                Ok(self.arena.compare_types(rhs_type, ElaboratedType::new_int(0).type_id(), vec![
                     self.arena.get_expr_token(rhs_expr).clone(),
                 ])?)
             },

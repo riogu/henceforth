@@ -687,6 +687,7 @@ impl StackAnalyzer {
         match op {
             op if op.is_binary() => {
                 let (lhs_expr, rhs_expr) = self.arena.pop2_or_error(vec![token.clone()])?;
+                self.validate_binary_operands(lhs_expr, rhs_expr, op)?;
                 let provenance = if matches!(self.arena.get_expr_provenance(lhs_expr), ExprProvenance::CompiletimeValue)
                     && matches!(self.arena.get_expr_provenance(lhs_expr), ExprProvenance::CompiletimeValue)
                 {
@@ -760,22 +761,33 @@ impl StackAnalyzer {
                         provenance,
                         token,
                     )),
+                    UnresolvedOperation::ArrayAccess => Ok(self.arena.alloc_and_push_to_hfs_stack(
+                        Expression::Operation(Operation::GreaterEqual(lhs_expr, rhs_expr)),
+                        provenance,
+                        token,
+                    )),
                     _ => unreachable!(),
                 }
             },
             UnresolvedOperation::Not => {
                 let expr = self.arena.pop_or_error(vec![token.clone()])?;
+                self.validate_unary_operand(expr, op)?;
                 let provenance = *self.arena.get_expr_provenance(expr);
                 Ok(self.arena.alloc_and_push_to_hfs_stack(Expression::Operation(Operation::Not(expr)), provenance, token))
             },
-            UnresolvedOperation::Dereference => todo!(),
-            UnresolvedOperation::AddressOf => {
-                // let expr = self.arena.pop_or_error(vec![token.clone()])?;
-                // let provenance = *self.arena.get_expr_provenance(expr);
-                todo!()
-                // Ok(self.arena.alloc_and_push_to_hfs_stack(Expression::Operation(Operation::Not(expr)), , token))
+            UnresolvedOperation::Dereference => {
+                let expr = self.arena.pop_or_error(vec![token.clone()])?;
+                self.validate_unary_operand(expr, op)?;
+                let provenance = *self.arena.get_expr_provenance(expr);
+                Ok(self.arena.alloc_and_push_to_hfs_stack(Expression::Operation(Operation::Dereference(expr)), provenance, token))
             },
-            _ => panic!("[internal error] missing semantic analysis for unary operation '{:?}'", op),
+            UnresolvedOperation::AddressOf => {
+                let expr = self.arena.pop_or_error(vec![token.clone()])?;
+                self.validate_unary_operand(expr, op)?;
+                let provenance = *self.arena.get_expr_provenance(expr);
+                Ok(self.arena.alloc_and_push_to_hfs_stack(Expression::Operation(Operation::AddressOf(expr)), provenance, token))
+            },
+            _ => unreachable!(),
         }
     }
 
@@ -861,6 +873,112 @@ impl StackAnalyzer {
             _ => {
                 panic!("[internal error] invalid stack keyword")
             },
+        }
+    }
+
+    fn validate_binary_operands(
+        &mut self,
+        lhs_expr: ExprId,
+        rhs_expr: ExprId,
+        op: &UnresolvedOperation,
+    ) -> Result<(), Box<dyn CompileError>> {
+        match op {
+            UnresolvedOperation::Add
+            | UnresolvedOperation::Sub
+            | UnresolvedOperation::Mul
+            | UnresolvedOperation::Div
+            | UnresolvedOperation::Mod
+            | UnresolvedOperation::Or
+            | UnresolvedOperation::And
+            | UnresolvedOperation::Equal
+            | UnresolvedOperation::NotEqual
+            | UnresolvedOperation::Less
+            | UnresolvedOperation::LessEqual
+            | UnresolvedOperation::Greater
+            | UnresolvedOperation::GreaterEqual => {
+                self.has_valid_types_binary(lhs_expr, rhs_expr, *op)?;
+                Ok(self.has_same_types(lhs_expr, rhs_expr)?)
+            },
+            UnresolvedOperation::ArrayAccess => self.has_valid_types_binary(lhs_expr, rhs_expr, *op),
+            _ => panic!("[internal error] unary operation being typechecked in binary context"),
+        }
+    }
+
+    fn has_same_types(&mut self, lhs_expr: ExprId, rhs_expr: ExprId) -> Result<(), Box<dyn CompileError>> {
+        let lhs_type = self.arena.get_type_id_of_expr(lhs_expr)?;
+        let rhs_type = self.arena.get_type_id_of_expr(rhs_expr)?;
+        Ok(self.arena.compare_types(lhs_type, rhs_type, vec![self.arena.get_expr_token(lhs_expr).clone()])?)
+    }
+
+    fn has_valid_types_binary(
+        &mut self,
+        lhs_expr: ExprId,
+        rhs_expr: ExprId,
+        op: UnresolvedOperation,
+    ) -> Result<(), Box<dyn CompileError>> {
+        let lhs_type = self.arena.get_type_id_of_expr(lhs_expr)?;
+        let rhs_type = self.arena.get_type_id_of_expr(rhs_expr)?;
+        match op {
+            UnresolvedOperation::Less
+            | UnresolvedOperation::LessEqual
+            | UnresolvedOperation::Greater
+            | UnresolvedOperation::GreaterEqual
+            | UnresolvedOperation::Add
+            | UnresolvedOperation::Sub
+            | UnresolvedOperation::Mul
+            | UnresolvedOperation::Div => {
+                self.arena
+                    .compare_types(lhs_type, self.arena.int_type(), vec![self.arena.get_expr_token(lhs_expr).clone()])
+                    .or(self
+                        .arena
+                        .compare_types(lhs_type, self.arena.float_type(), vec![self.arena.get_expr_token(lhs_expr).clone()]))?;
+                Ok(self
+                    .arena
+                    .compare_types(rhs_type, self.arena.int_type(), vec![self.arena.get_expr_token(rhs_expr).clone()])
+                    .or(self
+                    .arena
+                    .compare_types(rhs_type, self.arena.float_type(), vec![self.arena.get_expr_token(rhs_expr).clone()]))?)
+            },
+            UnresolvedOperation::Mod => {
+                self.arena.compare_types(lhs_type, self.arena.int_type(), vec![self.arena.get_expr_token(lhs_expr).clone()])?;
+                Ok(self
+                    .arena
+                    .compare_types(rhs_type, self.arena.int_type(), vec![self.arena.get_expr_token(rhs_expr).clone()])?)
+            },
+            UnresolvedOperation::Or | UnresolvedOperation::And => {
+                self.arena.compare_types(lhs_type, self.arena.bool_type(), vec![self.arena.get_expr_token(lhs_expr).clone()])?;
+                Ok(self
+                    .arena
+                    .compare_types(rhs_type, self.arena.bool_type(), vec![self.arena.get_expr_token(rhs_expr).clone()])?)
+            },
+            UnresolvedOperation::NotEqual | UnresolvedOperation::Equal => Ok(()),
+            UnresolvedOperation::ArrayAccess => {
+                // TODO check if lhs is an array
+                Ok(self
+                    .arena
+                    .compare_types(rhs_type, self.arena.int_type(), vec![self.arena.get_expr_token(rhs_expr).clone()])?)
+            },
+            _ => panic!("[internal error] unary operation being typechecked in binary context"),
+        }
+    }
+
+    fn validate_unary_operand(&mut self, expr: ExprId, op: &UnresolvedOperation) -> Result<(), Box<dyn CompileError>> {
+        let lhs_type = self.arena.get_type_id_of_expr(expr)?;
+        match op {
+            UnresolvedOperation::Not =>
+                Ok(self.arena.compare_types(lhs_type, self.arena.bool_type(), vec![self.arena.get_expr_token(expr).clone()])?),
+            UnresolvedOperation::AddressOf => Ok(()),
+            UnresolvedOperation::Dereference =>
+                if self.arena.get_type(lhs_type).get_ptr_count() > 0 {
+                    Ok(())
+                } else {
+                    stack_analyzer_error!(
+                        StackAnalyzerErrorKind::TooManyDereferences(1, self.arena.get_type(lhs_type).get_ptr_count()),
+                        &self.arena,
+                        vec![self.arena.get_expr_token(expr).source_info.clone()]
+                    )
+                },
+            _ => panic!("[internal error] binary operation being typechecked in unary context"),
         }
     }
 }

@@ -12,14 +12,12 @@ impl AstArena {
     // Only expressions have types!
     pub fn get_type_of_operation(&mut self, op: &Operation) -> Result<TypeId, Box<dyn CompileError>> {
         match op {
-            Operation::Add(lhs, rhs)
-            | Operation::Sub(lhs, rhs)
-            | Operation::Mul(lhs, rhs)
-            | Operation::Div(lhs, rhs)
-            | Operation::Mod(lhs, rhs) => {
+            Operation::Add(lhs, _rhs)
+            | Operation::Sub(lhs, _rhs)
+            | Operation::Mul(lhs, _rhs)
+            | Operation::Div(lhs, _rhs)
+            | Operation::Mod(lhs, _rhs) => {
                 let lhs_type = self.get_type_id_of_expr(*lhs)?;
-                let rhs_type = self.get_type_id_of_expr(*rhs)?;
-                self.compare_types(lhs_type, rhs_type, vec![self.get_expr_token(*lhs).clone()])?;
                 Ok(lhs_type)
             },
             Operation::Or(_, _)
@@ -167,7 +165,7 @@ impl IrArena {
             Type::Bool { ptr_count } => Type::Bool { ptr_count: ptr_count - 1 },
             Type::Float { ptr_count } => Type::Float { ptr_count: ptr_count - 1 },
             Type::Tuple { ptr_count, type_ids } => Type::Tuple { ptr_count: ptr_count - 1, type_ids: type_ids.clone() },
-            Type::Array { hfs_type: _, length: _, ptr_count } => todo!(),
+            Type::Array { hfs_type: _, length: _, ptr_count: _ } => todo!(),
         };
         self.alloc_type(hfs_type, source_info)
     }

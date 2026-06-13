@@ -1010,7 +1010,9 @@ impl StackAnalyzer {
             UnresolvedType::Array { hfs_type, length, ptr_count } => Ok(ElaboratedType::Array {
                 hfs_type,
                 length: match length {
-                    Some(expr) => Some(self.resolve_expr(expr)?),
+                    // arrays stay unresolved at elaboration because resolving them
+                    // requires knowing information about compile-time variables before elaborating types
+                    Some(expr) => Some(ArrayLength::Unresolved(expr)),
                     None => None,
                 },
                 ptr_count,

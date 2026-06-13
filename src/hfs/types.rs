@@ -96,17 +96,23 @@ impl Type for UnresolvedType {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum ArrayLength {
+    Unresolved(UnresolvedExprId),
+    Resolved(ExprId),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ElaboratedType {
     Int { ptr_count: usize },
     String { ptr_count: usize },
     Bool { ptr_count: usize },
     Float { ptr_count: usize },
     Tuple { type_ids: Vec<TypeId>, ptr_count: usize },
-    Array { hfs_type: TypeId, length: Option<ExprId>, ptr_count: usize },
+    Array { hfs_type: TypeId, length: Option<ArrayLength>, ptr_count: usize },
 }
 
 impl Type for ElaboratedType {
-    type IndexType = ExprId;
+    type IndexType = ArrayLength;
     type Arena = AstArena;
 
     fn get_repr(&self, arena: &Self::Arena) -> String {

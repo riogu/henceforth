@@ -5,8 +5,8 @@ use slotmap::Key;
 
 use crate::{
     hfs::{
-        BlockId, ElaboratedType, GlobalIrVarDeclaration, GlobalIrVarId, InstId, Instruction, IrArena, IrFuncId, IrFunction,
-        IrOperation, IrTopLevelId, IrType, PRIMITIVE_TYPE_COUNT, SourceInfo, TerminatorInst, Type,
+        ArrayLength, BlockId, ElaboratedType, GlobalIrVarDeclaration, GlobalIrVarId, InstId, Instruction, IrArena, IrFuncId,
+        IrFunction, IrOperation, IrTopLevelId, IrType, PRIMITIVE_TYPE_COUNT, SourceInfo, TerminatorInst, Type,
         ast::*,
         error::{CompileError, DiagnosticInfo},
         ir_lowerer_errors::IrLowererErrorKind,
@@ -760,7 +760,10 @@ impl IrLowerer {
             ElaboratedType::Array { hfs_type, length, ptr_count } => Ok(IrType::Array {
                 hfs_type,
                 length: match length {
-                    Some(id) => Some(self.lower_expr(id)?),
+                    Some(id) => Some(self.lower_expr(match id {
+                        ArrayLength::Unresolved(_) => panic!("[internal error] array length should be resolved at lowering"),
+                        ArrayLength::Resolved(expr_id) => expr_id,
+                    })?),
                     None => None,
                 },
                 ptr_count,

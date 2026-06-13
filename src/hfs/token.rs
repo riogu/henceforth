@@ -296,6 +296,7 @@ impl TokenKind {
             | TokenKind::And
             | TokenKind::Or
             | TokenKind::LeftBracket
+            | TokenKind::Dereference
             | TokenKind::Not => true,
             _ => false,
         }

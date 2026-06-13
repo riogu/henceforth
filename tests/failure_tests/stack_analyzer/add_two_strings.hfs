@@ -1,0 +1,3 @@
+fn main: () -> () {
+	@("a" "b" +); //? ERROR "expected {{*}} found str"
+}

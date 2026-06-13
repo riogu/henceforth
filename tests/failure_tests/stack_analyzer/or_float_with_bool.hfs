@@ -1,0 +1,3 @@
+fn main: () -> () {
+	@(true 6.5 ||) //? ERROR "expected bool found f32"
+}

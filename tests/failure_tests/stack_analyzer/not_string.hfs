@@ -1,0 +1,3 @@
+fn main: () -> () {
+	@("a" !) //? ERROR "expected bool found str"
+}

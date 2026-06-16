@@ -1,0 +1,3 @@
+fn main: () -> () {
+	@(1 1 []); //? ERROR "expected array found i32"
+}

@@ -38,6 +38,7 @@ fn get_winner: ([]str) -> (str) {
     } else if @("O") &> player_win {
         @("the winner was player 'O'!\n") 
     } else {
+        @pop;
         @("no one won!\n")
     }
 }

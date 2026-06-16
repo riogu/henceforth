@@ -1,0 +1,5 @@
+fn main: () -> () {
+	let a: [4]i32;
+	@(5) [:]= a; //? ERROR "expected item on stack"
+}
+

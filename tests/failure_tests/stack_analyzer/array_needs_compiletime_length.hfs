@@ -1,0 +1,5 @@
+fn foo: (i32) -> () {
+	let N: i32;
+	@(1 +) &= N;
+	let a: [N]i32; //? ERROR "found runtime value on length expression for '{{*}}'"
+}

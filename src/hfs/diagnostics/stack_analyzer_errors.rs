@@ -42,6 +42,8 @@ pub enum StackAnalyzerErrorKind {
     TooManyDereferences(usize, usize),
     CallVariableAsFunction,
     UseOfUndeclaredIdentifier(String),
+    IndexOutOfBounds(i32, i32),
+    ArrayLengthMustBeCompileTime(String),
 }
 
 #[derive(Debug)]
@@ -121,6 +123,10 @@ impl CompileError for StackAnalyzerError {
             StackAnalyzerErrorKind::CallVariableAsFunction => (format!("cannot call variable as a function"), String::new()),
             StackAnalyzerErrorKind::UseOfUndeclaredIdentifier(name) =>
                 (format!("use of undeclared identifier '{}'", name), format!("undeclared identifier")),
+            StackAnalyzerErrorKind::IndexOutOfBounds(idx, len) =>
+                (format!("index {} is out of bounds for array of length {}", idx, len), "out of bounds".to_string()),
+            StackAnalyzerErrorKind::ArrayLengthMustBeCompileTime(name) =>
+                (format!("found runtime value on length expression for '{}'", name), String::new()),
         }
     }
 
@@ -374,7 +380,15 @@ impl Dumpable for Operation {
                 arena.get_expr(*x).dump(arena),
                 ")".custom_color(CustomColor::new(129, 137, 150))
             )),
-            Operation::ArrayAccess(_expr_id, _expr_id1) => todo!(),
+            Operation::ArrayAccess(x, y) => ColoredString::from(format!(
+                "{}{}{}{}{}{}",
+                "ArrayAccess".yellow(),
+                "(".custom_color(CustomColor::new(129, 137, 150)),
+                arena.get_expr(*x).dump(arena),
+                ", ".custom_color(CustomColor::new(129, 137, 150)),
+                arena.get_expr(*y).dump(arena),
+                ")".custom_color(CustomColor::new(129, 137, 150))
+            )),
         };
         op
     }
@@ -574,7 +588,18 @@ impl Dumpable for Statement {
                     "]".custom_color(CustomColor::new(129, 137, 150)),
                 ))
             },
-            Statement::ArrayAssignment { position: _, identifier: _, is_move: _, deref_count: _ } => todo!(),
+            Statement::ArrayAssignment { position, identifier, is_move, deref_count } => ColoredString::from(format!(
+                "\n{}\n\t{} {}\n\t{} {}\n\t{} {}\n\t{} {}",
+                "Array Assignment:".red().bold(),
+                "Identifier:".blue(),
+                indent(&identifier.dump(arena)),
+                "Position:".blue(),
+                indent(&arena.get_expr(*position).dump(arena)),
+                "Is Move:".blue(),
+                format!("{}", is_move).green(),
+                "Deref Count:".blue(),
+                format!("{}", deref_count).green(),
+            )),
         }
     }
 }

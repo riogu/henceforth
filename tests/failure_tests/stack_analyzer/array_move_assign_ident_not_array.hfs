@@ -1,0 +1,4 @@
+fn main: () -> () {
+	let a: i32;
+	@(4 1) [&]= a; //? ERROR "expected array found i32"
+}

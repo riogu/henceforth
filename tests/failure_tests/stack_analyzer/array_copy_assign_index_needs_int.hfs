@@ -1,0 +1,4 @@
+fn main: () -> () {
+	let a: [5]str;
+	@("a" 6.4) [:]= a; //? ERROR "expected i32 found f32"
+}

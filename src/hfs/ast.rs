@@ -1,7 +1,7 @@
 use std::{collections::HashMap, rc::Rc};
 
 use crate::hfs::{
-    ElaboratedType, ScopeKind, Type,
+    ArrayLength, ElaboratedType, ScopeKind, Type,
     error::{CompileError, DiagnosticInfo},
     token::*,
 };
@@ -286,13 +286,40 @@ impl AstArena {
         self.type_cache.insert(hfs_type, id);
         id
     }
+
     pub fn alloc_type(&mut self, hfs_type: ElaboratedType, token: Token) -> TypeId {
+        // for resolving arrays, we need to check if their lengths are EQUIVALENT, since they can have different ExprIds
+        if let ElaboratedType::Array { hfs_type: elem_type, length: Some(ArrayLength::Resolved(expr_id)), ptr_count } = hfs_type {
+            if let Some(existing_id) = self.find_equivalent_array_type(elem_type, expr_id, ptr_count) {
+                return existing_id;
+            }
+            return self.alloc_type_uncached(hfs_type, token);
+        }
+
         // Check if this type already exists
         if let Some(&existing_id) = self.type_cache.get(&hfs_type) {
             return existing_id;
         }
         // If not, allocate it
         self.alloc_type_uncached(hfs_type, token)
+    }
+
+    fn find_equivalent_array_type(&self, elem_type: TypeId, length: ExprId, ptr_count: usize) -> Option<TypeId> {
+        match self.get_expr(length) {
+            Expression::Literal(Literal::Integer(len)) =>
+                self.types.iter().enumerate().find_map(|(idx, hfs_type)| match hfs_type {
+                    ElaboratedType::Array { hfs_type: t, length: Some(ArrayLength::Resolved(other_expr)), ptr_count: p }
+                        if *t == elem_type && *p == ptr_count =>
+                        match self.get_expr(*other_expr) {
+                            Expression::Literal(Literal::Integer(other_len)) if other_len == len => Some(TypeId(idx)),
+                            Expression::Literal(_) => panic!("[internal error] tried to alloc array before typechecking"),
+                            _ => unimplemented!(),
+                        },
+                    _ => None,
+                }),
+            Expression::Literal(_) => panic!("[internal error] tried to alloc array before typechecking"),
+            _ => unimplemented!(),
+        }
     }
     pub fn get_stack_change(&self, stack_start: Vec<ExprId>, mut hfs_stack: Vec<ExprId>) -> (Vec<ExprId>, usize) {
         let common_prefix = hfs_stack.iter().zip(&stack_start).take_while(|(a, b)| a == b).count();
@@ -385,6 +412,13 @@ impl AstArena {
                     panic!("[internal error] trying to index into a non-array after typechecking")
                 },
             }),
+        }
+    }
+
+    pub fn get_type_id_of_identifier(&self, id: Identifier) -> TypeId {
+        match id {
+            Identifier::GlobalVar(var_id) | Identifier::Variable(var_id) => self.get_var(var_id).hfs_type,
+            Identifier::Function(func_id) => self.get_func(func_id).return_type,
         }
     }
 

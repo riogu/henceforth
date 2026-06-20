@@ -3,7 +3,7 @@ use std::{fmt::Display, fs, path::PathBuf};
 use colored::{ColoredString, Colorize};
 
 use crate::hfs::{
-    AstArena, IrArena, IrFuncId, IrType, SourceInfo,
+    AstArena, IrArena, IrFuncId, SourceInfo,
     error::{CompileError, DebugInfo, number_length},
     prettify_ir, print,
     stack_analyzer_errors::StackAnalyzerError,
@@ -14,7 +14,7 @@ pub enum IrLowererErrorKind {
     IncorrectTupleLength(usize, usize),
     IncorrectPointerCount(usize, usize),
     MismatchingStackDepths(usize, usize),
-    MismatchingTypes(IrType, IrType),
+    MismatchingTypes(String, String),
     NoStatementsInGlobalScope,
     StackUnderflow,
     ExpectedItemOnStack,

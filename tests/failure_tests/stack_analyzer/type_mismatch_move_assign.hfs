@@ -1,0 +1,4 @@
+fn main: () -> () {
+	let a: i32;
+	@(true) &= a; //? ERROR "expected i32 found bool"
+}

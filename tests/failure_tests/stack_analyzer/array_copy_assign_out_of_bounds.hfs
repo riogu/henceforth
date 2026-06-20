@@ -1,0 +1,4 @@
+fn main: () -> () {
+	let a: [5]str;
+	@("a" 5) [:]= a; //? ERROR "index {{[0-9]}} is out of bounds for array of length {{[0-9]}}"
+}

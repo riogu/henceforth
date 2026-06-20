@@ -1,7 +1,8 @@
 fn print: (str) -> () { @pop; }
-fn print_board: ([]str) -> () {
+fn print_board: ([9]str) -> () {
     @("next move:\n") &> print;
-    let board: [9]str; &= board;
+    let board: [9]str;
+    &= board;
     let idx: i32; @(0) &= idx;
     while @(idx 9 !=) {
         if @(idx 3 % 0 ==) { @(" |-----------|\n") &> print; }
@@ -13,7 +14,7 @@ fn print_board: ([]str) -> () {
         @(idx 1 +) &= idx;
     }
 }
-fn player_win: ([]str str) -> (bool) {
+fn player_win: ([9]str str) -> (bool) {
     let board: [9]str; &= board;
     let player: str; &= player;
     @(
@@ -32,7 +33,7 @@ fn player_win: ([]str str) -> (bool) {
      )
 }
 
-fn get_winner: ([]str) -> (str) {
+fn get_winner: ([9]str) -> (str) {
     if @("X") &> player_win {
         @("the winner was player 'X'!\n") 
     } else if @("O") &> player_win {
@@ -60,7 +61,7 @@ fn tic_tac_toe: ([9]str i32 str) -> ([9]str) {
 
 fn main: () -> () {
     let N: i32 @(9) &= N; // board size
-    let board: [N]str;
+    let board: [9]str;
 
     let idx: i32; @(0) &= idx;
     while @(idx N !=) {

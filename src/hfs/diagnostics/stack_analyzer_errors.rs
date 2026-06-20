@@ -30,8 +30,8 @@ pub enum StackAnalyzerErrorKind {
     StackUnderflow,
     ExpectedItemOnStack,
     IncorrectNumberReturnValues(usize, usize),
-    TypeMismatchReturnValues(ElaboratedType, ElaboratedType),
-    TypeMismatch(ElaboratedType, ElaboratedType),
+    TypeMismatchReturnValues(String, String),
+    TypeMismatch(String, String),
     IncorrectTupleLength(usize, usize),
     IncorrectPointerCount(usize, usize),
     MismatchingStackDepths(usize, usize),
@@ -44,6 +44,8 @@ pub enum StackAnalyzerErrorKind {
     UseOfUndeclaredIdentifier(String),
     IndexOutOfBounds(i32, i32),
     ArrayLengthMustBeCompileTime(String),
+    ArrayLengthMustBeCompileTimeOnParameter,
+    ArrayLengthMustBeCompileTimeOnReturnType,
 }
 
 #[derive(Debug)]
@@ -127,6 +129,10 @@ impl CompileError for StackAnalyzerError {
                 (format!("index {} is out of bounds for array of length {}", idx, len), "out of bounds".to_string()),
             StackAnalyzerErrorKind::ArrayLengthMustBeCompileTime(name) =>
                 (format!("found runtime value on length expression for '{}'", name), String::new()),
+            StackAnalyzerErrorKind::ArrayLengthMustBeCompileTimeOnParameter =>
+                (format!("found runtime value on length expression for parameter"), String::new()),
+            StackAnalyzerErrorKind::ArrayLengthMustBeCompileTimeOnReturnType =>
+                (format!("found runtime value on length expression for return type"), String::new()),
         }
     }
 

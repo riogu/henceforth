@@ -90,8 +90,8 @@ impl AstArena {
             if let Err(_) = self.compare_types(actual_type_id, *expected_type_id, tokens.clone()) {
                 return stack_analyzer_error!(
                     StackAnalyzerErrorKind::TypeMismatchReturnValues(
-                        self.get_type(*expected_type_id).clone(),
-                        self.get_type(actual_type_id).clone(),
+                        self.get_type(*expected_type_id).get_repr(&self),
+                        self.get_type(actual_type_id).get_repr(&self),
                     ),
                     &*self,
                     tokens.iter().map(|tkn| tkn.clone().source_info).collect()
@@ -156,7 +156,7 @@ impl AstArena {
             },
             (actual, expected) if actual == expected => Ok(()),
             (actual, expected) => stack_analyzer_error!(
-                StackAnalyzerErrorKind::TypeMismatch(expected.clone(), actual.clone()),
+                StackAnalyzerErrorKind::TypeMismatch(expected.get_repr(&self), actual.get_repr(&self)),
                 self,
                 tokens.iter().map(|token| token.source_info.clone()).collect()
             ),
@@ -214,29 +214,9 @@ impl StackAnalyzer {
         let unresolved_var = self.unresolved_arena.get_unresolved_var(id).clone();
         let token = self.unresolved_arena.get_unresolved_var_token(id);
 
-        let hfs_type = if let ElaboratedType::Array { hfs_type, length: Some(ArrayLength::Unresolved(id)), ptr_count } =
-            self.arena.get_type(unresolved_var.hfs_type)
-        {
-            let (hfs_type, ptr_count) = (*hfs_type, *ptr_count);
-            let id = *id;
-            let resolved_expr_id = self.resolve_expr(id)?;
-            let length_token = self.arena.get_expr_token(resolved_expr_id).clone();
-            self.arena.pop_or_error(vec![length_token.clone()])?;
-            if *self.arena.get_expr_provenance(resolved_expr_id) != ExprProvenance::CompiletimeValue {
-                return stack_analyzer_error!(
-                    StackAnalyzerErrorKind::ArrayLengthMustBeCompileTime(unresolved_var.name),
-                    &self.arena,
-                    vec![length_token.source_info]
-                );
-            }
-            self.arena.alloc_type(
-                ElaboratedType::Array { hfs_type, length: Some(ArrayLength::Resolved(resolved_expr_id)), ptr_count },
-                token.clone(),
-            )
-        } else {
-            unresolved_var.hfs_type
-        };
-
+        let hfs_type = self.resolve_array(unresolved_var.hfs_type, token.clone(), |name| {
+            StackAnalyzerErrorKind::ArrayLengthMustBeCompileTime(name)
+        })?;
         let var_id = self.arena.alloc_var(VarDeclaration { name: unresolved_var.name.clone(), hfs_type }, token);
         self.scope_resolution_stack.push_variable(&unresolved_var.name, var_id);
         Ok(var_id)
@@ -245,29 +225,30 @@ impl StackAnalyzer {
     fn resolve_func_decl(&mut self, id: UnresolvedFuncId) -> Result<FuncId, Box<dyn CompileError>> {
         let token = self.unresolved_arena.get_unresolved_func_token(id);
         let (name, param_type, return_type, unresolved_body, parameter_exprs) = {
-            let unresolved_func = &self.unresolved_arena.get_unresolved_func(id);
+            let unresolved_func = &self.unresolved_arena.get_unresolved_func(id).clone();
             // deconstruct parameter tuple into Vec<Expression::Parameter>
             let mut params = Vec::<ExprId>::new();
             if let UnresolvedType::Tuple { type_ids: param_types, .. } =
-                self.unresolved_arena.get_type(unresolved_func.param_type)
+                self.unresolved_arena.get_type(unresolved_func.param_type).clone()
             {
                 for (index, param_type) in param_types.iter().enumerate() {
                     // function parameter type is always a tuple
-                    let token = self.unresolved_arena.get_type_token(*param_type);
+                    let token = self.unresolved_arena.get_type_token(*param_type).clone();
+                    let hfs_type = self.resolve_array(*param_type, token.clone(), |_| {
+                        StackAnalyzerErrorKind::ArrayLengthMustBeCompileTimeOnParameter
+                    })?;
+
                     params.push(self.arena.alloc_and_push_to_hfs_stack(
-                        Expression::Parameter { index, type_id: *param_type },
+                        Expression::Parameter { index, type_id: hfs_type },
                         ExprProvenance::RuntimeValue,
                         token,
                     ))
                 }
             }
-            (
-                unresolved_func.name.clone(),
-                unresolved_func.param_type.clone(),
-                unresolved_func.return_type.clone(),
-                unresolved_func.body,
-                params,
-            )
+            let return_type = self.resolve_array(unresolved_func.return_type, token.clone(), |_name| {
+                StackAnalyzerErrorKind::ArrayLengthMustBeCompileTimeOnReturnType
+            })?;
+            (unresolved_func.name.clone(), unresolved_func.param_type.clone(), return_type, unresolved_func.body, params)
         };
 
         // needed for recursive functions AND to match the correct token
@@ -543,14 +524,18 @@ impl StackAnalyzer {
                     ])?
                 };
 
-                let identifier = self.resolve_var_assignment_identifier(
+                let resolved_identifier = self.resolve_var_assignment_identifier(
                     identifier,
                     *self.arena.get_expr_provenance(value),
                     deref_count,
                     assign_tkn,
                 )?;
 
-                Ok(self.arena.alloc_stmt(Statement::Assignment { identifier, is_move, deref_count }, token))
+                let value_type_id = self.arena.get_type_id_of_expr(value)?;
+                let identifier_type_id = self.arena.get_type_id_of_identifier(resolved_identifier);
+                self.arena.compare_types(value_type_id, identifier_type_id, vec![self.arena.get_expr_token(value).clone()])?;
+
+                Ok(self.arena.alloc_stmt(Statement::Assignment { identifier: resolved_identifier, is_move, deref_count }, token))
             },
             UnresolvedStatement::FunctionCall { identifier, is_move } => {
                 // just checks if we actually had a function and finds the identifier
@@ -625,14 +610,50 @@ impl StackAnalyzer {
                     ])?
                 };
 
-                let identifier = self.resolve_var_assignment_identifier(
+                let resolved_identifier = self.resolve_var_assignment_identifier(
                     identifier,
                     *self.arena.get_expr_provenance(value),
                     deref_count,
                     assign_tkn,
                 )?;
 
-                Ok(self.arena.alloc_stmt(Statement::ArrayAssignment { identifier, is_move, deref_count, position: idx }, token))
+                let idx_type_id = self.arena.get_type_id_of_expr(idx)?;
+                let value_type_id = self.arena.get_type_id_of_expr(value)?;
+                let identifier_type_id = self.arena.get_type_id_of_identifier(resolved_identifier);
+
+                let value_token = self.arena.get_expr_token(value);
+                let idx_token = self.arena.get_expr_token(idx);
+
+                if let ElaboratedType::Array { hfs_type, length, .. } = self.arena.get_type(identifier_type_id) {
+                    self.arena.compare_types(value_type_id, *hfs_type, vec![value_token.clone()])?;
+                    self.arena.compare_types(idx_type_id, ElaboratedType::new_int(0).type_id(), vec![idx_token.clone()])?;
+                    match length {
+                        Some(ArrayLength::Unresolved(_)) => panic!("[internal error] array length should be resolved by now"),
+                        Some(ArrayLength::Resolved(length)) =>
+                        // we don't need to check for the provenance of the length expression, that is done when it's resolved
+                            if *self.arena.get_expr_provenance(idx) == ExprProvenance::CompiletimeValue {
+                                self.check_bounds(&idx, length)?;
+                            },
+                        None => unimplemented!(),
+                    }
+                } else {
+                    return stack_analyzer_error!(
+                        StackAnalyzerErrorKind::TypeMismatch(
+                            ElaboratedType::Array { hfs_type: TypeId(usize::MAX), length: None, ptr_count: 0 }
+                                .get_repr(&self.arena),
+                            self.arena.get_type(identifier_type_id).get_repr(&self.arena),
+                        ),
+                        &self.arena,
+                        vec![self.unresolved_arena.get_unresolved_expr_token(identifier).source_info]
+                    );
+                }
+
+                self.arena.compare_types(value_type_id, identifier_type_id, vec![self.arena.get_expr_token(value).clone()])?;
+
+                Ok(self.arena.alloc_stmt(
+                    Statement::ArrayAssignment { identifier: resolved_identifier, is_move, deref_count, position: idx },
+                    token,
+                ))
             },
         }
     }
@@ -1042,8 +1063,9 @@ impl StackAnalyzer {
                 } else {
                     stack_analyzer_error!(
                         StackAnalyzerErrorKind::TypeMismatch(
-                            ElaboratedType::Array { hfs_type: TypeId(0), length: None, ptr_count: 0 },
-                            self.arena.get_type(lhs_type).clone()
+                            ElaboratedType::Array { hfs_type: TypeId(usize::MAX), length: None, ptr_count: 0 }
+                                .get_repr(&self.arena),
+                            self.arena.get_type(lhs_type).get_repr(&self.arena)
                         ),
                         &self.arena,
                         vec![self.arena.get_expr_token(lhs_expr).source_info]
@@ -1094,17 +1116,59 @@ impl StackAnalyzer {
         }
     }
 
-    fn check_bounds(&self, rhs_expr: &ExprId, expr: &ExprId) -> Result<(), Box<dyn CompileError>> {
-        match (self.arena.get_expr(*rhs_expr), self.arena.get_expr(*expr)) {
+    fn check_bounds(&self, index: &ExprId, length: &ExprId) -> Result<(), Box<dyn CompileError>> {
+        match (self.arena.get_expr(*index), self.arena.get_expr(*length)) {
             (Expression::Literal(Literal::Integer(idx)), Expression::Literal(Literal::Integer(len))) =>
                 if *idx >= 0 && *idx < *len {
                     Ok(())
                 } else {
                     return stack_analyzer_error!(StackAnalyzerErrorKind::IndexOutOfBounds(*idx, *len), &self.arena, vec![
-                        self.arena.get_expr_token(*rhs_expr).source_info
+                        self.arena.get_expr_token(*index).source_info
                     ]);
                 },
-            _ => unimplemented!(),
+            (_, _) => Ok(()),
+        }
+    }
+
+    fn resolve_array(
+        &mut self,
+        hfs_type: TypeId,
+        token: Token,
+        error_fn: impl Fn(String) -> StackAnalyzerErrorKind + Copy,
+    ) -> Result<TypeId, Box<dyn CompileError>> {
+        match self.arena.get_type(hfs_type).clone() {
+            ElaboratedType::Array { hfs_type, length: Some(ArrayLength::Unresolved(id)), ptr_count } => {
+                let hfs_type = self.resolve_array(hfs_type, token.clone(), error_fn)?;
+
+                let resolved_expr_id = self.resolve_expr(id)?;
+                let length_token = self.arena.get_expr_token(resolved_expr_id).clone();
+                self.arena.pop_or_error(vec![length_token.clone()])?;
+
+                if *self.arena.get_expr_provenance(resolved_expr_id) != ExprProvenance::CompiletimeValue {
+                    let name = self.arena.get_type(hfs_type).get_repr(&self.arena);
+                    return stack_analyzer_error!(error_fn(name), &self.arena, vec![length_token.source_info]);
+                }
+
+                Ok(self.arena.alloc_type(
+                    ElaboratedType::Array { hfs_type, length: Some(ArrayLength::Resolved(resolved_expr_id)), ptr_count },
+                    token,
+                ))
+            },
+            ElaboratedType::Tuple { type_ids, ptr_count } => {
+                let mut resolved_ids = Vec::new();
+                let mut changed = false;
+                for id in type_ids.iter() {
+                    let resolved = self.resolve_array(*id, token.clone(), error_fn)?;
+                    changed |= resolved != *id;
+                    resolved_ids.push(resolved);
+                }
+                if changed {
+                    Ok(self.arena.alloc_type(ElaboratedType::Tuple { type_ids: resolved_ids, ptr_count }, token))
+                } else {
+                    Ok(hfs_type)
+                }
+            },
+            _ => Ok(hfs_type),
         }
     }
 }

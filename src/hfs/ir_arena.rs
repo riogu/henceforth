@@ -323,7 +323,7 @@ impl IrArena {
             },
             (actual, expected) if actual == expected => Ok(()),
             (actual, expected) => ir_lowerer_error!(
-                IrLowererErrorKind::MismatchingTypes(actual.clone(), expected.clone()),
+                IrLowererErrorKind::MismatchingTypes(actual.get_repr(&self), expected.get_repr(&self)),
                 self,
                 None,
                 source_infos

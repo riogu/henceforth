@@ -1,6 +1,4 @@
-use std::fmt::Display;
-
-use crate::hfs::{InstId, IrArena, TokenKind, UnresolvedAstArena, UnresolvedExprId, ast::*};
+use crate::hfs::{InstId, Instruction, IrArena, Literal, TokenKind, UnresolvedAstArena, UnresolvedExprId, ast::*};
 
 pub const PRIMITIVE_TYPE_COUNT: usize = 4;
 
@@ -35,16 +33,17 @@ impl Type for UnresolvedType {
 
     fn get_repr(&self, arena: &Self::Arena) -> String {
         match self {
-            UnresolvedType::Int { ptr_count: _ } => format!("i32"),
-            UnresolvedType::String { ptr_count: _ } => format!("str"),
-            UnresolvedType::Bool { ptr_count: _ } => format!("bool"),
-            UnresolvedType::Float { ptr_count: _ } => format!("f32"),
-            UnresolvedType::Tuple { type_ids, ptr_count: _ } => format!(
-                "Tuple<{}>",
-                type_ids.iter().map(|id| arena.get_type(*id).get_repr(arena)).collect::<Vec<String>>().join(", ")
+            UnresolvedType::Int { ptr_count } => format!("i32{}", "*".repeat(*ptr_count)),
+            UnresolvedType::String { ptr_count } => format!("str{}", "*".repeat(*ptr_count)),
+            UnresolvedType::Bool { ptr_count } => format!("bool{}", "*".repeat(*ptr_count)),
+            UnresolvedType::Float { ptr_count } => format!("f32{}", "*".repeat(*ptr_count)),
+            UnresolvedType::Tuple { type_ids, ptr_count } => format!(
+                "({}){}",
+                type_ids.iter().map(|id| arena.get_type(*id).get_repr(arena)).collect::<Vec<String>>().join(", "),
+                "*".repeat(*ptr_count)
             ),
-            UnresolvedType::Array { hfs_type, length: _, ptr_count: _ } =>
-                format!("[]{}", arena.get_type(*hfs_type).get_repr(arena)),
+            UnresolvedType::Array { hfs_type, length: _, ptr_count } =>
+                format!("[]{}{}", arena.get_type(*hfs_type).get_repr(arena), "*".repeat(*ptr_count)),
         }
     }
 
@@ -117,16 +116,34 @@ impl Type for ElaboratedType {
 
     fn get_repr(&self, arena: &Self::Arena) -> String {
         match self {
-            ElaboratedType::Int { ptr_count: _ } => format!("i32"),
-            ElaboratedType::String { ptr_count: _ } => format!("str"),
-            ElaboratedType::Bool { ptr_count: _ } => format!("bool"),
-            ElaboratedType::Float { ptr_count: _ } => format!("f32"),
-            ElaboratedType::Tuple { type_ids, ptr_count: _ } => format!(
-                "Tuple<{}>",
-                type_ids.iter().map(|id| arena.get_type(*id).get_repr(arena)).collect::<Vec<String>>().join(", ")
+            ElaboratedType::Int { ptr_count } => format!("i32{}", "*".repeat(*ptr_count)),
+            ElaboratedType::String { ptr_count } => format!("str{}", "*".repeat(*ptr_count)),
+            ElaboratedType::Bool { ptr_count } => format!("bool{}", "*".repeat(*ptr_count)),
+            ElaboratedType::Float { ptr_count } => format!("f32{}", "*".repeat(*ptr_count)),
+            ElaboratedType::Tuple { type_ids, ptr_count } => format!(
+                "({}){}",
+                type_ids.iter().map(|id| arena.get_type(*id).get_repr(arena)).collect::<Vec<String>>().join(", "),
+                "*".repeat(*ptr_count)
             ),
-            ElaboratedType::Array { hfs_type, length: _, ptr_count: _ } =>
-                format!("[]{}", arena.get_type(*hfs_type).get_repr(arena)),
+            ElaboratedType::Array { hfs_type, length, ptr_count } =>
+                if matches!(*hfs_type, TypeId(usize::MAX)) {
+                    return format!("array");
+                } else {
+                    return format!(
+                        "[{}]{}{}",
+                        match length {
+                            Some(ArrayLength::Resolved(id)) => match arena.get_expr(*id) {
+                                Expression::Literal(Literal::Integer(n)) => n.to_string(),
+                                Expression::Literal(_) => panic!("[internal error] typechecking array before its length"),
+                                _ => unimplemented!(),
+                            },
+                            Some(ArrayLength::Unresolved(_)) => format!("array"),
+                            None => String::new(),
+                        },
+                        arena.get_type(*hfs_type).get_repr(arena),
+                        "*".repeat(*ptr_count)
+                    );
+                },
         }
     }
 
@@ -177,19 +194,6 @@ impl Type for ElaboratedType {
     }
 }
 
-impl Display for ElaboratedType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ElaboratedType::Int { ptr_count } => write!(f, "i32{}", "*".repeat(*ptr_count)),
-            ElaboratedType::Float { ptr_count } => write!(f, "f32{}", "*".repeat(*ptr_count)),
-            ElaboratedType::String { ptr_count } => write!(f, "str{}", "*".repeat(*ptr_count)),
-            ElaboratedType::Bool { ptr_count } => write!(f, "bool{}", "*".repeat(*ptr_count)),
-            ElaboratedType::Tuple { ptr_count, .. } => write!(f, "tuple{}", "*".repeat(*ptr_count)),
-            ElaboratedType::Array { ptr_count, .. } => write!(f, "array{}", "*".repeat(*ptr_count)),
-        }
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum IrType {
     Int { ptr_count: usize },
@@ -206,15 +210,34 @@ impl Type for IrType {
 
     fn get_repr(&self, arena: &Self::Arena) -> String {
         match self {
-            IrType::Int { ptr_count: _ } => format!("i32"),
-            IrType::String { ptr_count: _ } => format!("str"),
-            IrType::Bool { ptr_count: _ } => format!("bool"),
-            IrType::Float { ptr_count: _ } => format!("f32"),
-            IrType::Tuple { type_ids, ptr_count: _ } => format!(
-                "Tuple<{}>",
-                type_ids.iter().map(|id| arena.get_type(*id).get_repr(arena)).collect::<Vec<String>>().join(", ")
+            IrType::Int { ptr_count } => format!("i32{}", "*".repeat(*ptr_count)),
+            IrType::String { ptr_count } => format!("str{}", "*".repeat(*ptr_count)),
+            IrType::Bool { ptr_count } => format!("bool{}", "*".repeat(*ptr_count)),
+            IrType::Float { ptr_count } => format!("f32{}", "*".repeat(*ptr_count)),
+            IrType::Tuple { type_ids, ptr_count } => format!(
+                "Tuple<{}>{}",
+                type_ids.iter().map(|id| arena.get_type(*id).get_repr(arena)).collect::<Vec<String>>().join(", "),
+                "*".repeat(*ptr_count)
             ),
-            IrType::Array { hfs_type, length: _, ptr_count: _ } => format!("[]{}", arena.get_type(*hfs_type).get_repr(arena)),
+            IrType::Array { hfs_type, length, ptr_count } =>
+                if matches!(*hfs_type, TypeId(usize::MAX)) {
+                    return format!("array");
+                } else {
+                    return format!(
+                        "[{}]{}{}",
+                        match length {
+                            Some(inst) => match arena.get_inst(*inst) {
+                                Instruction::Literal { literal: Literal::Integer(n), .. } => n.to_string(),
+                                Instruction::Literal { .. } =>
+                                    panic!("[internal error] found literal in length expression of array at codegen"),
+                                _ => unimplemented!(),
+                            },
+                            None => String::new(),
+                        },
+                        arena.get_type(*hfs_type).get_repr(arena),
+                        "*".repeat(*ptr_count)
+                    );
+                },
         }
     }
 
@@ -261,19 +284,6 @@ impl Type for IrType {
             IrType::Float { .. } => TokenKind::Float,
             IrType::Tuple { .. } => TokenKind::LeftParen,
             IrType::Array { .. } => TokenKind::LeftBracket,
-        }
-    }
-}
-
-impl Display for IrType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            IrType::Int { ptr_count } => write!(f, "i32{}", "*".repeat(*ptr_count)),
-            IrType::Float { ptr_count } => write!(f, "f32{}", "*".repeat(*ptr_count)),
-            IrType::String { ptr_count } => write!(f, "str{}", "*".repeat(*ptr_count)),
-            IrType::Bool { ptr_count } => write!(f, "bool{}", "*".repeat(*ptr_count)),
-            IrType::Tuple { ptr_count, .. } => write!(f, "tuple{}", "*".repeat(*ptr_count)),
-            IrType::Array { ptr_count, .. } => write!(f, "array{}", "*".repeat(*ptr_count)),
         }
     }
 }

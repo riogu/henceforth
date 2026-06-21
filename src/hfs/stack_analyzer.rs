@@ -228,6 +228,7 @@ impl StackAnalyzer {
             let unresolved_func = &self.unresolved_arena.get_unresolved_func(id).clone();
             // deconstruct parameter tuple into Vec<Expression::Parameter>
             let mut params = Vec::<ExprId>::new();
+            let mut new_param_types: Vec<TypeId> = Vec::new();
             if let UnresolvedType::Tuple { type_ids: param_types, .. } =
                 self.unresolved_arena.get_type(unresolved_func.param_type).clone()
             {
@@ -237,6 +238,7 @@ impl StackAnalyzer {
                     let hfs_type = self.resolve_array(*param_type, token.clone(), |_| {
                         StackAnalyzerErrorKind::ArrayLengthMustBeCompileTimeOnParameter
                     })?;
+                    new_param_types.push(hfs_type);
 
                     params.push(self.arena.alloc_and_push_to_hfs_stack(
                         Expression::Parameter { index, type_id: hfs_type },
@@ -248,7 +250,9 @@ impl StackAnalyzer {
             let return_type = self.resolve_array(unresolved_func.return_type, token.clone(), |_name| {
                 StackAnalyzerErrorKind::ArrayLengthMustBeCompileTimeOnReturnType
             })?;
-            (unresolved_func.name.clone(), unresolved_func.param_type.clone(), return_type, unresolved_func.body, params)
+            let param_type =
+                self.arena.alloc_type(ElaboratedType::Tuple { type_ids: new_param_types, ptr_count: 0 }, token.clone());
+            (unresolved_func.name.clone(), param_type, return_type, unresolved_func.body, params)
         };
 
         // needed for recursive functions AND to match the correct token
@@ -596,7 +600,6 @@ impl StackAnalyzer {
             },
             UnresolvedStatement::Else(_) => panic!("[internal error] else statements are not solved here"),
             UnresolvedStatement::ArrayAssignment { identifier, is_move, deref_count } => {
-                // TODO check for bounds and type check
                 let assign_tkn = self.unresolved_arena.get_unresolved_stmt_token(id);
                 let (value, idx) = if is_move {
                     self.arena.pop2_or_error(vec![
@@ -636,6 +639,8 @@ impl StackAnalyzer {
                             },
                         None => unimplemented!(),
                     }
+
+                    self.arena.compare_types(value_type_id, *hfs_type, vec![self.arena.get_expr_token(value).clone()])?;
                 } else {
                     return stack_analyzer_error!(
                         StackAnalyzerErrorKind::TypeMismatch(
@@ -647,8 +652,6 @@ impl StackAnalyzer {
                         vec![self.unresolved_arena.get_unresolved_expr_token(identifier).source_info]
                     );
                 }
-
-                self.arena.compare_types(value_type_id, identifier_type_id, vec![self.arena.get_expr_token(value).clone()])?;
 
                 Ok(self.arena.alloc_stmt(
                     Statement::ArrayAssignment { identifier: resolved_identifier, is_move, deref_count, position: idx },

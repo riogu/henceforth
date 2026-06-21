@@ -217,6 +217,9 @@ impl UnresolvedAstArena {
 
     pub fn alloc_type(&mut self, hfs_type: UnresolvedType, token: Token) -> TypeId {
         if let Some(id) = self.types.iter().position(|t| *t == hfs_type) {
+            if self.type_tokens[id].source_info == SourceInfo::new(0, 0, 0) {
+                self.type_tokens[id] = token;
+            }
             return TypeId(id);
         }
         let id = TypeId(self.types.len());

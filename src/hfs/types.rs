@@ -137,7 +137,7 @@ impl Type for ElaboratedType {
                                 Expression::Literal(_) => panic!("[internal error] typechecking array before its length"),
                                 _ => unimplemented!(),
                             },
-                            Some(ArrayLength::Unresolved(_)) => format!("array"),
+                            Some(ArrayLength::Unresolved(_)) => format!("UNRESOLVED_LENGTH"),
                             None => String::new(),
                         },
                         arena.get_type(*hfs_type).get_repr(arena),

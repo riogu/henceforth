@@ -2,13 +2,12 @@
 
 use std::{error::Error, path::PathBuf, process::exit, rc::Rc};
 
-use clap::{arg, Parser};
+use clap::{Parser, arg};
 use henceforth::hfs::{
-    self,
+    self, OptPipeline,
     error::{CompileError, DiagnosticInfo},
-    get_eof_source_info,
+    get_eof_span,
     ir_lowerer_errors::IrLowererError,
-    OptPipeline,
 };
 
 #[derive(Parser, Debug, Clone)]
@@ -25,7 +24,7 @@ fn run() -> Result<(), Box<dyn CompileError>> {
     let file_name = file.path.to_str().unwrap().to_string();
 
     let tokens = hfs::Lexer::tokenize(&file)?;
-    let diagnostic_info = Rc::new(DiagnosticInfo::new(file.path, get_eof_source_info(&tokens)));
+    let diagnostic_info = Rc::new(DiagnosticInfo::new(file.path, get_eof_span(&tokens)));
 
     let (unresolved_top_level_nodes, unresolved_ast_arena) = hfs::Parser::parse_tokens(tokens.clone(), diagnostic_info.clone())?;
 

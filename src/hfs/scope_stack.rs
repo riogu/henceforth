@@ -2,10 +2,10 @@ use std::{collections::HashMap, rc::Rc};
 
 use crate::{
     hfs::{
+        Token,
         ast::*,
         error::{CompileError, DiagnosticInfo},
         stack_analyzer_errors::{StackAnalyzerError, StackAnalyzerErrorKind},
-        Token,
     },
     stack_analyzer_error,
 };
@@ -76,9 +76,8 @@ impl ScopeStack {
         match curr_stack.kind {
             ScopeKind::Global => self.mangled_global_vars.insert(mangled_name, var_id),
             ScopeKind::Function => self.mangled_locals.insert(mangled_name, var_id),
-            ScopeKind::Block | ScopeKind::WhileLoop | ScopeKind::IfStmt | ScopeKind::ElseStmt => {
-                self.mangled_locals.insert(mangled_name, var_id)
-            },
+            ScopeKind::Block | ScopeKind::WhileLoop | ScopeKind::IfStmt | ScopeKind::ElseStmt =>
+                self.mangled_locals.insert(mangled_name, var_id),
         };
     }
     pub fn pop(&mut self) {
@@ -86,9 +85,7 @@ impl ScopeStack {
             self.scope_stack.pop();
         }
     }
-    pub fn curr_scope_kind(&self) -> ScopeKind {
-        self.scope_stack.last().expect("[internal hfs error] no scope found").kind
-    }
+    pub fn curr_scope_kind(&self) -> ScopeKind { self.scope_stack.last().expect("[internal hfs error] no scope found").kind }
     pub fn get_curr_func_return_type(&self) -> TypeId {
         self.scope_stack.last().expect("[internal hfs error] no scope found").curr_func_return_type
     }
@@ -142,13 +139,12 @@ impl ScopeStack {
         match self.find_variable(&name) {
             (None, _) => match self.find_function(&name) {
                 Some(id) => Ok(Identifier::Function(id)),
-                None => {
+                None =>
                     return stack_analyzer_error!(
                         StackAnalyzerErrorKind::UseOfUndeclaredIdentifier(name.to_string()),
                         arena,
-                        vec![token.source_info]
-                    )
-                },
+                        vec![token.span]
+                    ),
             },
             (Some(id), false) => Ok(Identifier::Variable(id)),
             (Some(id), true) => Ok(Identifier::GlobalVar(id)),

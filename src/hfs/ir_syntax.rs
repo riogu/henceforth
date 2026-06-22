@@ -36,9 +36,7 @@ use std::{
     rc::Rc,
 };
 
-use crate::hfs::{
-    BlockId, InstId, Instruction, IrArena, IrFuncId, IrFunction, IrType, Literal, SourceInfo, TerminatorInst, TypeId,
-};
+use crate::hfs::{BlockId, InstId, Instruction, IrArena, IrFuncId, IrFunction, IrType, Literal, Span, TerminatorInst, TypeId};
 
 #[derive(Default)]
 pub struct NameMap {
@@ -710,7 +708,7 @@ mod iso {
     use indexmap::IndexMap;
 
     use super::*;
-    use crate::hfs::{BlockId, InstId, Instruction, IrFuncId, IrOperation, Literal, SourceInfo, TerminatorInst, TypeId};
+    use crate::hfs::{BlockId, InstId, Instruction, IrFuncId, IrOperation, Literal, Span, TerminatorInst, TypeId};
 
     pub fn literal_integer() -> Iso<i32, Literal> {
         Iso::new(|n| Some(Literal::Integer(n)), |lit| if let Literal::Integer(n) = lit { Some(n) } else { None })
@@ -923,11 +921,11 @@ mod iso {
     }
 
     pub fn term_jump() -> Iso<BlockId, TerminatorInst> {
-        use crate::hfs::SourceInfo;
+        use crate::hfs::Span;
         Iso::new(
-            |b| Some(TerminatorInst::Jump { source_info: SourceInfo::default(), target: b }),
+            |b| Some(TerminatorInst::Jump { span: Span::default(), target: b }),
             |term| {
-                if let TerminatorInst::Jump { source_info: _, target: b } = term {
+                if let TerminatorInst::Jump { span: _, target: b } = term {
                     Some(b)
                 } else {
                     None
@@ -937,11 +935,11 @@ mod iso {
     }
 
     pub fn term_return() -> Iso<InstId, TerminatorInst> {
-        use crate::hfs::SourceInfo;
+        use crate::hfs::Span;
         Iso::new(
-            |id| Some(TerminatorInst::Return { source_info: SourceInfo::default(), return_tuple: id }),
+            |id| Some(TerminatorInst::Return { span: Span::default(), return_tuple: id }),
             |term| {
-                if let TerminatorInst::Return { source_info: _, return_tuple: id } = term {
+                if let TerminatorInst::Return { span: _, return_tuple: id } = term {
                     Some(id)
                 } else {
                     None
@@ -950,11 +948,9 @@ mod iso {
         )
     }
     pub fn term_branch() -> Iso<(InstId, BlockId, BlockId), TerminatorInst> {
-        use crate::hfs::SourceInfo;
+        use crate::hfs::Span;
         Iso::new(
-            |(cond, t, f)| {
-                Some(TerminatorInst::Branch { source_info: SourceInfo::default(), cond, true_block: t, false_block: f })
-            },
+            |(cond, t, f)| Some(TerminatorInst::Branch { span: Span::default(), cond, true_block: t, false_block: f }),
             |term| {
                 if let TerminatorInst::Branch { cond, true_block, false_block, .. } = term {
                     Some((cond, true_block, false_block))
@@ -967,7 +963,7 @@ mod iso {
 
     pub fn inst_load() -> Iso<InstId, Instruction> {
         Iso::new(
-            |address| Some(Instruction::Load { source_info: SourceInfo::default(), address, type_id: TypeId::default() }),
+            |address| Some(Instruction::Load { span: Span::default(), address, type_id: TypeId::default() }),
             |inst| {
                 if let Instruction::Load { address, .. } = inst {
                     Some(address)
@@ -980,7 +976,7 @@ mod iso {
 
     pub fn inst_store() -> Iso<(InstId, InstId), Instruction> {
         Iso::new(
-            |(value, address)| Some(Instruction::Store { source_info: SourceInfo::default(), address, value }),
+            |(value, address)| Some(Instruction::Store { span: Span::default(), address, value }),
             |inst| {
                 if let Instruction::Store { address, value, .. } = inst {
                     Some((value, address))
@@ -992,7 +988,7 @@ mod iso {
     }
     pub fn inst_alloca() -> Iso<TypeId, Instruction> {
         Iso::new(
-            |type_id| Some(Instruction::Alloca { source_info: SourceInfo::default(), type_id }),
+            |type_id| Some(Instruction::Alloca { span: Span::default(), type_id }),
             |inst| {
                 if let Instruction::Alloca { type_id, .. } = inst {
                     Some(type_id)
@@ -1005,7 +1001,7 @@ mod iso {
 
     pub fn inst_retval() -> Iso<TypeId, Instruction> {
         Iso::new(
-            |type_id| Some(Instruction::ReturnValue { source_info: SourceInfo::default(), type_id }),
+            |type_id| Some(Instruction::ReturnValue { span: Span::default(), type_id }),
             |inst| {
                 if let Instruction::ReturnValue { type_id, .. } = inst {
                     Some(type_id)
@@ -1020,7 +1016,7 @@ mod iso {
         Iso::new(
             |(func_id, args)| {
                 Some(Instruction::FunctionCall {
-                    source_info: SourceInfo::default(),
+                    span: Span::default(),
                     func_id,
                     args,
                     // NOTE: ignoring is_move and return_values should be fine as long as we don't test the stack directly at the IR level (if we do this we are stupid)
@@ -1041,10 +1037,7 @@ mod iso {
     pub fn inst_phi() -> Iso<Vec<(BlockId, InstId)>, Instruction> {
         Iso::new(
             |pairs: Vec<(BlockId, InstId)>| {
-                Some(Instruction::Phi {
-                    source_info: SourceInfo::default(),
-                    incoming: pairs.into_iter().collect::<IndexMap<_, _>>(),
-                })
+                Some(Instruction::Phi { span: Span::default(), incoming: pairs.into_iter().collect::<IndexMap<_, _>>() })
             },
             |inst| {
                 if let Instruction::Phi { incoming, .. } = inst {
@@ -1058,7 +1051,7 @@ mod iso {
 
     pub fn inst_tuple() -> Iso<Vec<InstId>, Instruction> {
         Iso::new(
-            |instructions| Some(Instruction::Tuple { source_info: SourceInfo::default(), instructions }),
+            |instructions| Some(Instruction::Tuple { span: Span::default(), instructions }),
             |inst| {
                 if let Instruction::Tuple { instructions, .. } = inst {
                     Some(instructions)
@@ -1071,7 +1064,7 @@ mod iso {
 
     pub fn inst_operation() -> Iso<IrOperation, Instruction> {
         Iso::new(
-            |op| Some(Instruction::Operation { source_info: SourceInfo::default(), op }),
+            |op| Some(Instruction::Operation { span: Span::default(), op }),
             |inst| {
                 if let Instruction::Operation { op, .. } = inst {
                     Some(op)
@@ -1084,7 +1077,7 @@ mod iso {
 
     pub fn inst_literal() -> Iso<Literal, Instruction> {
         Iso::new(
-            |literal| Some(Instruction::Literal { source_info: SourceInfo::default(), literal }),
+            |literal| Some(Instruction::Literal { span: Span::default(), literal }),
             |inst| {
                 if let Instruction::Literal { literal, .. } = inst {
                     Some(literal)
@@ -1096,7 +1089,7 @@ mod iso {
     }
     pub fn inst_load_element() -> Iso<(usize, InstId), Instruction> {
         Iso::new(
-            |(index, tuple)| Some(Instruction::LoadElement { source_info: SourceInfo::default(), index, tuple }),
+            |(index, tuple)| Some(Instruction::LoadElement { span: Span::default(), index, tuple }),
             |inst| {
                 if let Instruction::LoadElement { index, tuple, .. } = inst {
                     Some((index, tuple))
@@ -1147,7 +1140,7 @@ fn syntax_store<S: Syntax>(s: &S, names: &NameMap) -> S::Output<Instruction> {
 fn syntax_parameter<S: Syntax>(s: &S) -> S::Output<Instruction> {
     s.iso(
         Iso::new(
-            |index| Some(Instruction::Parameter { source_info: SourceInfo::default(), index, type_id: TypeId::default() }),
+            |index| Some(Instruction::Parameter { span: Span::default(), index, type_id: TypeId::default() }),
             |inst| {
                 if let Instruction::Parameter { index, .. } = inst {
                     Some(index)
@@ -1362,7 +1355,7 @@ fn collect_tuple_type(name: &str, arena: &mut IrArena, names: &mut NameMap) {
     if inner_ids.len() != inner_names.len() {
         return;
     }
-    let type_id = arena.alloc_type(IrType::Tuple { type_ids: inner_ids, ptr_count: 0 }, SourceInfo::new(0, 0, 0));
+    let type_id = arena.alloc_type(IrType::Tuple { type_ids: inner_ids, ptr_count: 0 }, Span::new(0, 0, 0));
     names.type_to_name.insert(type_id, name.to_string());
     names.name_to_type.insert(name.to_string(), type_id);
 }
@@ -1371,7 +1364,7 @@ fn collect_tuple_type(name: &str, arena: &mut IrArena, names: &mut NameMap) {
 //
 // Simple scan over the text for functions, blocks and instructions
 fn collect_names(input: &str, arena: &mut IrArena, names: &mut NameMap) {
-    let placeholder_inst = || Instruction::Literal { source_info: SourceInfo::default(), literal: Literal::Integer(0) };
+    let placeholder_inst = || Instruction::Literal { span: Span::default(), literal: Literal::Integer(0) };
     let placeholder_type = TypeId(0);
 
     let mut current_func: Option<IrFuncId> = None;
@@ -1388,7 +1381,7 @@ fn collect_names(input: &str, arena: &mut IrArena, names: &mut NameMap) {
             let name = rest.split_whitespace().next().unwrap_or("").trim_end_matches(':').to_string();
             let joined = rest.split_whitespace().skip(1).collect::<Vec<_>>().join(" ");
             let func_id = arena.alloc_function(IrFunction {
-                source_info: SourceInfo::default(),
+                span: Span::default(),
                 name: name.clone(),
                 param_type: placeholder_type,
                 return_type: placeholder_type,

@@ -24,7 +24,7 @@ impl Parser {
             Some(found) => parser_error!(
                 ParserErrorKind::ExpectedButFound(vec![Expectable::Token(token_kind)], Some(found.kind)),
                 &self.arena,
-                vec![found.source_info]
+                vec![found.span]
             ),
             None =>
                 parser_error!(ParserErrorKind::ExpectedButFound(vec![Expectable::Token(token_kind)], None), &self.arena, vec![
@@ -46,7 +46,7 @@ impl Parser {
             _ => parser_error!(
                 ParserErrorKind::ExpectedButFound(vec![Expectable::Identifier], Some(token.kind)),
                 &self.arena,
-                vec![token.source_info]
+                vec![token.span]
             ),
         }
     }
@@ -64,7 +64,7 @@ impl Parser {
             _ => parser_error!(
                 ParserErrorKind::ExpectedButFound(vec![Expectable::StackKeyword], Some(token.kind)),
                 &self.arena,
-                vec![token.source_info]
+                vec![token.span]
             ),
         }
     }
@@ -114,7 +114,7 @@ impl Parser {
                 Ok(self.arena.alloc_type(UnresolvedType::Array { hfs_type, length, ptr_count }, token))
             },
             _ => parser_error!(ParserErrorKind::ExpectedButFound(vec![Expectable::Type], Some(token.kind)), &self.arena, vec![
-                token.source_info
+                token.span
             ]),
         }
     }
@@ -153,7 +153,7 @@ impl Parser {
                                 Some(t.kind)
                             ),
                             &self.arena,
-                            vec![t.source_info]
+                            vec![t.span]
                         ),
                 }
             },
@@ -169,7 +169,7 @@ impl Parser {
                         Some(t.kind.clone())
                     ),
                     &self.arena,
-                    vec![t.source_info]
+                    vec![t.span]
                 ),
             None =>
                 return parser_error!(
@@ -243,7 +243,7 @@ impl Parser {
                             Some(token.kind.clone()),
                         ),
                         &parser.arena,
-                        vec![token.source_info.clone()]
+                        vec![token.span.clone()]
                     ),
             };
         }
@@ -330,7 +330,7 @@ impl Parser {
                 return parser_error!(
                     ParserErrorKind::ExpectedButFound(vec![Expectable::Statement], Some(token.kind.clone())),
                     &self.arena,
-                    vec![token.source_info.clone()]
+                    vec![token.span.clone()]
                 ),
         }
     }
@@ -438,7 +438,7 @@ impl Parser {
                 return parser_error!(
                     ParserErrorKind::ExpectedButFound(vec![Expectable::StackExpression], Some(token.kind.clone())),
                     &self.arena,
-                    vec![token.source_info.clone()]
+                    vec![token.span.clone()]
                 ),
         }
     }
@@ -494,7 +494,7 @@ impl Parser {
                                 Some(t.kind.clone())
                             ),
                             &self.arena,
-                            vec![t.source_info]
+                            vec![t.span]
                         )
                     },
                     None => parser_error!(
@@ -515,7 +515,7 @@ impl Parser {
                 return parser_error!(
                     ParserErrorKind::ExpectedButFound(vec![Expectable::StackOperation], Some(kind)),
                     &self.arena,
-                    vec![token.source_info.clone()] // shouldn't happen
+                    vec![token.span.clone()] // shouldn't happen
                 ),
         }
     }

@@ -3,7 +3,7 @@ use std::{error::Error, fmt::Display, fs, path::PathBuf};
 use colored::{ColoredString, Colorize, CustomColor};
 
 use crate::hfs::{
-    SourceInfo, TokenKind, Type, UnresolvedAstArena, UnresolvedExpression, UnresolvedFunctionDeclaration, UnresolvedOperation,
+    Span, TokenKind, Type, UnresolvedAstArena, UnresolvedExpression, UnresolvedFunctionDeclaration, UnresolvedOperation,
     UnresolvedStatement, UnresolvedTopLevelId, UnresolvedType, UnresolvedVarDeclaration,
     error::{CompileError, DebugInfo, Dumpable, number_length},
 };
@@ -52,17 +52,17 @@ pub enum ParserErrorKind {
 pub struct ParserError {
     pub kind: ParserErrorKind,
     pub path: PathBuf,
-    pub source_info: SourceInfo,
+    pub span: Span,
     pub debug_info: DebugInfo,
 }
 
 #[macro_export]
 macro_rules! parser_error {
-    ($kind:expr, $arena:expr, $source_info:expr) => {
+    ($kind:expr, $arena:expr, $span:expr) => {
         Err(Box::new(ParserError {
             kind: $kind,
             path: $arena.diagnostic_info.path.clone(),
-            source_info: ParserError::merge_source_info($source_info),
+            span: ParserError::merge_span($span),
             debug_info: $crate::hfs::diagnostics::error::DebugInfo {
                 compiler_file: file!(),
                 compiler_line: line!(),
@@ -74,12 +74,12 @@ macro_rules! parser_error {
 }
 
 impl ParserError {
-    pub fn merge_source_info(mut source_infos: Vec<SourceInfo>) -> SourceInfo {
-        source_infos.sort();
-        let first = source_infos.first().unwrap();
-        let last = source_infos.last().unwrap();
+    pub fn merge_span(mut spans: Vec<Span>) -> Span {
+        spans.sort();
+        let first = spans.first().unwrap();
+        let last = spans.last().unwrap();
 
-        SourceInfo {
+        Span {
             line_number: first.line_number,
             line_offset: first.line_offset,
             token_width: last.line_offset + last.token_width - first.line_offset,
@@ -93,7 +93,7 @@ impl ParserError {
 }
 
 impl CompileError for ParserError {
-    fn get_line(&self) -> usize { return self.source_info.line_number; }
+    fn get_line(&self) -> usize { return self.span.line_number; }
 
     fn message(&self) -> (String, String) {
         match &self.kind {
@@ -121,11 +121,11 @@ impl CompileError for ParserError {
     fn location(&self) -> ColoredString {
         format!(
             "{}{} {}:{}:{}",
-            " ".repeat(number_length(self.source_info.line_number)),
+            " ".repeat(number_length(self.span.line_number)),
             "-->".blue(),
             self.path.to_str().unwrap(),
-            self.source_info.line_number,
-            self.source_info.line_offset
+            self.span.line_number,
+            self.span.line_offset
         )
         .into()
     }
@@ -135,20 +135,20 @@ impl CompileError for ParserError {
 
         let line = source
             .lines()
-            .nth(self.source_info.line_number - 1)
-            .ok_or_else(|| format!("Line {} not found in file", self.source_info.line_number))?
+            .nth(self.span.line_number - 1)
+            .ok_or_else(|| format!("Line {} not found in file", self.span.line_number))?
             .replace("\t", "    ");
 
-        let mut error_pointer = " ".repeat(self.source_info.line_offset - 1);
-        error_pointer.push_str(format!("{} {}", "^".repeat(self.source_info.token_width), self.message().1).as_str());
+        let mut error_pointer = " ".repeat(self.span.line_offset - 1);
+        error_pointer.push_str(format!("{} {}", "^".repeat(self.span.token_width), self.message().1).as_str());
         return Ok(ColoredString::from(format!(
             "{} {}\n{} {} {}\n{} {} {}",
-            " ".repeat(number_length(self.source_info.line_number)),
+            " ".repeat(number_length(self.span.line_number)),
             "|".blue().bold(),
-            self.source_info.line_number.to_string().blue().bold(),
+            self.span.line_number.to_string().blue().bold(),
             "|".blue().bold(),
             line,
-            " ".repeat(number_length(self.source_info.line_number)),
+            " ".repeat(number_length(self.span.line_number)),
             "|".blue().bold(),
             error_pointer.red().bold()
         )));

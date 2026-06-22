@@ -161,22 +161,10 @@ impl UnresolvedAstArena {
     pub fn new(diagnostic_info: Rc<DiagnosticInfo>) -> Self {
         let mut arena = Self::default();
         arena.diagnostic_info = diagnostic_info;
-        arena.alloc_type_uncached(UnresolvedType::new_int(0), Token {
-            kind: TokenKind::Int,
-            source_info: SourceInfo::new(0, 0, 0),
-        });
-        arena.alloc_type_uncached(UnresolvedType::new_float(0), Token {
-            kind: TokenKind::Float,
-            source_info: SourceInfo::new(0, 0, 0),
-        });
-        arena.alloc_type_uncached(UnresolvedType::new_bool(0), Token {
-            kind: TokenKind::Bool,
-            source_info: SourceInfo::new(0, 0, 0),
-        });
-        arena.alloc_type_uncached(UnresolvedType::new_string(0), Token {
-            kind: TokenKind::String,
-            source_info: SourceInfo::new(0, 0, 0),
-        });
+        arena.alloc_type_uncached(UnresolvedType::new_int(0), Token { kind: TokenKind::Int, span: Span::new(0, 0, 0) });
+        arena.alloc_type_uncached(UnresolvedType::new_float(0), Token { kind: TokenKind::Float, span: Span::new(0, 0, 0) });
+        arena.alloc_type_uncached(UnresolvedType::new_bool(0), Token { kind: TokenKind::Bool, span: Span::new(0, 0, 0) });
+        arena.alloc_type_uncached(UnresolvedType::new_string(0), Token { kind: TokenKind::String, span: Span::new(0, 0, 0) });
         arena
     }
 
@@ -217,7 +205,7 @@ impl UnresolvedAstArena {
 
     pub fn alloc_type(&mut self, hfs_type: UnresolvedType, token: Token) -> TypeId {
         if let Some(id) = self.types.iter().position(|t| *t == hfs_type) {
-            if self.type_tokens[id].source_info == SourceInfo::new(0, 0, 0) {
+            if self.type_tokens[id].span == Span::new(0, 0, 0) {
                 self.type_tokens[id] = token;
             }
             return TypeId(id);

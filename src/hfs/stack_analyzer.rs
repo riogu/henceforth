@@ -30,7 +30,7 @@ impl AstArena {
             None => stack_analyzer_error!(
                 StackAnalyzerErrorKind::StackUnderflow,
                 &*self,
-                tokens.iter().map(|tkn| tkn.clone().source_info).collect()
+                tokens.iter().map(|tkn| tkn.clone().span).collect()
             ),
         }
     }
@@ -40,7 +40,7 @@ impl AstArena {
             None => stack_analyzer_error!(
                 StackAnalyzerErrorKind::ExpectedItemOnStack,
                 &*self,
-                tokens.iter().map(|tkn| tkn.clone().source_info).collect()
+                tokens.iter().map(|tkn| tkn.clone().span).collect()
             ),
         }
     }
@@ -56,7 +56,7 @@ impl AstArena {
             None => stack_analyzer_error!(
                 StackAnalyzerErrorKind::ExpectedItemOnStack,
                 &*self,
-                tokens.iter().map(|tkn| tkn.clone().source_info).collect()
+                tokens.iter().map(|tkn| tkn.clone().span).collect()
             ),
         }
     }
@@ -80,7 +80,7 @@ impl AstArena {
             return stack_analyzer_error!(
                 StackAnalyzerErrorKind::IncorrectNumberReturnValues(expected_count, actual_count),
                 &*self,
-                tokens.iter().map(|tkn| tkn.clone().source_info).collect()
+                tokens.iter().map(|tkn| tkn.clone().span).collect()
             );
         }
         let stack_copy = &self.hfs_stack.clone();
@@ -94,7 +94,7 @@ impl AstArena {
                         self.get_type(actual_type_id).get_repr(&self),
                     ),
                     &*self,
-                    tokens.iter().map(|tkn| tkn.clone().source_info).collect()
+                    tokens.iter().map(|tkn| tkn.clone().span).collect()
                 );
             }
         }
@@ -134,14 +134,14 @@ impl AstArena {
                     return stack_analyzer_error!(
                         StackAnalyzerErrorKind::IncorrectTupleLength(expected_types.len(), actual_types.len()),
                         self,
-                        tokens.iter().map(|token| token.source_info.clone()).collect()
+                        tokens.iter().map(|token| token.span.clone()).collect()
                     );
                 }
                 if actual_ptr_count != expected_ptr_count {
                     return stack_analyzer_error!(
                         StackAnalyzerErrorKind::IncorrectPointerCount(*actual_ptr_count, *expected_ptr_count),
                         self,
-                        tokens.iter().map(|token| token.source_info.clone()).collect()
+                        tokens.iter().map(|token| token.span.clone()).collect()
                     );
                 }
                 // Recursively validate each element
@@ -158,7 +158,7 @@ impl AstArena {
             (actual, expected) => stack_analyzer_error!(
                 StackAnalyzerErrorKind::TypeMismatch(expected.get_repr(&self), actual.get_repr(&self)),
                 self,
-                tokens.iter().map(|token| token.source_info.clone()).collect()
+                tokens.iter().map(|token| token.span.clone()).collect()
             ),
         }
     }
@@ -313,27 +313,18 @@ impl StackAnalyzer {
                                 if if_depth_after != else_depth_after {
                                     let else_body = self.unresolved_arena.get_unresolved_stmt(stmt_id.clone());
                                     if let UnresolvedStatement::BlockScope(stmts, _) = else_body {
-                                        let mut else_body_source_infos = Vec::new();
+                                        let mut else_body_spans = Vec::new();
                                         for stmt in stmts {
                                             match stmt {
-                                                UnresolvedTopLevelId::VariableDecl(unresolved_var_id) => else_body_source_infos
-                                                    .push(
-                                                        self.unresolved_arena
-                                                            .get_unresolved_var_token(*unresolved_var_id)
-                                                            .source_info,
-                                                    ),
-                                                UnresolvedTopLevelId::FunctionDecl(unresolved_func_id) => else_body_source_infos
-                                                    .push(
-                                                        self.unresolved_arena
-                                                            .get_unresolved_func_token(*unresolved_func_id)
-                                                            .source_info,
-                                                    ),
-                                                UnresolvedTopLevelId::Statement(unresolved_stmt_id) => else_body_source_infos
-                                                    .push(
-                                                        self.unresolved_arena
-                                                            .get_unresolved_stmt_token(*unresolved_stmt_id)
-                                                            .source_info,
-                                                    ),
+                                                UnresolvedTopLevelId::VariableDecl(unresolved_var_id) => else_body_spans.push(
+                                                    self.unresolved_arena.get_unresolved_var_token(*unresolved_var_id).span,
+                                                ),
+                                                UnresolvedTopLevelId::FunctionDecl(unresolved_func_id) => else_body_spans.push(
+                                                    self.unresolved_arena.get_unresolved_func_token(*unresolved_func_id).span,
+                                                ),
+                                                UnresolvedTopLevelId::Statement(unresolved_stmt_id) => else_body_spans.push(
+                                                    self.unresolved_arena.get_unresolved_stmt_token(*unresolved_stmt_id).span,
+                                                ),
                                             }
                                         }
                                         return stack_analyzer_error!(
@@ -342,7 +333,7 @@ impl StackAnalyzer {
                                                 else_depth_after - if_depth_before,
                                             ),
                                             &self.arena,
-                                            else_body_source_infos
+                                            else_body_spans
                                         );
                                     } else {
                                         panic!(
@@ -368,21 +359,21 @@ impl StackAnalyzer {
                         if if_depth_before != if_depth_after {
                             let if_body = self.arena.get_stmt(body.clone());
                             if let Statement::BlockScope(stmts, _) = if_body {
-                                let mut if_body_source_infos = Vec::new();
+                                let mut if_body_spans = Vec::new();
                                 for stmt in stmts {
                                     match stmt {
                                         TopLevelId::VariableDecl(var_id) =>
-                                            if_body_source_infos.push(self.arena.get_var_token(*var_id).source_info.clone()),
+                                            if_body_spans.push(self.arena.get_var_token(*var_id).span.clone()),
                                         TopLevelId::FunctionDecl(func_id) =>
-                                            if_body_source_infos.push(self.arena.get_function_token(*func_id).source_info.clone()),
+                                            if_body_spans.push(self.arena.get_function_token(*func_id).span.clone()),
                                         TopLevelId::Statement(stmt_id) =>
-                                            if_body_source_infos.push(self.arena.get_stmt_token(*stmt_id).source_info.clone()),
+                                            if_body_spans.push(self.arena.get_stmt_token(*stmt_id).span.clone()),
                                     }
                                 }
                                 return stack_analyzer_error!(
                                     StackAnalyzerErrorKind::ExpectedNetZeroStackEffectIfStmt(if_depth_after - if_depth_before),
                                     &self.arena,
-                                    if_body_source_infos
+                                    if_body_spans
                                 );
                             } else {
                                 panic!("[internal error] if body is not a block scope (should be resolved in parser)")
@@ -420,21 +411,19 @@ impl StackAnalyzer {
                 let stack_depth_after = self.arena.hfs_stack.len();
                 if stack_depth_before != stack_depth_after {
                     if let Statement::BlockScope(stmts, _) = self.arena.get_stmt(body) {
-                        let mut while_body_source_infos = Vec::new();
+                        let mut while_body_spans = Vec::new();
                         for stmt in stmts {
                             match stmt {
-                                TopLevelId::VariableDecl(var_id) =>
-                                    while_body_source_infos.push(self.arena.get_var_token(*var_id).source_info),
+                                TopLevelId::VariableDecl(var_id) => while_body_spans.push(self.arena.get_var_token(*var_id).span),
                                 TopLevelId::FunctionDecl(func_id) =>
-                                    while_body_source_infos.push(self.arena.get_function_token(*func_id).source_info),
-                                TopLevelId::Statement(stmt_id) =>
-                                    while_body_source_infos.push(self.arena.get_stmt_token(*stmt_id).source_info),
+                                    while_body_spans.push(self.arena.get_function_token(*func_id).span),
+                                TopLevelId::Statement(stmt_id) => while_body_spans.push(self.arena.get_stmt_token(*stmt_id).span),
                             }
                         }
                         return stack_analyzer_error!(
                             StackAnalyzerErrorKind::ExpectedNetZeroStackEffectWhileLoop(stack_depth_after - stack_depth_before),
                             &self.arena,
-                            while_body_source_infos
+                            while_body_spans
                         );
                     } else {
                         panic!("[internal error] while body is not a block scope (should be resolved in parser)")
@@ -497,7 +486,7 @@ impl StackAnalyzer {
                     return stack_analyzer_error!(
                         StackAnalyzerErrorKind::FoundXOutsideWhileLoop(JumpKeyword::Break),
                         &self.arena,
-                        vec![self.unresolved_arena.get_unresolved_stmt_token(id).source_info]
+                        vec![self.unresolved_arena.get_unresolved_stmt_token(id).span]
                     );
                 }
                 Ok(self.arena.alloc_stmt(Statement::Break, token))
@@ -507,7 +496,7 @@ impl StackAnalyzer {
                     return stack_analyzer_error!(
                         StackAnalyzerErrorKind::FoundXOutsideWhileLoop(JumpKeyword::Continue),
                         &self.arena,
-                        vec![self.unresolved_arena.get_unresolved_stmt_token(id).source_info]
+                        vec![self.unresolved_arena.get_unresolved_stmt_token(id).span]
                     );
                 }
                 Ok(self.arena.alloc_stmt(Statement::Continue, token))
@@ -570,7 +559,7 @@ impl StackAnalyzer {
                 arg_expr_tokens.reverse();
                 let arg_type_id = self.arena.alloc_type(ElaboratedType::Tuple { type_ids: arg_types, ptr_count: 0 }, Token {
                     kind: TokenKind::LeftParen,
-                    source_info: SourceInfo::new(0, 0, 0),
+                    span: Span::new(0, 0, 0),
                 });
 
                 if !is_move {
@@ -649,7 +638,7 @@ impl StackAnalyzer {
                             self.arena.get_type(identifier_type_id).get_repr(&self.arena),
                         ),
                         &self.arena,
-                        vec![self.unresolved_arena.get_unresolved_expr_token(identifier).source_info]
+                        vec![self.unresolved_arena.get_unresolved_expr_token(identifier).span]
                     );
                 }
 
@@ -683,7 +672,7 @@ impl StackAnalyzer {
                                 return stack_analyzer_error!(
                                     StackAnalyzerErrorKind::TooManyDereferences(deref_count, ptr_count),
                                     &self.arena,
-                                    vec![token.source_info]
+                                    vec![token.span]
                                 );
                             }
                         }
@@ -691,8 +680,8 @@ impl StackAnalyzer {
                     },
                     Identifier::Function(_) =>
                         return stack_analyzer_error!(StackAnalyzerErrorKind::AssignValueToFunction, &self.arena, vec![
-                            assign_tkn.source_info,
-                            token.source_info
+                            assign_tkn.span,
+                            token.span
                         ]),
                 }
             },
@@ -710,8 +699,8 @@ impl StackAnalyzer {
         match identifier {
             Identifier::GlobalVar(_) | Identifier::Variable(_) =>
                 return stack_analyzer_error!(StackAnalyzerErrorKind::CallVariableAsFunction, &self.arena, vec![
-                    assign_tkn.source_info,
-                    self.unresolved_arena.get_unresolved_expr_token(id).source_info
+                    assign_tkn.span,
+                    self.unresolved_arena.get_unresolved_expr_token(id).span
                 ]),
             Identifier::Function(func_id) => {
                 self.arena.curr_func_call_provenances[func_id.0] = ExprProvenance::RuntimeValue;
@@ -1071,7 +1060,7 @@ impl StackAnalyzer {
                             self.arena.get_type(lhs_type).get_repr(&self.arena)
                         ),
                         &self.arena,
-                        vec![self.arena.get_expr_token(lhs_expr).source_info]
+                        vec![self.arena.get_expr_token(lhs_expr).span]
                     )
                 },
             _ => panic!("[internal error] unary operation being typechecked in binary context"),
@@ -1092,7 +1081,7 @@ impl StackAnalyzer {
                     stack_analyzer_error!(
                         StackAnalyzerErrorKind::TooManyDereferences(1, self.arena.get_type(lhs_type).get_ptr_count()),
                         &self.arena,
-                        vec![self.arena.get_expr_token(expr).source_info.clone()]
+                        vec![self.arena.get_expr_token(expr).span.clone()]
                     )
                 },
             _ => panic!("[internal error] binary operation being typechecked in unary context"),
@@ -1126,7 +1115,7 @@ impl StackAnalyzer {
                     Ok(())
                 } else {
                     return stack_analyzer_error!(StackAnalyzerErrorKind::IndexOutOfBounds(*idx, *len), &self.arena, vec![
-                        self.arena.get_expr_token(*index).source_info
+                        self.arena.get_expr_token(*index).span
                     ]);
                 },
             (_, _) => Ok(()),
@@ -1149,7 +1138,7 @@ impl StackAnalyzer {
 
                 if *self.arena.get_expr_provenance(resolved_expr_id) != ExprProvenance::CompiletimeValue {
                     let name = self.arena.get_type(hfs_type).get_repr(&self.arena);
-                    return stack_analyzer_error!(error_fn(name), &self.arena, vec![length_token.source_info]);
+                    return stack_analyzer_error!(error_fn(name), &self.arena, vec![length_token.span]);
                 }
 
                 Ok(self.arena.alloc_type(

@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use indexmap::IndexSet;
-use slotmap::{new_key_type, Key, SlotMap};
+use slotmap::{Key, SlotMap, new_key_type};
 
 use crate::hfs::{BlockId, InstId, InstOrTermId, Instruction, IrArena, IrFuncId};
 
@@ -508,7 +508,7 @@ impl LoopInfo {
 
 #[cfg(test)]
 mod tests {
-    use crate::hfs::{utils::*, IrArena, LoopId, LoopInfo};
+    use crate::hfs::{IrArena, LoopId, LoopInfo, utils::*};
 
     fn check_while_helper(outer_id: LoopId, loop_info: &LoopInfo) {
         // outer's blocks include both sub-loops' blocks

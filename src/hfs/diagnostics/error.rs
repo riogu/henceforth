@@ -6,7 +6,7 @@ use std::{
 
 use colored::ColoredString;
 
-use crate::hfs::SourceInfo;
+use crate::hfs::Span;
 
 pub trait CompileError: Display + Debug {
     fn message(&self) -> (String, String);
@@ -20,18 +20,14 @@ pub trait CompileError: Display + Debug {
 #[derive(Debug, Default, Clone)]
 pub struct DiagnosticInfo {
     pub path: PathBuf,
-    pub eof_pos: SourceInfo,
+    pub eof_pos: Span,
 }
 
 impl DiagnosticInfo {
-    pub fn new(path: PathBuf, eof_pos: SourceInfo) -> Self {
-        Self { path, eof_pos }
-    }
+    pub fn new(path: PathBuf, eof_pos: Span) -> Self { Self { path, eof_pos } }
 }
 
-pub fn number_length(n: usize) -> usize {
-    n.to_string().len()
-}
+pub fn number_length(n: usize) -> usize { n.to_string().len() }
 
 #[derive(Debug, Default, Clone)]
 pub struct DebugInfo {

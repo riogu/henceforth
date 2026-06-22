@@ -12,7 +12,7 @@ use slotmap::SlotMap;
 use crate::{
     hfs::{
         BasicBlock, BlockId, GlobalIrVarDeclaration, GlobalIrVarId, InstId, Instruction, IrFuncId, IrFunction, IrOperation,
-        IrType, Literal, SourceInfo, TermInstId, TerminatorInst, Type,
+        IrType, Literal, Span, TermInstId, TerminatorInst, Type,
         ast::*,
         error::{CompileError, DiagnosticInfo},
         ir_lowerer_errors::IrLowererErrorKind,
@@ -33,7 +33,7 @@ pub struct IrArena {
     pub types: Vec<IrType>,
     pub func_id_to_blocks: HashMap<IrFuncId, Vec<BlockId>>, // in insertion order
 
-    pub type_source_infos: Vec<SourceInfo>,
+    pub type_spans: Vec<Span>,
     type_cache: HashMap<IrType, TypeId>,
     pub hfs_stack: Vec<InstId>,
     // this is reset whenever we add a terminator instruction to the current block
@@ -59,28 +59,24 @@ impl IrArena {
     pub fn new(diagnostic_info: Rc<DiagnosticInfo>) -> Self {
         let mut arena = Self::default();
         arena.diagnostic_info = diagnostic_info;
-        arena.alloc_type_uncached(IrType::new_int(0), SourceInfo::new(0, 0, 0));
-        arena.alloc_type_uncached(IrType::new_float(0), SourceInfo::new(0, 0, 0));
-        arena.alloc_type_uncached(IrType::new_bool(0), SourceInfo::new(0, 0, 0));
-        arena.alloc_type_uncached(IrType::new_string(0), SourceInfo::new(0, 0, 0));
+        arena.alloc_type_uncached(IrType::new_int(0), Span::new(0, 0, 0));
+        arena.alloc_type_uncached(IrType::new_float(0), Span::new(0, 0, 0));
+        arena.alloc_type_uncached(IrType::new_bool(0), Span::new(0, 0, 0));
+        arena.alloc_type_uncached(IrType::new_string(0), Span::new(0, 0, 0));
         arena
     }
 
     // Stack methods (manage the hfs stack for operations)
-    pub fn pop_or_error(&mut self, source_infos: Vec<SourceInfo>, ast_arena: &AstArena) -> Result<InstId, Box<dyn CompileError>> {
+    pub fn pop_or_error(&mut self, spans: Vec<Span>, ast_arena: &AstArena) -> Result<InstId, Box<dyn CompileError>> {
         match self.pop_hfs_stack() {
             Some(id) => Ok(id),
-            None => ir_lowerer_error!(IrLowererErrorKind::StackUnderflow, &*self, Some(ast_arena), source_infos),
+            None => ir_lowerer_error!(IrLowererErrorKind::StackUnderflow, &*self, Some(ast_arena), spans),
         }
     }
-    pub fn last_or_error(
-        &mut self,
-        source_infos: Vec<SourceInfo>,
-        ast_arena: &AstArena,
-    ) -> Result<InstId, Box<dyn CompileError>> {
+    pub fn last_or_error(&mut self, spans: Vec<Span>, ast_arena: &AstArena) -> Result<InstId, Box<dyn CompileError>> {
         match self.hfs_stack.last() {
             Some(id) => Ok(*id),
-            None => ir_lowerer_error!(IrLowererErrorKind::ExpectedItemOnStack, &*self, Some(ast_arena), source_infos),
+            None => ir_lowerer_error!(IrLowererErrorKind::ExpectedItemOnStack, &*self, Some(ast_arena), spans),
         }
     }
     pub fn push_to_hfs_stack(&mut self, inst: InstId) {
@@ -95,18 +91,18 @@ impl IrArena {
         self.hfs_stack.pop()
     }
 
-    pub fn alloc_type_uncached(&mut self, hfs_type: IrType, source_info: SourceInfo) -> TypeId {
+    pub fn alloc_type_uncached(&mut self, hfs_type: IrType, span: Span) -> TypeId {
         let id = TypeId(self.types.len());
         self.types.push(hfs_type.clone());
-        self.type_source_infos.push(source_info);
+        self.type_spans.push(span);
         id
     }
-    pub fn alloc_type(&mut self, hfs_type: IrType, source_info: SourceInfo) -> TypeId {
+    pub fn alloc_type(&mut self, hfs_type: IrType, span: Span) -> TypeId {
         // Check if this type already exists
         if let Some(&existing_id) = self.type_cache.get(&hfs_type) {
             return existing_id;
         } // If not, allocate it
-        self.alloc_type_uncached(hfs_type, source_info)
+        self.alloc_type_uncached(hfs_type, span)
     }
     pub fn alloc_function(&mut self, func: IrFunction) -> IrFuncId {
         let id = self.functions.insert(func);
@@ -154,13 +150,13 @@ impl IrArena {
     fn alloc_term_impl_unchecked(&mut self, terminator: TerminatorInst, block_id: BlockId) -> TermInstId {
         // add predecessors whenever we jump or branch somewhere
         match terminator {
-            TerminatorInst::Branch { source_info: _, cond: _, true_block, false_block } => {
+            TerminatorInst::Branch { span: _, cond: _, true_block, false_block } => {
                 self.get_block_mut(block_id).successors.insert(true_block);
                 self.get_block_mut(block_id).successors.insert(false_block);
                 self.get_block_mut(true_block).predecessors.insert(block_id);
                 self.get_block_mut(false_block).predecessors.insert(block_id);
             },
-            TerminatorInst::Jump { source_info: _, target } => {
+            TerminatorInst::Jump { span: _, target } => {
                 self.get_block_mut(block_id).successors.insert(target);
                 self.get_block_mut(target).predecessors.insert(block_id);
             },
@@ -260,7 +256,7 @@ impl IrArena {
         &mut self,
         stack1: &Vec<InstId>,
         stack2: &Vec<InstId>,
-        source_infos: Vec<SourceInfo>,
+        spans: Vec<Span>,
     ) -> Result<(), Box<dyn CompileError>> {
         let expected_count = stack1.len();
         let actual_count = stack2.len();
@@ -269,24 +265,19 @@ impl IrArena {
                 IrLowererErrorKind::MismatchingStackDepths(expected_count, actual_count),
                 &self,
                 None,
-                source_infos
+                spans
             );
         }
 
         for (inst_id1, inst_id2) in stack1.iter().zip(stack2.iter()) {
             let type_id1 = self.get_type_id_of_inst(*inst_id1)?;
             let type_id2 = self.get_type_id_of_inst(*inst_id2)?;
-            self.compare_types(type_id1, type_id2, source_infos.clone())?;
+            self.compare_types(type_id1, type_id2, spans.clone())?;
         }
         Ok(())
     }
 
-    pub fn compare_types(
-        &self,
-        type1: TypeId,
-        type2: TypeId,
-        source_infos: Vec<SourceInfo>,
-    ) -> Result<(), Box<dyn CompileError>> {
+    pub fn compare_types(&self, type1: TypeId, type2: TypeId, spans: Vec<Span>) -> Result<(), Box<dyn CompileError>> {
         let actual_type = self.get_type(type1);
         let expected_type = self.get_type(type2);
 
@@ -300,7 +291,7 @@ impl IrArena {
                         IrLowererErrorKind::IncorrectTupleLength(expected_types.len(), actual_types.len()),
                         self,
                         None,
-                        source_infos
+                        spans
                     );
                 }
                 if actual_ptr_count != expected_ptr_count {
@@ -308,16 +299,16 @@ impl IrArena {
                         IrLowererErrorKind::IncorrectPointerCount(*expected_ptr_count, *actual_ptr_count),
                         self,
                         None,
-                        source_infos
+                        spans
                     );
                 }
                 // Recursively validate each element
                 for (i, (&actual_elem_id, &expected_elem_id)) in actual_types.iter().zip(expected_types.iter()).enumerate() {
-                    let elem_source_info = match source_infos.get(i) {
-                        Some(source_info) => source_info.clone(),
+                    let elem_span = match spans.get(i) {
+                        Some(span) => span.clone(),
                         None => panic!("[internal error] wrong number of source infos passed"),
                     };
-                    self.compare_types(actual_elem_id, expected_elem_id, vec![elem_source_info])?;
+                    self.compare_types(actual_elem_id, expected_elem_id, vec![elem_span])?;
                 }
                 Ok(())
             },
@@ -326,7 +317,7 @@ impl IrArena {
                 IrLowererErrorKind::MismatchingTypes(actual.get_repr(&self), expected.get_repr(&self)),
                 self,
                 None,
-                source_infos
+                spans
             ),
         }
     }
@@ -359,14 +350,14 @@ impl IrArena {
 
     pub fn get_type_id_of_inst(&mut self, inst_id: InstId) -> Result<TypeId, Box<dyn CompileError>> {
         match self.get_inst(inst_id).clone() {
-            Instruction::Operation { source_info: _, op } => Ok(self.get_type_of_operation(&op)?),
-            Instruction::Literal { source_info: _, literal } => match literal {
+            Instruction::Operation { span: _, op } => Ok(self.get_type_of_operation(&op)?),
+            Instruction::Literal { span: _, literal } => match literal {
                 Literal::Integer(_) => Ok(IrType::new_int(0).type_id()),
                 Literal::Float(_) => Ok(IrType::new_float(0).type_id()),
                 Literal::String(_) => Ok(IrType::new_string(0).type_id()),
                 Literal::Bool(_) => Ok(IrType::new_bool(0).type_id()),
             },
-            Instruction::Tuple { source_info, instructions } => {
+            Instruction::Tuple { span, instructions } => {
                 // Build tuple type from element types
                 let mut element_types = Vec::new();
                 for inst_id in instructions.clone() {
@@ -375,19 +366,19 @@ impl IrArena {
                 }
 
                 let tuple_type = IrType::Tuple { type_ids: element_types, ptr_count: 0 };
-                Ok(self.alloc_type(tuple_type, source_info.clone()))
+                Ok(self.alloc_type(tuple_type, span.clone()))
             },
-            Instruction::Parameter { source_info: _, index: _, type_id } => Ok(type_id),
-            Instruction::FunctionCall { source_info: _, args: _, func_id, is_move: _, return_values: _ } =>
+            Instruction::Parameter { span: _, index: _, type_id } => Ok(type_id),
+            Instruction::FunctionCall { span: _, args: _, func_id, is_move: _, return_values: _ } =>
                 Ok(self.get_func(func_id).return_type),
-            Instruction::Phi { source_info: _, incoming } => Ok(self.get_type_id_of_inst(
+            Instruction::Phi { span: _, incoming } => Ok(self.get_type_id_of_inst(
                 *incoming.values().next().expect("[internal error] found phi with no elements in type checking"),
             )?),
-            Instruction::LoadElement { source_info: _, index: _, tuple: _ } => todo!(),
-            Instruction::ReturnValue { source_info: _, type_id } => Ok(type_id),
-            Instruction::Load { source_info: _, address: _, type_id } => Ok(type_id),
-            Instruction::Store { source_info: _, address: _, value } => Ok(self.get_type_id_of_inst(value)?),
-            Instruction::Alloca { source_info: _, type_id: _ } => {
+            Instruction::LoadElement { span: _, index: _, tuple: _ } => todo!(),
+            Instruction::ReturnValue { span: _, type_id } => Ok(type_id),
+            Instruction::Load { span: _, address: _, type_id } => Ok(type_id),
+            Instruction::Store { span: _, address: _, value } => Ok(self.get_type_id_of_inst(value)?),
+            Instruction::Alloca { span: _, type_id: _ } => {
                 // implement this later
                 panic!("[internal error] asked for the type of an alloca instruction but i don't see why this would happen")
             },
@@ -403,7 +394,7 @@ impl IrArena {
     }
 
     // returns itself with the pointer count reduced by one
-    pub fn reduce_type_ptr_count(&mut self, type_id: TypeId, source_info: SourceInfo) -> TypeId {
+    pub fn reduce_type_ptr_count(&mut self, type_id: TypeId, span: Span) -> TypeId {
         let hfs_type = match self.get_type(type_id) {
             IrType::Int { ptr_count } => IrType::Int { ptr_count: ptr_count - 1 },
             IrType::String { ptr_count } => IrType::String { ptr_count: ptr_count - 1 },
@@ -412,7 +403,7 @@ impl IrArena {
             IrType::Tuple { ptr_count, type_ids } => IrType::Tuple { ptr_count: ptr_count - 1, type_ids: type_ids.clone() },
             IrType::Array { hfs_type: _, length: _, ptr_count: _ } => todo!(),
         };
-        self.alloc_type(hfs_type, source_info)
+        self.alloc_type(hfs_type, span)
     }
 
     // these functions are only used for printing so we don't have to pass a mutable reference to an arena everywhere

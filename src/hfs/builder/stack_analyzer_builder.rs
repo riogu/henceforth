@@ -1,10 +1,10 @@
 use std::{collections::HashMap, path::PathBuf, rc::Rc};
 
 use crate::hfs::{
+    AstArena, ExprId, ExprProvenance, Expression, FuncId, FunctionDeclaration, Identifier, Literal, Operation, ScopeKind, Span,
+    Statement, StmtId, Token, TokenKind, TopLevelId, Type, TypeId, VarDeclaration, VarId,
     builder::builder::{Builder, BuilderOperation, ControlFlowOps, FunctionOps, LoopOps, PassMode, StackOps, VariableOps},
     error::DiagnosticInfo,
-    AstArena, ExprId, ExprProvenance, Expression, FuncId, FunctionDeclaration, Identifier, Literal, Operation, ScopeKind,
-    SourceInfo, Statement, StmtId, Token, TokenKind, TopLevelId, Type, TypeId, VarDeclaration, VarId,
 };
 
 #[deprecated]
@@ -18,26 +18,18 @@ pub struct StackAnalyzerBuilder {
 }
 
 impl StackAnalyzerBuilder {
-    fn dummy_token() -> Token {
-        Token { kind: TokenKind::Let, source_info: SourceInfo::new(0, 0, 0) }
-    }
+    fn dummy_token() -> Token { Token { kind: TokenKind::Let, span: Span::new(0, 0, 0) } }
 
     fn types_to_tuple_id(&mut self, types: Vec<Type>) -> TypeId {
         let type_ids = types.into_iter().map(|ty| self.type_to_id(ty)).collect();
         self.arena.alloc_type(Type::Tuple { type_ids, ptr_count: 0 }, Self::dummy_token())
     }
 
-    fn type_to_id(&mut self, typename: Type) -> TypeId {
-        self.arena.to_type(Token::new(typename.to_token(), SourceInfo::new(0, 0, 0)))
-    }
+    fn type_to_id(&mut self, typename: Type) -> TypeId { self.arena.to_type(Token::new(typename.to_token(), Span::new(0, 0, 0))) }
 
-    fn push_scope(&mut self) {
-        self.variable_scopes.push(HashMap::new());
-    }
+    fn push_scope(&mut self) { self.variable_scopes.push(HashMap::new()); }
 
-    fn pop_scope(&mut self) {
-        self.variable_scopes.pop();
-    }
+    fn pop_scope(&mut self) { self.variable_scopes.pop(); }
 
     fn add_variable(&mut self, name: &str, var_id: VarId) {
         if let Some(scope) = self.variable_scopes.last_mut() {
@@ -45,9 +37,7 @@ impl StackAnalyzerBuilder {
         }
     }
 
-    fn add_function(&mut self, name: &str, func_id: FuncId) {
-        self.function_scope.insert(name.to_string(), func_id);
-    }
+    fn add_function(&mut self, name: &str, func_id: FuncId) { self.function_scope.insert(name.to_string(), func_id); }
 
     fn find_variable(&self, name: &str) -> VarId {
         for scope in self.variable_scopes.iter().rev() {
@@ -58,9 +48,7 @@ impl StackAnalyzerBuilder {
         VarId(0)
     }
 
-    fn find_function(&self, name: &str) -> FuncId {
-        self.function_scope.get(name).copied().unwrap_or(FuncId(0))
-    }
+    fn find_function(&self, name: &str) -> FuncId { self.function_scope.get(name).copied().unwrap_or(FuncId(0)) }
 }
 
 #[deprecated]
@@ -89,10 +77,11 @@ impl Builder<StmtOrExpr> for StackAnalyzerBuilder {
 
     fn new() -> Self {
         StackAnalyzerBuilder {
-            arena: AstArena::new(Rc::new(DiagnosticInfo::new(
-                PathBuf::new(),
-                SourceInfo { line_number: 0, line_offset: 0, token_width: 0 },
-            ))),
+            arena: AstArena::new(Rc::new(DiagnosticInfo::new(PathBuf::new(), Span {
+                line_number: 0,
+                line_offset: 0,
+                token_width: 0,
+            }))),
             current_function: None,
             stack_block_exprs: Vec::new(),
             context_stack: Vec::new(),
@@ -122,14 +111,12 @@ impl Builder<StmtOrExpr> for StackAnalyzerBuilder {
         self
     }
 
-    fn build(self) -> Self::Built {
-        self.arena
-    }
+    fn build(self) -> Self::Built { self.arena }
 }
 
 impl VariableOps for StackAnalyzerBuilder {
     fn variable(mut self, name: &str, typename: Type) -> Self {
-        let type_id = self.arena.to_type(Token::new(typename.to_token(), SourceInfo::new(0, 0, 0)));
+        let type_id = self.arena.to_type(Token::new(typename.to_token(), Span::new(0, 0, 0)));
         let var_decl = VarDeclaration { name: name.to_string(), hfs_type: type_id };
         let token = Self::dummy_token();
         let var_id = self.arena.alloc_var(var_decl, token.clone());
@@ -343,9 +330,7 @@ impl FunctionOps for StackAnalyzerBuilder {
         self
     }
 
-    fn body(self) -> Self {
-        self
-    }
+    fn body(self) -> Self { self }
 
     fn end_body(mut self) -> Self {
         if let Some(func) = self.current_function.take() {

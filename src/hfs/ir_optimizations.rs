@@ -16,9 +16,7 @@ pub trait IrPass {
 pub trait OptPipeline {
     fn name(&self) -> &str;
     fn get_opt_passes(&self) -> &[Box<dyn IrPass + Send + Sync>];
-    fn get_pass_names(&self) -> Vec<&str> {
-        self.get_opt_passes().iter().map(|p| p.short_name()).collect()
-    }
+    fn get_pass_names(&self) -> Vec<&str> { self.get_opt_passes().iter().map(|p| p.short_name()).collect() }
 
     fn run_on_function(&mut self, arena: &mut IrArena, func_id: IrFuncId) -> bool {
         let mut any_changed = false;
@@ -79,9 +77,7 @@ impl IrPass for CommonCleanupPipeline {
         any_changed
     }
 
-    fn short_name(&self) -> &str {
-        "CommonCleanupPipeline"
-    }
+    fn short_name(&self) -> &str { "CommonCleanupPipeline" }
 }
 fn retain_changed<T>(vec: &mut Vec<T>, pred: impl Fn(&T) -> bool) -> bool {
     let len_before = vec.len();
@@ -92,9 +88,7 @@ pub struct RemoveStaleIR;
 impl IrPass for RemoveStaleIR {
     fn new() -> Box<dyn IrPass + Send + Sync> { Box::new(Self) }
     fn name(&self) -> &str { "RemoveStaleInstIds: clean all blocks that have stale InstIds" }
-    fn short_name(&self) -> &str {
-        "RemoveStaleIR"
-    }
+    fn short_name(&self) -> &str { "RemoveStaleIR" }
     fn run(&self, arena: &mut IrArena, func_id: IrFuncId) -> bool {
         let mut any_changed = false;
 
@@ -157,9 +151,7 @@ impl IrPass for DeadCodeElimination {
         changed | CommonCleanupPipeline::new().run(arena, func_id)
     }
 
-    fn short_name(&self) -> &str {
-        "DeadCodeElimination"
-    }
+    fn short_name(&self) -> &str { "DeadCodeElimination" }
 }
 
 // ======================================================================================
@@ -207,9 +199,7 @@ impl IrPass for Mem2Reg {
         // therefore checking if it did anything is enough to know if this pass did work
     }
 
-    fn short_name(&self) -> &str {
-        "Mem2Reg"
-    }
+    fn short_name(&self) -> &str { "Mem2Reg" }
 }
 // phase 1 of SSA construction algorithm (also known as Mem2Reg)
 impl Mem2Reg {
@@ -240,13 +230,13 @@ impl Mem2Reg {
                 }
             }
         }
-        let source_info = arena.get_inst(*alloca).get_source_info();
+        let span = arena.get_inst(*alloca).get_span();
         let mut inserted_phis = Vec::new();
         for block_id in needs_phi {
             let predecessors = arena.get_block(block_id).predecessors.clone();
             let incoming: IndexMap<BlockId, InstId> =
                 predecessors.into_iter().map(|pred| (pred, InstId::null() /* placeholder to be filled in later */)).collect();
-            inserted_phis.push(arena.alloc_inst_at_start_for(Instruction::Phi { source_info, incoming }, block_id));
+            inserted_phis.push(arena.alloc_inst_at_start_for(Instruction::Phi { span, incoming }, block_id));
         }
         inserted_phis
     }
@@ -372,9 +362,7 @@ impl IrPass for CleanCFG {
         any_changed
     }
 
-    fn short_name(&self) -> &str {
-        "CleanCFG"
-    }
+    fn short_name(&self) -> &str { "CleanCFG" }
 }
 impl CleanCFG {
     fn run_iteration(arena: &mut IrArena, func_id: IrFuncId) -> bool {
@@ -384,10 +372,10 @@ impl CleanCFG {
                 continue; // skip blocks that we invalidate during the algorithm
             };
             match *arena.get_block_term(block_id) {
-                TerminatorInst::Branch { true_block, false_block, source_info, .. } =>
+                TerminatorInst::Branch { true_block, false_block, span, .. } =>
                     if true_block == false_block {
                         // 1. Fold a Redundant Branch => branch %cond, %block1, %block1 -> jump %block1
-                        arena.replace_terminator_for(TerminatorInst::Jump { source_info, target: true_block }, block_id);
+                        arena.replace_terminator_for(TerminatorInst::Jump { span, target: true_block }, block_id);
                         any_changed = true;
                     },
                 TerminatorInst::Jump { target, .. } => {
@@ -442,25 +430,21 @@ impl CleanCFG {
                 continue; // skip blocks that we invalidate during the algorithm
             };
             match term {
-                TerminatorInst::Branch { source_info, cond, true_block, false_block, .. } => {
+                TerminatorInst::Branch { span, cond, true_block, false_block, .. } => {
                     if true_block == block_id && false_block == block_id {
                         // weird case where both blocks are the same,
                         // need this otherwise logic will be wrong for the other 2 if statements below
-                        arena.replace_terminator_for(TerminatorInst::Jump { source_info, target }, pred);
+                        arena.replace_terminator_for(TerminatorInst::Jump { span, target }, pred);
                     } else if true_block == block_id {
-                        arena.replace_terminator_for(
-                            TerminatorInst::Branch { source_info, cond, true_block: target, false_block },
-                            pred,
-                        );
+                        arena
+                            .replace_terminator_for(TerminatorInst::Branch { span, cond, true_block: target, false_block }, pred);
                     } else if false_block == block_id {
-                        arena.replace_terminator_for(
-                            TerminatorInst::Branch { source_info, cond, true_block, false_block: target },
-                            pred,
-                        );
+                        arena
+                            .replace_terminator_for(TerminatorInst::Branch { span, cond, true_block, false_block: target }, pred);
                     }
                 },
-                TerminatorInst::Jump { source_info, .. } => {
-                    arena.replace_terminator_for(TerminatorInst::Jump { source_info, target }, pred);
+                TerminatorInst::Jump { span, .. } => {
+                    arena.replace_terminator_for(TerminatorInst::Jump { span, target }, pred);
                 },
                 TerminatorInst::Return { .. } | TerminatorInst::Unreachable =>
                     panic!("[internal error] predecessor block ended with return/unreachable terminator"),

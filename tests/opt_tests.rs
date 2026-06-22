@@ -1,9 +1,9 @@
 use std::{error::Error, fs, io, path::PathBuf, rc::Rc};
 
 use henceforth::{
-    hfs::{error::DiagnosticInfo, parse, prettify_ir, print, IrArena, IrFuncId, SourceInfo},
+    hfs::{IrArena, IrFuncId, Span, error::DiagnosticInfo, parse, prettify_ir, print},
     hfscheck::{
-        hfscheck::{generate_ir_tests, Test, TestInput},
+        hfscheck::{Test, TestInput, generate_ir_tests},
         ir_check::IrTest,
     },
 };
@@ -14,7 +14,7 @@ const OPT_TESTS_FOLDERS: &[&str] = &["tests/opt_tests"];
 fn run_with_opts(test: &mut IrTest) -> (IrArena, Vec<IrFuncId>) {
     let contents = fs::read_to_string(test.path.clone()).expect("Could not read file");
 
-    let mut arena = IrArena::new(Rc::new(DiagnosticInfo::new(PathBuf::new(), SourceInfo::new(0, 0, 0))));
+    let mut arena = IrArena::new(Rc::new(DiagnosticInfo::new(PathBuf::new(), Span::new(0, 0, 0))));
     if let Some(funcs) = parse(&contents, &mut arena) {
         if test.settings.dump {
             if let Some(dump) = print(&funcs, &arena) {

@@ -5,7 +5,7 @@ use crate::{
         VALID_STACK_KEYWORDS,
         error::CompileError,
         lexer_errors::{LexerError, LexerErrorKind},
-        token::{Literal, SourceInfo, Token, TokenKind},
+        token::{Literal, Span, Token, TokenKind},
     },
     lexer_error,
 };
@@ -61,7 +61,7 @@ impl Lexer {
                                     return lexer_error!(
                                         LexerErrorKind::UnexpectedChar,
                                         file.path.clone(),
-                                        SourceInfo::new(line_number + 1, line_offset + 3, 1),
+                                        Span::new(line_number + 1, line_offset + 3, 1),
                                         tokens
                                     );
                                 }
@@ -69,7 +69,7 @@ impl Lexer {
                                 return lexer_error!(
                                     LexerErrorKind::UnexpectedChar,
                                     file.path.clone(),
-                                    SourceInfo::new(line_number + 1, line_offset + 2, 1),
+                                    Span::new(line_number + 1, line_offset + 2, 1),
                                     tokens
                                 );
                             }
@@ -94,7 +94,7 @@ impl Lexer {
                             return lexer_error!(
                                 LexerErrorKind::InvalidStackKeyword,
                                 file.path.clone(),
-                                SourceInfo::new(line_number + 1, line_offset, lit.len()),
+                                Span::new(line_number + 1, line_offset, lit.len()),
                                 tokens
                             );
                         }
@@ -109,7 +109,7 @@ impl Lexer {
                                 return lexer_error!(
                                     LexerErrorKind::UnexpectedChar,
                                     file.path.clone(),
-                                    SourceInfo::new(line_number + 1, line_offset + 1, 1),
+                                    Span::new(line_number + 1, line_offset + 1, 1),
                                     tokens
                                 );
                             }
@@ -117,7 +117,7 @@ impl Lexer {
                             return lexer_error!(
                                 LexerErrorKind::UnexpectedChar,
                                 file.path.clone(),
-                                SourceInfo::new(line_number + 1, line_offset + 1, 1),
+                                Span::new(line_number + 1, line_offset + 1, 1),
                                 tokens
                             );
                         },
@@ -152,7 +152,7 @@ impl Lexer {
                             return lexer_error!(
                                 LexerErrorKind::UnexpectedChar,
                                 file.path.clone(),
-                                SourceInfo::new(line_number + 1, line_offset + 1, 1),
+                                Span::new(line_number + 1, line_offset + 1, 1),
                                 tokens
                             );
                         }, // ==
@@ -196,7 +196,7 @@ impl Lexer {
                             return lexer_error!(
                                 LexerErrorKind::UnexpectedChar,
                                 file.path.clone(),
-                                SourceInfo::new(line_number + 1, line_offset + 1, 1),
+                                Span::new(line_number + 1, line_offset + 1, 1),
                                 tokens
                             );
                         }, // ||
@@ -224,7 +224,7 @@ impl Lexer {
                                                     return lexer_error!(
                                                         LexerErrorKind::UnexpectedEof,
                                                         file.path.clone(),
-                                                        SourceInfo::new(line_number + 1, line_offset + 1, 1),
+                                                        Span::new(line_number + 1, line_offset + 1, 1),
                                                         tokens
                                                     ),
                                             }
@@ -236,7 +236,7 @@ impl Lexer {
                                         return lexer_error!(
                                             LexerErrorKind::UnexpectedEof,
                                             file.path.clone(),
-                                            SourceInfo::new(line_number + 1, line_offset + 1, 1),
+                                            Span::new(line_number + 1, line_offset + 1, 1),
                                             tokens
                                         ),
                                 }
@@ -294,12 +294,12 @@ impl Lexer {
                         return lexer_error!(
                             LexerErrorKind::UnexpectedChar,
                             file.path.clone(),
-                            SourceInfo::new(line_number + 1, line_offset, 1),
+                            Span::new(line_number + 1, line_offset, 1),
                             tokens
                         ),
                 };
                 let width = kind.get_width();
-                tokens.push(Token::new(kind.clone(), SourceInfo::new(line_number + 1, line_offset, width)));
+                tokens.push(Token::new(kind.clone(), Span::new(line_number + 1, line_offset, width)));
                 line_offset += width;
             }
         }

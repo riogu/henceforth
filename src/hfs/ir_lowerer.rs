@@ -6,7 +6,7 @@ use slotmap::Key;
 use crate::{
     hfs::{
         ArrayLength, BlockId, ElaboratedType, GlobalIrVarDeclaration, GlobalIrVarId, InstId, Instruction, IrArena, IrFuncId,
-        IrFunction, IrOperation, IrTopLevelId, IrType, PRIMITIVE_TYPE_COUNT, SourceInfo, TerminatorInst, Type,
+        IrFunction, IrOperation, IrTopLevelId, IrType, PRIMITIVE_TYPE_COUNT, Span, TerminatorInst, Type,
         ast::*,
         error::{CompileError, DiagnosticInfo},
         ir_lowerer_errors::IrLowererErrorKind,
@@ -85,7 +85,7 @@ impl IrLowerer {
                         IrLowererErrorKind::NoStatementsInGlobalScope,
                         &self.arena,
                         Some(&self.ast_arena),
-                        vec![self.ast_arena.get_stmt_token(id).source_info.clone()]
+                        vec![self.ast_arena.get_stmt_token(id).span.clone()]
                     ),
             };
             analyzed_nodes.push(new_node);
@@ -98,7 +98,7 @@ impl IrLowerer {
         // maybe if we add assignments to declarations we might want to in the future but for now this doesn't do anything
         let var = self.ast_arena.get_var(id);
         let (global_var_id, inst_id) = self.arena.alloc_global_var(GlobalIrVarDeclaration {
-            source_info: self.ast_arena.get_var_token(id).source_info.clone(),
+            span: self.ast_arena.get_var_token(id).span.clone(),
             name: var.name.clone(),
             hfs_type: var.hfs_type,
         });
@@ -111,7 +111,7 @@ impl IrLowerer {
         let var = self.ast_arena.get_var(id);
         let entry_block = self.arena.get_func(self.ir_context.curr_func).entry_block;
         let inst_id = self.arena.alloc_inst_for(
-            Instruction::Alloca { source_info: self.ast_arena.get_var_token(id).source_info.clone(), type_id: var.hfs_type },
+            Instruction::Alloca { span: self.ast_arena.get_var_token(id).span.clone(), type_id: var.hfs_type },
             entry_block,
         );
         self.var_id_to_alloca_map.insert(id, inst_id);
@@ -119,7 +119,7 @@ impl IrLowerer {
     }
 
     pub fn lower_function_declaration(&mut self, id: FuncId) -> Result<IrFuncId, Box<dyn CompileError>> {
-        let (name, param_type, return_type, parameter_exprs, body, source_info) = {
+        let (name, param_type, return_type, parameter_exprs, body, span) = {
             let func_decl = self.ast_arena.get_func(id).clone();
             (
                 func_decl.name,
@@ -127,12 +127,12 @@ impl IrLowerer {
                 func_decl.return_type,
                 func_decl.parameter_exprs,
                 func_decl.body,
-                self.ast_arena.get_function_token(id).source_info.clone(),
+                self.ast_arena.get_function_token(id).span.clone(),
             )
         };
 
         let cfg_function = IrFunction {
-            source_info: source_info.clone(),
+            span: span.clone(),
             name,
             param_type,
             return_type,
@@ -171,12 +171,11 @@ impl IrLowerer {
         if self.arena.get_block(self.ir_context.curr_insert_block).terminator.is_none() {
             // add implicit return at the end of the function if the block is unfinished
             let instructions = self.arena.pop_entire_hfs_stack();
-            let return_tuple = self.arena.alloc_inst_for(
-                Instruction::Tuple { source_info: source_info.clone(), instructions },
-                self.ir_context.curr_insert_block,
-            );
+            let return_tuple = self
+                .arena
+                .alloc_inst_for(Instruction::Tuple { span: span.clone(), instructions }, self.ir_context.curr_insert_block);
             let _ = self.arena.alloc_terminator_for(
-                TerminatorInst::Return { source_info: source_info.clone(), return_tuple },
+                TerminatorInst::Return { span: span.clone(), return_tuple },
                 self.ir_context.curr_insert_block,
             );
         }
@@ -234,12 +233,11 @@ impl IrLowerer {
             Some(cond) => cond,
             None =>
                 return ir_lowerer_error!(IrLowererErrorKind::StackUnderflow, &self.arena, Some(&self.ast_arena), vec![
-                    self.ast_arena.get_stmt_token(body).source_info.clone()
+                    self.ast_arena.get_stmt_token(body).span.clone()
                 ]),
         };
         let cond_type = self.arena.get_type_id_of_inst(cond)?;
-        self.arena
-            .compare_types(cond_type, IrType::new_bool(0).type_id(), vec![self.arena.get_inst(cond).get_source_info()])?;
+        self.arena.compare_types(cond_type, IrType::new_bool(0).type_id(), vec![self.arena.get_inst(cond).get_span()])?;
 
         Ok((cond, block_before_if, if_body_block))
     }
@@ -260,7 +258,7 @@ impl IrLowerer {
             self.arena.compare_stacks(
                 &stack_after_body,
                 &curr_block_context.prev_stack_change,
-                stack_after_body.iter().map(|inst| self.arena.get_inst(*inst).get_source_info()).collect(),
+                stack_after_body.iter().map(|inst| self.arena.get_inst(*inst).get_span()).collect(),
             )?;
             curr_block_context.end_block.expect("[internal error] forgot to set exit block for the current if stmt")
         };
@@ -268,12 +266,7 @@ impl IrLowerer {
         Ok((if_end_block, stack_after_body))
     }
 
-    pub fn generate_merge_phis(
-        &mut self,
-        if_end_block: BlockId,
-        stack_snapshots: &[(BlockId, Vec<InstId>)],
-        source_info: &SourceInfo,
-    ) {
+    pub fn generate_merge_phis(&mut self, if_end_block: BlockId, stack_snapshots: &[(BlockId, Vec<InstId>)], span: &Span) {
         // to solve stack balancing, we keep track of the entire stack across branches
         // then, we compare what changed from one branch to the other
         // since we still have the stack from before we branched off, we need to skip elements that
@@ -295,15 +288,14 @@ impl IrLowerer {
                 for (block_id, snapshot) in stack_snapshots {
                     incoming.insert(*block_id, snapshot[stack_idx]);
                 }
-                let phi =
-                    self.arena.alloc_inst_for(Instruction::Phi { source_info: source_info.clone(), incoming }, if_end_block);
+                let phi = self.arena.alloc_inst_for(Instruction::Phi { span: span.clone(), incoming }, if_end_block);
                 self.arena.hfs_stack.push(phi);
             }
         }
     }
 
     pub fn lower_stmt(&mut self, id: StmtId, curr_block_context: BlockContext) -> Result<(), Box<dyn CompileError>> {
-        let source_info = self.ast_arena.get_stmt_token(id).source_info.clone();
+        let span = self.ast_arena.get_stmt_token(id).span.clone();
 
         match self.ast_arena.get_stmt(id).clone() {
             Statement::Else(stmt_id) => self.lower_stmt(stmt_id, curr_block_context),
@@ -322,7 +314,7 @@ impl IrLowerer {
 
                 if self.arena.get_block(self.ir_context.curr_insert_block).terminator.is_none() {
                     self.arena.alloc_terminator_for(
-                        TerminatorInst::Jump { source_info: source_info.clone(), target: if_end_block },
+                        TerminatorInst::Jump { span: span.clone(), target: if_end_block },
                         self.ir_context.curr_insert_block,
                     );
                 }
@@ -343,7 +335,7 @@ impl IrLowerer {
 
                             let _ = self.arena.alloc_terminator_for(
                                 TerminatorInst::Branch {
-                                    source_info: source_info.clone(),
+                                    span: span.clone(),
                                     cond,
                                     true_block: if_body_block,
                                     false_block: else_body_block,
@@ -372,12 +364,12 @@ impl IrLowerer {
                             && self.ir_context.curr_insert_block != if_end_block
                             {
                                 self.arena.alloc_terminator_for(
-                                    TerminatorInst::Jump { source_info: source_info.clone(), target: if_end_block },
+                                    TerminatorInst::Jump { span: span.clone(), target: if_end_block },
                                     self.ir_context.curr_insert_block,
                                 );
                             }
                             if is_else {
-                                self.generate_merge_phis(if_end_block, &stack_snapshots, &source_info);
+                                self.generate_merge_phis(if_end_block, &stack_snapshots, &span);
                             }
                         },
                         otherstmt => panic!("can't have other statements in else statement, found '{:?}'", otherstmt),
@@ -388,11 +380,11 @@ impl IrLowerer {
                             IrLowererErrorKind::ExpectedNetZeroStackEffectIfStmt(self.arena.hfs_stack.len()),
                             &self.arena,
                             Some(&self.ast_arena),
-                            vec![self.ast_arena.get_stmt_token(body).source_info.clone()]
+                            vec![self.ast_arena.get_stmt_token(body).span.clone()]
                         );
                     };
                     self.arena.alloc_terminator_for(
-                        TerminatorInst::Branch { source_info, cond, true_block: if_body_block, false_block: if_end_block },
+                        TerminatorInst::Branch { span, cond, true_block: if_body_block, false_block: if_end_block },
                         block_before_if,
                     );
                 }
@@ -415,7 +407,7 @@ impl IrLowerer {
                 let while_end_block = self.arena.alloc_block("while_end", self.ir_context.curr_func);
 
                 self.arena.alloc_terminator_for(
-                    TerminatorInst::Jump { source_info: source_info.clone(), target: while_cond_block },
+                    TerminatorInst::Jump { span: span.clone(), target: while_cond_block },
                     self.ir_context.curr_insert_block,
                 ); // finish the previous block with a jump
 
@@ -425,17 +417,15 @@ impl IrLowerer {
                 for stmt in &cond {
                     self.lower_stmt(*stmt, curr_block_context.clone())?;
                 }
-                let cond_inst = self.arena.pop_or_error(
-                    cond.iter().map(|stmt| self.ast_arena.get_stmt_token(*stmt).source_info).collect(),
-                    &self.ast_arena,
-                )?;
+                let cond_inst = self
+                    .arena
+                    .pop_or_error(cond.iter().map(|stmt| self.ast_arena.get_stmt_token(*stmt).span).collect(), &self.ast_arena)?;
                 let cond_type = self.arena.get_type_id_of_inst(cond_inst)?;
-                self.arena.compare_types(cond_type, IrType::new_bool(0).type_id(), vec![
-                    self.arena.get_inst(cond_inst).get_source_info(),
-                ])?;
+                self.arena
+                    .compare_types(cond_type, IrType::new_bool(0).type_id(), vec![self.arena.get_inst(cond_inst).get_span()])?;
                 self.arena.alloc_terminator_for(
                     TerminatorInst::Branch {
-                        source_info: source_info.clone(),
+                        span: span.clone(),
                         cond: cond_inst,
                         true_block: while_body_block,
                         false_block: while_end_block,
@@ -462,12 +452,12 @@ impl IrLowerer {
                         IrLowererErrorKind::ExpectedNetZeroStackEffectWhileLoop(stack_depth_after - stack_depth_before),
                         &self.arena,
                         Some(&self.ast_arena),
-                        vec![self.ast_arena.get_stmt_token(body).source_info.clone()]
+                        vec![self.ast_arena.get_stmt_token(body).span.clone()]
                     );
                 }
                 if self.arena.get_block(self.ir_context.curr_insert_block).terminator.is_none() {
                     self.arena.alloc_terminator_for(
-                        TerminatorInst::Jump { source_info, target: while_cond_block },
+                        TerminatorInst::Jump { span, target: while_cond_block },
                         self.ir_context.curr_insert_block,
                     );
                 }
@@ -520,13 +510,12 @@ impl IrLowerer {
                 // terms of size and types before each return statement.
                 // what the ir_lowerer does is also check all branches against each other.
                 let return_tuple = self.arena.alloc_inst_for(
-                    Instruction::Tuple { source_info: source_info.clone(), instructions: self.arena.hfs_stack.clone() },
+                    Instruction::Tuple { span: span.clone(), instructions: self.arena.hfs_stack.clone() },
                     self.ir_context.curr_insert_block,
                 );
-                let _ = self.arena.alloc_terminator_for(
-                    TerminatorInst::Return { source_info, return_tuple },
-                    self.ir_context.curr_insert_block,
-                );
+                let _ = self
+                    .arena
+                    .alloc_terminator_for(TerminatorInst::Return { span, return_tuple }, self.ir_context.curr_insert_block);
                 Ok(())
             },
             Statement::Break => {
@@ -534,7 +523,7 @@ impl IrLowerer {
                 // (the exit of the current control flow construct)
                 self.arena.alloc_terminator_for(
                     TerminatorInst::Jump {
-                        source_info,
+                        span,
                         target: curr_block_context.break_to_block.expect("[internal error] found break outside of while context"),
                     },
                     self.ir_context.curr_insert_block,
@@ -546,7 +535,7 @@ impl IrLowerer {
                 // context. its meant to allow the start of the next iteration
                 self.arena.alloc_terminator_for(
                     TerminatorInst::Jump {
-                        source_info,
+                        span,
                         target: curr_block_context
                             .continue_to_block
                             .expect("[internal error] found continue outside of while context"),
@@ -569,10 +558,7 @@ impl IrLowerer {
                                 IrLowererErrorKind::StackUnderflow,
                                 &self.arena,
                                 Some(&self.ast_arena),
-                                vec![
-                                    self.ast_arena.get_stmt_token(id).source_info.clone(),
-                                    identifier.get_source_info(&self.ast_arena)
-                                ]
+                                vec![self.ast_arena.get_stmt_token(id).span.clone(), identifier.get_span(&self.ast_arena)]
                             ),
                     }
                 } else {
@@ -583,10 +569,7 @@ impl IrLowerer {
                                 IrLowererErrorKind::ExpectedItemOnStack,
                                 &self.arena,
                                 Some(&self.ast_arena),
-                                vec![
-                                    self.ast_arena.get_stmt_token(id).source_info.clone(),
-                                    identifier.get_source_info(&self.ast_arena)
-                                ]
+                                vec![self.ast_arena.get_stmt_token(id).span.clone(), identifier.get_span(&self.ast_arena)]
                             ),
                     }
                 };
@@ -600,22 +583,22 @@ impl IrLowerer {
                 };
                 let other_type_id = self.arena.get_type_id_of_inst(inst_value)?;
                 self.arena.compare_types(type_id, other_type_id, vec![
-                    identifier.get_source_info(&self.ast_arena),
-                    self.arena.get_inst(inst_value).get_source_info(),
+                    identifier.get_span(&self.ast_arena),
+                    self.arena.get_inst(inst_value).get_span(),
                 ])?;
 
                 // Chase the pointer chain: ptr^ is 1 deref, ptr^^ is 2, etc.
                 if deref_count > 0 {
                     for _ in 0..deref_count {
-                        let type_id = self.arena.reduce_type_ptr_count(type_id, source_info.clone());
+                        let type_id = self.arena.reduce_type_ptr_count(type_id, span.clone());
                         address = self.arena.alloc_inst_for(
-                            Instruction::Load { source_info: source_info.clone(), address, type_id },
+                            Instruction::Load { span: span.clone(), address, type_id },
                             self.ir_context.curr_insert_block,
                         );
                     }
                 }
                 self.arena.alloc_inst_for(
-                    Instruction::Store { source_info: source_info.clone(), address, value: inst_value },
+                    Instruction::Store { span: span.clone(), address, value: inst_value },
                     self.ir_context.curr_insert_block,
                 );
                 Ok(())
@@ -625,11 +608,11 @@ impl IrLowerer {
                 // @(213) :> func; // copy call
                 let mut inst_args = Vec::<InstId>::new();
                 for _ in 0..arg_count {
-                    let source_infos = vec![
-                        self.ast_arena.get_stmt_token(id).source_info.clone(),
-                        self.ast_arena.get_function_token(func_id).source_info.clone(),
+                    let spans = vec![
+                        self.ast_arena.get_stmt_token(id).span.clone(),
+                        self.ast_arena.get_function_token(func_id).span.clone(),
                     ];
-                    let arg_inst = self.arena.pop_or_error(source_infos, &self.ast_arena)?;
+                    let arg_inst = self.arena.pop_or_error(spans, &self.ast_arena)?;
                     inst_args.push(arg_inst);
                 }
                 inst_args.reverse(); // we reverse because we were popping the stack
@@ -649,7 +632,7 @@ impl IrLowerer {
                 };
 
                 let func_call = self.arena.alloc_inst_for(
-                    Instruction::FunctionCall { source_info, args: inst_args, func_id, is_move, return_values: vec![] },
+                    Instruction::FunctionCall { span, args: inst_args, func_id, is_move, return_values: vec![] },
                     self.ir_context.curr_insert_block,
                 );
                 let mut new_return_vals = Vec::new();
@@ -682,9 +665,9 @@ impl IrLowerer {
             return Ok(*cached_inst_id);
         }
 
-        let source_info = self.ast_arena.get_expr_token(id).source_info.clone();
+        let span = self.ast_arena.get_expr_token(id).span.clone();
         let inst_id = match self.ast_arena.get_expr(id).clone() {
-            Expression::Operation(operation) => self.lower_operation(operation, source_info)?,
+            Expression::Operation(operation) => self.lower_operation(operation, span)?,
             Expression::Identifier(identifier) => match identifier {
                 Identifier::Variable(var_id) | Identifier::GlobalVar(var_id) => {
                     // this code expects to only be used for identifiers found in stack blocks, so
@@ -700,33 +683,31 @@ impl IrLowerer {
                         .get(&var_id)
                         .expect("[internal error] tried loading from a variable that hasn't been alloca'd yet");
                     let type_id = self.ast_arena.get_var(var_id).hfs_type;
-                    self.arena
-                        .alloc_inst_for(Instruction::Load { source_info, address, type_id }, self.ir_context.curr_insert_block)
+                    self.arena.alloc_inst_for(Instruction::Load { span, address, type_id }, self.ir_context.curr_insert_block)
                 },
                 Identifier::Function(_) => panic!("[internal error] can't have function identifiers as expressions."),
             },
             Expression::Literal(literal) =>
-                self.arena.alloc_inst_for(Instruction::Literal { source_info, literal }, self.ir_context.curr_insert_block),
+                self.arena.alloc_inst_for(Instruction::Literal { span, literal }, self.ir_context.curr_insert_block),
             Expression::Tuple { expressions } => {
                 let mut instructions = Vec::<InstId>::new();
                 for expr_id in expressions {
                     instructions.push(self.lower_expr(expr_id)?);
                 }
-                self.arena.alloc_inst_for(Instruction::Tuple { source_info, instructions }, self.ir_context.curr_insert_block)
+                self.arena.alloc_inst_for(Instruction::Tuple { span, instructions }, self.ir_context.curr_insert_block)
             },
             Expression::Parameter { index, type_id } =>
             // NOTE: Expression::Parameter are weird because this instruction isnt really used or
             // will even really be lowered to any assembly in reality. it probably doesnt need to
             // be added to any block, it can be kept inside the CfgFunction struct
-                self.arena
-                    .alloc_inst_for(Instruction::Parameter { source_info, index, type_id }, self.ir_context.curr_insert_block),
+                self.arena.alloc_inst_for(Instruction::Parameter { span, index, type_id }, self.ir_context.curr_insert_block),
             Expression::ReturnValue(type_id) =>
-                self.arena.alloc_inst_for(Instruction::ReturnValue { source_info, type_id }, self.ir_context.curr_insert_block),
+                self.arena.alloc_inst_for(Instruction::ReturnValue { span, type_id }, self.ir_context.curr_insert_block),
         };
         self.lowered_expr_cache.insert(id, inst_id);
         Ok(inst_id)
     }
-    pub fn lower_operation(&mut self, op: Operation, source_info: SourceInfo) -> Result<InstId, Box<dyn CompileError>> {
+    pub fn lower_operation(&mut self, op: Operation, span: Span) -> Result<InstId, Box<dyn CompileError>> {
         let cfg_op = match op {
             Operation::Add(expr_id, expr_id1) => IrOperation::Add(self.lower_expr(expr_id)?, self.lower_expr(expr_id1)?),
             Operation::Sub(expr_id, expr_id1) => IrOperation::Sub(self.lower_expr(expr_id)?, self.lower_expr(expr_id1)?),
@@ -747,7 +728,7 @@ impl IrLowerer {
             Operation::Dereference(_) => todo!(),
             Operation::ArrayAccess(_expr_id, _expr_id11) => todo!(),
         };
-        Ok(self.arena.alloc_inst_for(Instruction::Operation { source_info, op: cfg_op }, self.ir_context.curr_insert_block))
+        Ok(self.arena.alloc_inst_for(Instruction::Operation { span, op: cfg_op }, self.ir_context.curr_insert_block))
     }
 
     fn lower_type(&mut self, elaborated: ElaboratedType) -> Result<IrType, Box<dyn CompileError>> {
@@ -790,10 +771,10 @@ impl IrLowerer {
 //     self.read_variable_recursive(var_id, block_id)
 // }
 // fn read_variable_recursive(&mut self, var_id: IrVarId, block_id: BlockId) -> InstId {
-//     let source_info = self.get_var(var_id).source_info.clone();
+//     let span = self.get_var(var_id).span.clone();
 //     let val = if !self.sealed_blocks.contains(&block_id) {
 //         // Incomplete CFG
-//         let phi = self.alloc_inst_for(Instruction::Phi { source_info, incoming: HashMap::new() }, block_id);
+//         let phi = self.alloc_inst_for(Instruction::Phi { span, incoming: HashMap::new() }, block_id);
 //         self.incomplete_phis.entry(block_id).or_default().insert(var_id, phi);
 //         phi
 //     } else if self.get_block(block_id).predecessors.is_empty() {
@@ -805,7 +786,7 @@ impl IrLowerer {
 //         self.read_variable(var_id, self.get_block(block_id).predecessors[0])
 //     } else {
 //         // Break potential cycles with operandless phi
-//         let phi = self.alloc_inst_for(Instruction::Phi { source_info, incoming: HashMap::new() }, block_id);
+//         let phi = self.alloc_inst_for(Instruction::Phi { span, incoming: HashMap::new() }, block_id);
 //         self.write_variable(var_id, block_id, phi);
 //         self.add_phi_operands(var_id, phi, block_id)
 //     };

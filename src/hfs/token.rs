@@ -175,16 +175,16 @@ impl fmt::Display for TokenKind {
     }
 }
 
-pub const UNKNOWN_SOURCE: SourceInfo = SourceInfo { line_number: 0, line_offset: 0, token_width: 0 };
+pub const UNKNOWN_SOURCE: Span = Span { line_number: 0, line_offset: 0, token_width: 0 };
 
 #[derive(Debug, Clone, PartialEq, Hash, Eq, Default, Ord, PartialOrd, Copy)]
-pub struct SourceInfo {
+pub struct Span {
     pub line_number: usize,
     pub line_offset: usize,
     pub token_width: usize,
     // line_string: &'a str,
 }
-impl SourceInfo {
+impl Span {
     pub fn new(line_number: usize, line_offset: usize, token_width: usize) -> Self {
         Self { line_number, line_offset, token_width }
     }
@@ -193,11 +193,11 @@ impl SourceInfo {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Token {
     pub kind: TokenKind,
-    pub source_info: SourceInfo,
+    pub span: Span,
 }
 
 impl Token {
-    pub fn new(kind: TokenKind, source_info: SourceInfo) -> Self { Self { kind, source_info } }
+    pub fn new(kind: TokenKind, span: Span) -> Self { Self { kind, span } }
 
     pub fn is_type(&self) -> bool {
         match self.kind {
@@ -371,11 +371,11 @@ impl TokenKind {
     }
 }
 
-pub fn get_eof_source_info(tokens: &Vec<Token>) -> SourceInfo {
+pub fn get_eof_span(tokens: &Vec<Token>) -> Span {
     if tokens.len() > 0 {
         let last = tokens.last().expect("[internal error] no tokens after len > 0 check");
-        SourceInfo::new(last.source_info.line_number, last.source_info.line_offset + last.source_info.token_width, 1)
+        Span::new(last.span.line_number, last.span.line_offset + last.span.token_width, 1)
     } else {
-        SourceInfo::new(1, 1, 1)
+        Span::new(1, 1, 1)
     }
 }

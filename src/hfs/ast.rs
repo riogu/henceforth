@@ -29,11 +29,11 @@ pub enum Identifier {
 }
 
 impl Identifier {
-    pub fn get_source_info(&self, arena: &AstArena) -> SourceInfo {
+    pub fn get_span(&self, arena: &AstArena) -> Span {
         match self {
-            Identifier::GlobalVar(var_id) => arena.get_var_token(*var_id).source_info.clone(),
-            Identifier::Variable(var_id) => arena.get_var_token(*var_id).source_info.clone(),
-            Identifier::Function(func_id) => arena.get_function_token(*func_id).source_info.clone(),
+            Identifier::GlobalVar(var_id) => arena.get_var_token(*var_id).span.clone(),
+            Identifier::Variable(var_id) => arena.get_var_token(*var_id).span.clone(),
+            Identifier::Function(func_id) => arena.get_function_token(*func_id).span.clone(),
         }
     }
 }
@@ -218,22 +218,10 @@ impl AstArena {
     pub fn new(diagnostic_info: Rc<DiagnosticInfo>) -> Self {
         let mut arena = Self::default();
         arena.diagnostic_info = diagnostic_info;
-        arena.alloc_type_uncached(ElaboratedType::new_int(0), Token {
-            kind: TokenKind::Int,
-            source_info: SourceInfo::new(0, 0, 0),
-        });
-        arena.alloc_type_uncached(ElaboratedType::new_float(0), Token {
-            kind: TokenKind::Float,
-            source_info: SourceInfo::new(0, 0, 0),
-        });
-        arena.alloc_type_uncached(ElaboratedType::new_bool(0), Token {
-            kind: TokenKind::Bool,
-            source_info: SourceInfo::new(0, 0, 0),
-        });
-        arena.alloc_type_uncached(ElaboratedType::new_string(0), Token {
-            kind: TokenKind::String,
-            source_info: SourceInfo::new(0, 0, 0),
-        });
+        arena.alloc_type_uncached(ElaboratedType::new_int(0), Token { kind: TokenKind::Int, span: Span::new(0, 0, 0) });
+        arena.alloc_type_uncached(ElaboratedType::new_float(0), Token { kind: TokenKind::Float, span: Span::new(0, 0, 0) });
+        arena.alloc_type_uncached(ElaboratedType::new_bool(0), Token { kind: TokenKind::Bool, span: Span::new(0, 0, 0) });
+        arena.alloc_type_uncached(ElaboratedType::new_string(0), Token { kind: TokenKind::String, span: Span::new(0, 0, 0) });
         arena
     }
 

@@ -1,9 +1,9 @@
 use std::{any::Any, path::PathBuf, rc::Rc};
 
 use crate::hfs::{
+    AstArena, File, IrArena, IrLowerer, Lexer, O0, OptPipeline, Parser, StackAnalyzer, Token, UnresolvedAstArena,
     error::{CompileError, DiagnosticInfo},
-    get_eof_source_info, AstArena, File, IrArena, IrLowerer, Lexer, OptPipeline, Parser, StackAnalyzer, Token,
-    UnresolvedAstArena, O0,
+    get_eof_span,
 };
 
 pub trait Byproduct {
@@ -46,7 +46,7 @@ pub fn run_until(
     let file = File::new(path);
 
     let tokens = Lexer::tokenize(&file)?;
-    let diagnostic_info = Rc::new(DiagnosticInfo::new(file.path, get_eof_source_info(&tokens)));
+    let diagnostic_info = Rc::new(DiagnosticInfo::new(file.path, get_eof_span(&tokens)));
 
     if phase == Phase::Lexer {
         return Ok(Rc::new(tokens));

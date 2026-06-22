@@ -3,7 +3,7 @@ use std::{collections::HashSet, fmt::Display, vec};
 use indexmap::IndexMap;
 use slotmap::new_key_type;
 
-use crate::hfs::{IrArena, IrType, Literal, SourceInfo, ast::*, ir_pretty_printing::prettify_ir, print, syntax_term};
+use crate::hfs::{IrArena, IrType, Literal, Span, ast::*, ir_pretty_printing::prettify_ir, print, syntax_term};
 /*
 =================================================================================================
 Control Flow Graph IR Pass (HFS MIR - Medium-level IR)
@@ -53,7 +53,7 @@ pub enum IrTopLevelId {
 }
 #[derive(Debug, Clone)]
 pub struct IrFunction {
-    pub source_info: SourceInfo,
+    pub span: Span,
     pub name: String,
     // we repeat the FunctionDeclaration methods because we are meant convert everything over
     // rather than keep acessing the old FunctionDeclaration (we still keep the FuncId though)
@@ -80,7 +80,7 @@ pub struct BasicBlock {
 // Declarations (shared)
 #[derive(Debug)]
 pub struct GlobalIrVarDeclaration {
-    pub source_info: SourceInfo,
+    pub span: Span,
     pub name: String,
     pub hfs_type: TypeId,
 }
@@ -89,17 +89,17 @@ pub struct GlobalIrVarDeclaration {
 #[derive(Debug, Clone)]
 pub enum Instruction {
     Load {
-        source_info: SourceInfo,
+        span: Span,
         address: InstId,
         type_id: TypeId,
     },
     Store {
-        source_info: SourceInfo,
+        span: Span,
         address: InstId,
         value: InstId,
     },
     Alloca {
-        source_info: SourceInfo,
+        span: Span,
         type_id: TypeId,
     },
     GlobalAlloca(GlobalIrVarId),
@@ -107,18 +107,18 @@ pub enum Instruction {
     // please print the variable it holds and if you want annotate it like llvm with an alloca
     // @mycool_global_var = global i32 69420
     Parameter {
-        source_info: SourceInfo,
+        span: Span,
         index: usize,
         type_id: TypeId,
     },
     ReturnValue {
         // this is the temporary representation of the result of a function call as "local values"
         // we just store the type, the value is mapped at runtime by the interpreter
-        source_info: SourceInfo,
+        span: Span,
         type_id: TypeId,
     },
     FunctionCall {
-        source_info: SourceInfo,
+        span: Span,
         args: Vec<InstId>,
         func_id: IrFuncId,
         is_move: bool,
@@ -126,7 +126,7 @@ pub enum Instruction {
     },
 
     Phi {
-        source_info: SourceInfo,
+        span: Span,
         incoming: IndexMap<BlockId, InstId>, // (predecessor block, value from that block)
     },
 
@@ -136,21 +136,21 @@ pub enum Instruction {
     // but just have the Type system agnostic semantics
     // we convert StackKeyword Expressions to this
     Tuple {
-        source_info: SourceInfo,
+        span: Span,
         instructions: Vec<InstId>,
     },
     Operation {
-        source_info: SourceInfo,
+        span: Span,
         op: IrOperation,
     },
     Literal {
-        source_info: SourceInfo,
+        span: Span,
         literal: Literal,
     },
     LoadElement {
         // load an element from a tuple (used to merge tuples into a new one)
         // useful for mapping our stack tracking into LLVM IR
-        source_info: SourceInfo,
+        span: Span,
         index: usize,
         tuple: InstId,
     },
@@ -158,10 +158,10 @@ pub enum Instruction {
 // Terminator instructions, separated from the others
 #[derive(Debug, Clone, Copy)]
 pub enum TerminatorInst {
-    Return { source_info: SourceInfo, return_tuple: InstId },
-    Branch { source_info: SourceInfo, cond: InstId, true_block: BlockId, false_block: BlockId },
+    Return { span: Span, return_tuple: InstId },
+    Branch { span: Span, cond: InstId, true_block: BlockId, false_block: BlockId },
     // if we want to jump with nothing, just have an empty vector
-    Jump { source_info: SourceInfo, target: BlockId }, // is a tuple
+    Jump { span: Span, target: BlockId }, // is a tuple
     // the jump always carries around the stack variation itself
     // for other purposes, we usually generate a phi and find the associated InstId with a pass
     // that searches for store instructions and whatnot
@@ -305,20 +305,20 @@ pub enum IrOperation {
 }
 
 impl Instruction {
-    pub(crate) fn get_source_info(&self) -> SourceInfo {
+    pub(crate) fn get_span(&self) -> Span {
         match self {
-            Instruction::Load { source_info, address: _, type_id: _ } => source_info.clone(),
-            Instruction::Store { source_info, address: _, value: _ } => source_info.clone(),
-            Instruction::Alloca { source_info, type_id: _ } => source_info.clone(),
+            Instruction::Load { span, address: _, type_id: _ } => span.clone(),
+            Instruction::Store { span, address: _, value: _ } => span.clone(),
+            Instruction::Alloca { span, type_id: _ } => span.clone(),
             Instruction::GlobalAlloca(_) => todo!(),
-            Instruction::Parameter { source_info, index: _, type_id: _ } => source_info.clone(),
-            Instruction::ReturnValue { source_info, type_id: _ } => source_info.clone(),
-            Instruction::FunctionCall { source_info, args: _, func_id: _, is_move: _, return_values: _ } => source_info.clone(),
-            Instruction::Phi { source_info, incoming: _ } => source_info.clone(),
-            Instruction::Tuple { source_info, instructions: _ } => source_info.clone(),
-            Instruction::Operation { source_info, op: _ } => source_info.clone(),
-            Instruction::Literal { source_info, literal: _ } => source_info.clone(),
-            Instruction::LoadElement { source_info, index: _, tuple: _ } => source_info.clone(),
+            Instruction::Parameter { span, index: _, type_id: _ } => span.clone(),
+            Instruction::ReturnValue { span, type_id: _ } => span.clone(),
+            Instruction::FunctionCall { span, args: _, func_id: _, is_move: _, return_values: _ } => span.clone(),
+            Instruction::Phi { span, incoming: _ } => span.clone(),
+            Instruction::Tuple { span, instructions: _ } => span.clone(),
+            Instruction::Operation { span, op: _ } => span.clone(),
+            Instruction::Literal { span, literal: _ } => span.clone(),
+            Instruction::LoadElement { span, index: _, tuple: _ } => span.clone(),
         }
     }
 }

@@ -1,10 +1,10 @@
 use std::{path::PathBuf, rc::Rc};
 
 use crate::hfs::{
+    Literal, ScopeKind, Span, Token, Type, TypeId, UnresolvedAstArena, UnresolvedExprId, UnresolvedExpression,
+    UnresolvedFunctionDeclaration, UnresolvedStatement, UnresolvedStmtId, UnresolvedTopLevelId, UnresolvedVarDeclaration,
     builder::builder::{Builder, BuilderOperation, ControlFlowOps, FunctionOps, LoopOps, PassMode, StackOps, VariableOps},
     error::DiagnosticInfo,
-    Literal, ScopeKind, SourceInfo, Token, Type, TypeId, UnresolvedAstArena, UnresolvedExprId, UnresolvedExpression,
-    UnresolvedFunctionDeclaration, UnresolvedStatement, UnresolvedStmtId, UnresolvedTopLevelId, UnresolvedVarDeclaration,
 };
 
 #[deprecated]
@@ -37,9 +37,7 @@ enum BuilderContext {
 }
 
 impl ParserBuilder {
-    fn dummy_token() -> Token {
-        Token { kind: crate::hfs::TokenKind::Let, source_info: SourceInfo::new(0, 0, 0) }
-    }
+    fn dummy_token() -> Token { Token { kind: crate::hfs::TokenKind::Let, span: Span::new(0, 0, 0) } }
 
     fn types_to_tuple_id(&mut self, types: Vec<Type>) -> TypeId {
         let type_ids = types.into_iter().map(|ty| self.type_to_id(ty)).collect();
@@ -47,7 +45,7 @@ impl ParserBuilder {
     }
 
     fn type_to_id(&mut self, typename: Type) -> TypeId {
-        self.arena.to_type(Token::new(typename.to_token(), SourceInfo::new(0, 0, 0)), typename.get_ptr_count())
+        self.arena.to_type(Token::new(typename.to_token(), Span::new(0, 0, 0)), typename.get_ptr_count())
     }
 }
 
@@ -55,10 +53,11 @@ impl Builder<UnresolvedStmtOrExpr> for ParserBuilder {
     type Built = UnresolvedAstArena;
     fn new() -> Self {
         ParserBuilder {
-            arena: UnresolvedAstArena::new(Rc::new(DiagnosticInfo::new(
-                PathBuf::new(),
-                SourceInfo { line_number: 0, line_offset: 0, token_width: 0 },
-            ))),
+            arena: UnresolvedAstArena::new(Rc::new(DiagnosticInfo::new(PathBuf::new(), Span {
+                line_number: 0,
+                line_offset: 0,
+                token_width: 0,
+            }))),
             current_function: None,
             stack_block_exprs: Vec::new(),
             context_stack: Vec::new(),
@@ -86,14 +85,12 @@ impl Builder<UnresolvedStmtOrExpr> for ParserBuilder {
         self
     }
 
-    fn build(self) -> UnresolvedAstArena {
-        self.arena
-    }
+    fn build(self) -> UnresolvedAstArena { self.arena }
 }
 
 impl VariableOps for ParserBuilder {
     fn variable(mut self, name: &str, typename: Type) -> Self {
-        let type_id = self.arena.to_type(Token::new(typename.to_token(), SourceInfo::new(0, 0, 0)), typename.get_ptr_count());
+        let type_id = self.arena.to_type(Token::new(typename.to_token(), Span::new(0, 0, 0)), typename.get_ptr_count());
         let var_decl = UnresolvedVarDeclaration { name: name.to_string(), hfs_type: type_id };
         let var_id = self.arena.alloc_unresolved_var(var_decl, Self::dummy_token());
 
@@ -250,9 +247,7 @@ impl FunctionOps for ParserBuilder {
         self
     }
 
-    fn body(self) -> Self {
-        self
-    }
+    fn body(self) -> Self { self }
 
     fn end_body(mut self) -> Self {
         if let Some(func) = self.current_function.take() {

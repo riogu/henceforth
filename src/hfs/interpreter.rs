@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use slotmap::Key;
 
-use crate::hfs::{IrArena, IrType, ast::*, hfs_ir::*, scope_stack::*, token::*};
+use crate::hfs::{IrArena, IrType, hfs_ir::*, scope_stack::*, token::*};
 
 //---------------------------------------------------------------------------
 // Runtime values
@@ -198,7 +198,7 @@ impl Interpreter {
                      being interpreted"
                 )
             },
-            Instruction::FunctionCall { source_info: _, args, func_id, is_move: _, return_values } => {
+            Instruction::FunctionCall { span: _, args, func_id, is_move: _, return_values } => {
                 let mut arg_values = Vec::new();
                 let func_id = func_id.clone();
                 let return_values = return_values.clone();
@@ -215,21 +215,21 @@ impl Interpreter {
                 // capture them). maybe one day we might want to allow capturing them
                 RuntimeValue::Tuple(runtime_return_values)
             },
-            Instruction::Phi { source_info: _, incoming } =>
+            Instruction::Phi { span: _, incoming } =>
                 if let Some(inst_id) = incoming.get(&self.prev_block_id) {
                     self.interpret_instruction(*inst_id)
                 } else {
                     panic!("[internal error] reached phi without going through one of its predecessor blocks")
                 },
-            Instruction::Tuple { source_info: _, instructions } => {
+            Instruction::Tuple { span: _, instructions } => {
                 let mut runtime_values = Vec::<RuntimeValue>::new();
                 for inst_id in instructions.clone() {
                     runtime_values.push(self.interpret_instruction(inst_id));
                 }
                 RuntimeValue::Tuple(runtime_values)
             },
-            Instruction::Operation { source_info: _, op } => self.interpret_operation(*op),
-            Instruction::Literal { source_info: _, literal } => match literal {
+            Instruction::Operation { span: _, op } => self.interpret_operation(*op),
+            Instruction::Literal { span: _, literal } => match literal {
                 // NOTE: we are not interning strings or literals at all right now
                 // it might be a good idea to do this later for performance
                 Literal::Integer(val) => RuntimeValue::Integer(*val),
@@ -237,7 +237,7 @@ impl Interpreter {
                 Literal::String(val) => RuntimeValue::String(val.clone()),
                 Literal::Bool(val) => RuntimeValue::Bool(*val),
             },
-            Instruction::LoadElement { source_info: _, index: _, tuple: _ } => {
+            Instruction::LoadElement { span: _, index: _, tuple: _ } => {
                 todo!("[internal error] we aren't currently using Instruction::LoadElement for anything yet")
             },
 
@@ -448,7 +448,7 @@ impl Interpreter {
     // Returns `Some(block_id)` to continue to, or `None` to stop (return)
     pub fn interpret_terminator(&mut self, term_id: TermInstId) -> Option<BlockId> {
         match self.arena.get_term(term_id) {
-            TerminatorInst::Return { source_info: _, return_tuple } => {
+            TerminatorInst::Return { span: _, return_tuple } => {
                 if let RuntimeValue::Tuple(return_stack) = self.interpret_instruction(*return_tuple) {
                     self.curr_call_frame_mut().return_stack = return_stack;
                 } else {
@@ -456,7 +456,7 @@ impl Interpreter {
                 }
                 None
             },
-            TerminatorInst::Branch { source_info: _, cond, true_block, false_block } => {
+            TerminatorInst::Branch { span: _, cond, true_block, false_block } => {
                 let false_block = false_block.clone();
                 let true_block = true_block.clone();
                 if let RuntimeValue::Bool(cond) = self.interpret_instruction(*cond) {
@@ -465,7 +465,7 @@ impl Interpreter {
                     panic!("[internal error] expected 'RuntimeValue::Bool' in TerminatorInst::Branch condition value")
                 }
             },
-            TerminatorInst::Jump { source_info: _, target } => Some(*target),
+            TerminatorInst::Jump { span: _, target } => Some(*target),
             TerminatorInst::Unreachable => panic!("[internal error] reached 'Unreachable' instruction while interpreting"),
         }
     }

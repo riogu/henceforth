@@ -1,8 +1,8 @@
 use std::{error::Error, fs, io};
 
 use henceforth::{
-    hfs::utils::{run_until, Phase},
-    hfscheck::hfscheck::{generate_tests, Test, TestInput},
+    hfs::utils::{Phase, run_until},
+    hfscheck::hfscheck::{Test, TestInput, generate_tests},
 };
 use libtest_mimic::{Arguments, Failed, Trial};
 

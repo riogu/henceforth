@@ -8,8 +8,8 @@ use std::{
 use colored::{ColoredString, Colorize};
 
 use crate::hfs::{
-    error::{number_length, CompileError, DebugInfo},
-    SourceInfo, Token, VALID_STACK_KEYWORDS,
+    Span, Token, VALID_STACK_KEYWORDS,
+    error::{CompileError, DebugInfo, number_length},
 };
 
 #[derive(Debug)]
@@ -23,17 +23,17 @@ pub enum LexerErrorKind {
 pub struct LexerError {
     pub kind: LexerErrorKind,
     pub path: PathBuf,
-    pub source_info: SourceInfo,
+    pub span: Span,
     pub debug_info: DebugInfo,
 }
 
 #[macro_export]
 macro_rules! lexer_error {
-    ($kind:expr, $path:expr, $source_info:expr, $tokens:expr) => {
+    ($kind:expr, $path:expr, $span:expr, $tokens:expr) => {
         Err(Box::new(LexerError {
             kind: $kind,
             path: $path,
-            source_info: $source_info,
+            span: $span,
             debug_info: $crate::hfs::diagnostics::error::DebugInfo {
                 compiler_file: file!(),
                 compiler_line: line!(),
@@ -51,18 +51,16 @@ impl LexerError {
 }
 
 impl CompileError for LexerError {
-    fn header(&self) -> ColoredString {
-        format!("{} {}", "error:".red().bold(), self.message().0.bold()).into()
-    }
+    fn header(&self) -> ColoredString { format!("{} {}", "error:".red().bold(), self.message().0.bold()).into() }
 
     fn location(&self) -> ColoredString {
         format!(
             "{}{} {}:{}:{}",
-            " ".repeat(number_length(self.source_info.line_number)),
+            " ".repeat(number_length(self.span.line_number)),
             "-->".blue(),
             self.path.to_str().unwrap(),
-            self.source_info.line_number,
-            self.source_info.line_offset
+            self.span.line_number,
+            self.span.line_offset
         )
         .into()
     }
@@ -72,20 +70,20 @@ impl CompileError for LexerError {
 
         let line = source
             .lines()
-            .nth(self.source_info.line_number - 1)
-            .ok_or_else(|| format!("Line {} not found in file", self.source_info.line_number))?
+            .nth(self.span.line_number - 1)
+            .ok_or_else(|| format!("Line {} not found in file", self.span.line_number))?
             .replace("\t", "    ");
 
-        let mut error_pointer = " ".repeat(self.source_info.line_offset - 1);
-        error_pointer.push_str(format!("{} {}", "^".repeat(self.source_info.token_width), self.message().1).as_str());
+        let mut error_pointer = " ".repeat(self.span.line_offset - 1);
+        error_pointer.push_str(format!("{} {}", "^".repeat(self.span.token_width), self.message().1).as_str());
         return Ok(ColoredString::from(format!(
             "{} {}\n{} {} {}\n{} {} {}",
-            " ".repeat(number_length(self.source_info.line_number)),
+            " ".repeat(number_length(self.span.line_number)),
             "|".blue().bold(),
-            self.source_info.line_number.to_string().blue().bold(),
+            self.span.line_number.to_string().blue().bold(),
             "|".blue().bold(),
             line,
-            " ".repeat(number_length(self.source_info.line_number)),
+            " ".repeat(number_length(self.span.line_number)),
             "|".blue().bold(),
             error_pointer.red().bold()
         )));
@@ -119,9 +117,7 @@ impl CompileError for LexerError {
         return ColoredString::from("");
     }
 
-    fn get_line(&self) -> usize {
-        return self.source_info.line_number;
-    }
+    fn get_line(&self) -> usize { return self.span.line_number; }
 }
 
 impl Display for LexerError {
@@ -137,10 +133,6 @@ impl Display for LexerError {
 
 impl Display for Token {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{:?} (pos: {}:{}, width: {})",
-            self.kind, self.source_info.line_number, self.source_info.line_offset, self.source_info.token_width
-        )
+        write!(f, "{:?} (pos: {}:{}, width: {})", self.kind, self.span.line_number, self.span.line_offset, self.span.token_width)
     }
 }

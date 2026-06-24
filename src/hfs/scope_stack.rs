@@ -2,7 +2,7 @@ use std::{collections::HashMap, rc::Rc};
 
 use crate::{
     hfs::{
-        Token,
+        Span, Token,
         ast::*,
         error::{CompileError, DiagnosticInfo},
         stack_analyzer_errors::{StackAnalyzerError, StackAnalyzerErrorKind},
@@ -135,7 +135,7 @@ impl ScopeStack {
         self.mangled_functions.get(&global_mangled_name).copied()
     }
 
-    pub fn find_identifier(&self, name: &str, token: Token, arena: &AstArena) -> Result<Identifier, Box<dyn CompileError>> {
+    pub fn find_identifier(&self, name: &str, span: Span, arena: &AstArena) -> Result<Identifier, Box<dyn CompileError>> {
         match self.find_variable(&name) {
             (None, _) => match self.find_function(&name) {
                 Some(id) => Ok(Identifier::Function(id)),
@@ -143,7 +143,7 @@ impl ScopeStack {
                     return stack_analyzer_error!(
                         StackAnalyzerErrorKind::UseOfUndeclaredIdentifier(name.to_string()),
                         arena,
-                        vec![token.span]
+                        span
                     ),
             },
             (Some(id), false) => Ok(Identifier::Variable(id)),

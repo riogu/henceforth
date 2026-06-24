@@ -16,6 +16,7 @@ use crate::{
         ast::*,
         error::{CompileError, DiagnosticInfo},
         ir_lowerer_errors::IrLowererErrorKind,
+        merge_spans,
     },
     ir_lowerer_error,
 };
@@ -67,16 +68,16 @@ impl IrArena {
     }
 
     // Stack methods (manage the hfs stack for operations)
-    pub fn pop_or_error(&mut self, spans: Vec<Span>, ast_arena: &AstArena) -> Result<InstId, Box<dyn CompileError>> {
+    pub fn pop_or_error(&mut self, span: Span, ast_arena: &AstArena) -> Result<InstId, Box<dyn CompileError>> {
         match self.pop_hfs_stack() {
             Some(id) => Ok(id),
-            None => ir_lowerer_error!(IrLowererErrorKind::StackUnderflow, &*self, Some(ast_arena), spans),
+            None => ir_lowerer_error!(IrLowererErrorKind::StackUnderflow, &*self, Some(ast_arena), span),
         }
     }
-    pub fn last_or_error(&mut self, spans: Vec<Span>, ast_arena: &AstArena) -> Result<InstId, Box<dyn CompileError>> {
+    pub fn last_or_error(&mut self, span: Span, ast_arena: &AstArena) -> Result<InstId, Box<dyn CompileError>> {
         match self.hfs_stack.last() {
             Some(id) => Ok(*id),
-            None => ir_lowerer_error!(IrLowererErrorKind::ExpectedItemOnStack, &*self, Some(ast_arena), spans),
+            None => ir_lowerer_error!(IrLowererErrorKind::ExpectedItemOnStack, &*self, Some(ast_arena), span),
         }
     }
     pub fn push_to_hfs_stack(&mut self, inst: InstId) {
@@ -256,7 +257,7 @@ impl IrArena {
         &mut self,
         stack1: &Vec<InstId>,
         stack2: &Vec<InstId>,
-        spans: Vec<Span>,
+        span: Span,
     ) -> Result<(), Box<dyn CompileError>> {
         let expected_count = stack1.len();
         let actual_count = stack2.len();
@@ -265,14 +266,14 @@ impl IrArena {
                 IrLowererErrorKind::MismatchingStackDepths(expected_count, actual_count),
                 &self,
                 None,
-                spans
+                span
             );
         }
 
         for (inst_id1, inst_id2) in stack1.iter().zip(stack2.iter()) {
             let type_id1 = self.get_type_id_of_inst(*inst_id1)?;
             let type_id2 = self.get_type_id_of_inst(*inst_id2)?;
-            self.compare_types(type_id1, type_id2, spans.clone())?;
+            self.compare_types(type_id1, type_id2, vec![span])?;
         }
         Ok(())
     }
@@ -280,6 +281,7 @@ impl IrArena {
     pub fn compare_types(&self, type1: TypeId, type2: TypeId, spans: Vec<Span>) -> Result<(), Box<dyn CompileError>> {
         let actual_type = self.get_type(type1);
         let expected_type = self.get_type(type2);
+        let span = merge_spans(spans);
 
         match (actual_type, expected_type) {
             (
@@ -291,7 +293,7 @@ impl IrArena {
                         IrLowererErrorKind::IncorrectTupleLength(expected_types.len(), actual_types.len()),
                         self,
                         None,
-                        spans
+                        span
                     );
                 }
                 if actual_ptr_count != expected_ptr_count {
@@ -299,16 +301,12 @@ impl IrArena {
                         IrLowererErrorKind::IncorrectPointerCount(*expected_ptr_count, *actual_ptr_count),
                         self,
                         None,
-                        spans
+                        span
                     );
                 }
                 // Recursively validate each element
-                for (i, (&actual_elem_id, &expected_elem_id)) in actual_types.iter().zip(expected_types.iter()).enumerate() {
-                    let elem_span = match spans.get(i) {
-                        Some(span) => span.clone(),
-                        None => panic!("[internal error] wrong number of source infos passed"),
-                    };
-                    self.compare_types(actual_elem_id, expected_elem_id, vec![elem_span])?;
+                for (&actual_elem_id, &expected_elem_id) in actual_types.iter().zip(expected_types.iter()) {
+                    self.compare_types(actual_elem_id, expected_elem_id, vec![span])?;
                 }
                 Ok(())
             },
@@ -317,7 +315,7 @@ impl IrArena {
                 IrLowererErrorKind::MismatchingTypes(actual.get_repr(&self), expected.get_repr(&self)),
                 self,
                 None,
-                spans
+                span
             ),
         }
     }

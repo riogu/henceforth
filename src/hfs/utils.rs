@@ -1,10 +1,16 @@
 use std::{any::Any, path::PathBuf, rc::Rc};
 
 use crate::hfs::{
-    AstArena, File, IrArena, IrLowerer, Lexer, O0, OptPipeline, Parser, StackAnalyzer, Token, UnresolvedAstArena,
+    AstArena, File, IrArena, IrLowerer, Lexer, O0, OptPipeline, Parser, Span, StackAnalyzer, Token, UnresolvedAstArena,
     error::{CompileError, DiagnosticInfo},
     get_eof_span,
 };
+pub fn merge_spans(spans: Vec<Span>) -> Span {
+    match spans.first() {
+        Some(span) => span.merge(*spans.last().unwrap()),
+        None => Span::default(),
+    }
+}
 
 pub trait Byproduct {
     fn as_any(&self) -> &dyn Any;

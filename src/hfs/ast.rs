@@ -31,9 +31,9 @@ pub enum Identifier {
 impl Identifier {
     pub fn get_span(&self, arena: &AstArena) -> Span {
         match self {
-            Identifier::GlobalVar(var_id) => arena.get_var_token(*var_id).span.clone(),
-            Identifier::Variable(var_id) => arena.get_var_token(*var_id).span.clone(),
-            Identifier::Function(func_id) => arena.get_function_token(*func_id).span.clone(),
+            Identifier::GlobalVar(var_id) => arena.get_var_span(*var_id).clone(),
+            Identifier::Variable(var_id) => arena.get_var_span(*var_id).clone(),
+            Identifier::Function(func_id) => arena.get_function_span(*func_id).clone(),
         }
     }
 }
@@ -181,12 +181,12 @@ pub struct AstArena {
 
     pub(crate) types: Vec<ElaboratedType>,
 
-    // Token storage (parallel arrays)
-    pub(crate) expr_tokens: Vec<Token>,
-    pub(crate) stmt_tokens: Vec<Token>,
-    pub(crate) var_tokens: Vec<Token>,
-    pub(crate) function_tokens: Vec<Token>,
-    pub(crate) type_tokens: Vec<Token>,
+    // Span storage (parallel arrays)
+    pub(crate) expr_spans: Vec<Span>,
+    pub(crate) stmt_spans: Vec<Span>,
+    pub(crate) var_spans: Vec<Span>,
+    pub(crate) function_spans: Vec<Span>,
+    pub(crate) type_spans: Vec<Span>,
 
     pub(crate) hfs_stack: Vec<ExprId>, // keeps track of the state of our stack
 
@@ -218,36 +218,36 @@ impl AstArena {
     pub fn new(diagnostic_info: Rc<DiagnosticInfo>) -> Self {
         let mut arena = Self::default();
         arena.diagnostic_info = diagnostic_info;
-        arena.alloc_type_uncached(ElaboratedType::new_int(0), Token { kind: TokenKind::Int, span: Span::new(0, 0, 0) });
-        arena.alloc_type_uncached(ElaboratedType::new_float(0), Token { kind: TokenKind::Float, span: Span::new(0, 0, 0) });
-        arena.alloc_type_uncached(ElaboratedType::new_bool(0), Token { kind: TokenKind::Bool, span: Span::new(0, 0, 0) });
-        arena.alloc_type_uncached(ElaboratedType::new_string(0), Token { kind: TokenKind::String, span: Span::new(0, 0, 0) });
+        arena.alloc_type_uncached(ElaboratedType::new_int(0), Span::default());
+        arena.alloc_type_uncached(ElaboratedType::new_float(0), Span::default());
+        arena.alloc_type_uncached(ElaboratedType::new_bool(0), Span::default());
+        arena.alloc_type_uncached(ElaboratedType::new_string(0), Span::default());
         arena
     }
 
-    pub fn alloc_and_push_to_hfs_stack(&mut self, expr: Expression, provenance: ExprProvenance, token: Token) -> ExprId {
+    pub fn alloc_and_push_to_hfs_stack(&mut self, expr: Expression, provenance: ExprProvenance, span: Span) -> ExprId {
         // theres no reason to not push to the stack when making a new expression
         // so this is the only method available
         let id = ExprId(self.exprs.len());
         self.exprs.push(expr);
         self.hfs_stack.push(id);
         self.expr_provenances.push(provenance);
-        self.expr_tokens.push(token);
+        self.expr_spans.push(span);
         id
     }
 
-    pub fn alloc_stmt(&mut self, stmt: Statement, token: Token) -> StmtId {
+    pub fn alloc_stmt(&mut self, stmt: Statement, span: Span) -> StmtId {
         let id = StmtId(self.stmts.len());
         self.stmts.push(stmt);
-        self.stmt_tokens.push(token);
+        self.stmt_spans.push(span);
         id
     }
 
-    pub fn alloc_var(&mut self, var: VarDeclaration, token: Token) -> VarId {
+    pub fn alloc_var(&mut self, var: VarDeclaration, span: Span) -> VarId {
         let id = VarId(self.vars.len());
         self.vars.push(var);
         self.curr_var_provenances.push(ExprProvenance::CompiletimeValue);
-        self.var_tokens.push(token);
+        self.var_spans.push(span);
         // by default, variables start as compile time variables.
         // this is changed throughout semantic analysis, they could become runtime
         // if they are assigned a RuntimeValue (they can regain compile time if we reassign them)
@@ -255,33 +255,33 @@ impl AstArena {
         id
     }
 
-    pub fn alloc_function(&mut self, func: FunctionDeclaration, token: Token) -> FuncId {
+    pub fn alloc_function(&mut self, func: FunctionDeclaration, span: Span) -> FuncId {
         let id = FuncId(self.functions.len());
         self.functions.push(func);
         // we assume a function call is runtime by default (im not gonna invest too much on this)
         // this isnt really used extensively, its here to match variables if we want it later for
         // compile-time analysis of functions and other things
         self.curr_func_call_provenances.push(ExprProvenance::RuntimeValue);
-        self.function_tokens.push(token);
+        self.function_spans.push(span);
         id
     }
 
     // Internal: allocate without checking cache
-    fn alloc_type_uncached(&mut self, hfs_type: ElaboratedType, token: Token) -> TypeId {
+    fn alloc_type_uncached(&mut self, hfs_type: ElaboratedType, span: Span) -> TypeId {
         let id = TypeId(self.types.len());
         self.types.push(hfs_type.clone());
-        self.type_tokens.push(token);
+        self.type_spans.push(span);
         self.type_cache.insert(hfs_type, id);
         id
     }
 
-    pub fn alloc_type(&mut self, hfs_type: ElaboratedType, token: Token) -> TypeId {
+    pub fn alloc_type(&mut self, hfs_type: ElaboratedType, span: Span) -> TypeId {
         // for resolving arrays, we need to check if their lengths are EQUIVALENT, since they can have different ExprIds
         if let ElaboratedType::Array { hfs_type: elem_type, length: Some(ArrayLength::Resolved(expr_id)), ptr_count } = hfs_type {
             if let Some(existing_id) = self.find_equivalent_array_type(elem_type, expr_id, ptr_count) {
                 return existing_id;
             }
-            return self.alloc_type_uncached(hfs_type, token);
+            return self.alloc_type_uncached(hfs_type, span);
         }
 
         // Check if this type already exists
@@ -289,7 +289,7 @@ impl AstArena {
             return existing_id;
         }
         // If not, allocate it
-        self.alloc_type_uncached(hfs_type, token)
+        self.alloc_type_uncached(hfs_type, span)
     }
 
     fn find_equivalent_array_type(&self, elem_type: TypeId, length: ExprId, ptr_count: usize) -> Option<TypeId> {
@@ -347,22 +347,22 @@ impl AstArena {
     pub fn get_func_mut(&mut self, id: FuncId) -> &mut FunctionDeclaration { &mut self.functions[id.0] }
 
     // Token accessor methods
-    pub fn get_expr_token(&self, id: ExprId) -> &Token { &self.expr_tokens[id.0] }
+    pub fn get_expr_span(&self, id: ExprId) -> &Span { &self.expr_spans[id.0] }
 
-    pub fn get_stmt_token(&self, id: StmtId) -> &Token { &self.stmt_tokens[id.0] }
+    pub fn get_stmt_span(&self, id: StmtId) -> &Span { &self.stmt_spans[id.0] }
 
-    pub fn get_var_token(&self, id: VarId) -> &Token { &self.var_tokens[id.0] }
+    pub fn get_var_span(&self, id: VarId) -> &Span { &self.var_spans[id.0] }
 
-    pub fn get_function_token(&self, id: FuncId) -> &Token { &self.function_tokens[id.0] }
+    pub fn get_function_span(&self, id: FuncId) -> &Span { &self.function_spans[id.0] }
 
-    pub fn get_type_token(&self, id: TypeId) -> &Token { &self.type_tokens[id.0] }
+    pub fn get_type_span(&self, id: TypeId) -> &Span { &self.type_spans[id.0] }
 
     pub fn to_type(&mut self, token: Token) -> TypeId {
         match token.kind {
-            TokenKind::Int => self.alloc_type(ElaboratedType::new_int(0), token),
-            TokenKind::String => self.alloc_type(ElaboratedType::new_string(0), token),
-            TokenKind::Bool => self.alloc_type(ElaboratedType::new_bool(0), token),
-            TokenKind::Float => self.alloc_type(ElaboratedType::new_float(0), token),
+            TokenKind::Int => self.alloc_type(ElaboratedType::new_int(0), token.span),
+            TokenKind::String => self.alloc_type(ElaboratedType::new_string(0), token.span),
+            TokenKind::Bool => self.alloc_type(ElaboratedType::new_bool(0), token.span),
+            TokenKind::Float => self.alloc_type(ElaboratedType::new_float(0), token.span),
             TokenKind::Identifier(_) => {
                 panic!("[internal hfs error]: this is not how you convert identifiers to types")
             },
@@ -430,7 +430,7 @@ impl AstArena {
                 Literal::Bool(_) => Ok(ElaboratedType::new_bool(0).type_id()),
             },
             Expression::Tuple { expressions } => {
-                let token = self.get_expr_token(expr_id).clone();
+                let token = self.get_expr_span(expr_id).clone();
                 // Build tuple type from element types
                 let mut element_types = Vec::new();
                 for expr_id in expressions.clone() {

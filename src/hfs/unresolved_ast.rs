@@ -137,12 +137,12 @@ pub struct UnresolvedAstArena {
     pub(crate) unresolved_functions: Vec<UnresolvedFunctionDeclaration>,
     pub(crate) types: Vec<UnresolvedType>,
 
-    // Token storage
-    pub(crate) unresolved_expr_tokens: Vec<Token>,
-    pub(crate) unresolved_stmt_tokens: Vec<Token>,
-    pub(crate) unresolved_var_tokens: Vec<Token>,
-    pub(crate) unresolved_function_tokens: Vec<Token>,
-    pub(crate) type_tokens: Vec<Token>,
+    // Span storage
+    pub(crate) unresolved_expr_spans: Vec<Span>,
+    pub(crate) unresolved_stmt_spans: Vec<Span>,
+    pub(crate) unresolved_var_spans: Vec<Span>,
+    pub(crate) unresolved_function_spans: Vec<Span>,
+    pub(crate) type_spans: Vec<Span>,
 
     pub diagnostic_info: Rc<DiagnosticInfo>,
 }
@@ -161,58 +161,58 @@ impl UnresolvedAstArena {
     pub fn new(diagnostic_info: Rc<DiagnosticInfo>) -> Self {
         let mut arena = Self::default();
         arena.diagnostic_info = diagnostic_info;
-        arena.alloc_type_uncached(UnresolvedType::new_int(0), Token { kind: TokenKind::Int, span: Span::new(0, 0, 0) });
-        arena.alloc_type_uncached(UnresolvedType::new_float(0), Token { kind: TokenKind::Float, span: Span::new(0, 0, 0) });
-        arena.alloc_type_uncached(UnresolvedType::new_bool(0), Token { kind: TokenKind::Bool, span: Span::new(0, 0, 0) });
-        arena.alloc_type_uncached(UnresolvedType::new_string(0), Token { kind: TokenKind::String, span: Span::new(0, 0, 0) });
+        arena.alloc_type_uncached(UnresolvedType::new_int(0), Span::default());
+        arena.alloc_type_uncached(UnresolvedType::new_float(0), Span::default());
+        arena.alloc_type_uncached(UnresolvedType::new_bool(0), Span::default());
+        arena.alloc_type_uncached(UnresolvedType::new_string(0), Span::default());
         arena
     }
 
-    fn alloc_type_uncached(&mut self, hfs_type: UnresolvedType, token: Token) -> TypeId {
+    fn alloc_type_uncached(&mut self, hfs_type: UnresolvedType, span: Span) -> TypeId {
         let id = TypeId(self.types.len());
         self.types.push(hfs_type.clone());
-        self.type_tokens.push(token);
+        self.type_spans.push(span);
         id
     }
 
-    pub fn alloc_unresolved_expr(&mut self, expr: UnresolvedExpression, token: Token) -> UnresolvedExprId {
+    pub fn alloc_unresolved_expr(&mut self, expr: UnresolvedExpression, span: Span) -> UnresolvedExprId {
         let id = UnresolvedExprId(self.unresolved_exprs.len());
         self.unresolved_exprs.push(expr);
-        self.unresolved_expr_tokens.push(token);
+        self.unresolved_expr_spans.push(span);
         id
     }
 
-    pub fn alloc_unresolved_stmt(&mut self, stmt: UnresolvedStatement, token: Token) -> UnresolvedStmtId {
+    pub fn alloc_unresolved_stmt(&mut self, stmt: UnresolvedStatement, span: Span) -> UnresolvedStmtId {
         let id = UnresolvedStmtId(self.unresolved_stmts.len());
         self.unresolved_stmts.push(stmt);
-        self.unresolved_stmt_tokens.push(token);
+        self.unresolved_stmt_spans.push(span);
         id
     }
 
-    pub fn alloc_unresolved_var(&mut self, var: UnresolvedVarDeclaration, token: Token) -> UnresolvedVarId {
+    pub fn alloc_unresolved_var(&mut self, var: UnresolvedVarDeclaration, span: Span) -> UnresolvedVarId {
         let id = UnresolvedVarId(self.unresolved_vars.len());
         self.unresolved_vars.push(var);
-        self.unresolved_var_tokens.push(token);
+        self.unresolved_var_spans.push(span);
         id
     }
 
-    pub fn alloc_unresolved_function(&mut self, func: UnresolvedFunctionDeclaration, token: Token) -> UnresolvedFuncId {
+    pub fn alloc_unresolved_function(&mut self, func: UnresolvedFunctionDeclaration, span: Span) -> UnresolvedFuncId {
         let id = UnresolvedFuncId(self.unresolved_functions.len());
         self.unresolved_functions.push(func);
-        self.unresolved_function_tokens.push(token);
+        self.unresolved_function_spans.push(span);
         id
     }
 
-    pub fn alloc_type(&mut self, hfs_type: UnresolvedType, token: Token) -> TypeId {
+    pub fn alloc_type(&mut self, hfs_type: UnresolvedType, span: Span) -> TypeId {
         if let Some(id) = self.types.iter().position(|t| *t == hfs_type) {
-            if self.type_tokens[id].span == Span::new(0, 0, 0) {
-                self.type_tokens[id] = token;
+            if self.type_spans[id] == Span::new(0, 0, 0) {
+                self.type_spans[id] = span;
             }
             return TypeId(id);
         }
         let id = TypeId(self.types.len());
         self.types.push(hfs_type);
-        self.type_tokens.push(token);
+        self.type_spans.push(span);
         id
     }
 
@@ -228,22 +228,22 @@ impl UnresolvedAstArena {
     pub fn get_type(&self, id: TypeId) -> &UnresolvedType { &self.types[id.0] }
 
     // Token accessor methods
-    pub fn get_unresolved_expr_token(&self, id: UnresolvedExprId) -> Token { self.unresolved_expr_tokens[id.0].clone() }
+    pub fn get_unresolved_expr_span(&self, id: UnresolvedExprId) -> Span { self.unresolved_expr_spans[id.0].clone() }
 
-    pub fn get_unresolved_stmt_token(&self, id: UnresolvedStmtId) -> Token { self.unresolved_stmt_tokens[id.0].clone() }
+    pub fn get_unresolved_stmt_span(&self, id: UnresolvedStmtId) -> Span { self.unresolved_stmt_spans[id.0].clone() }
 
-    pub fn get_unresolved_var_token(&self, id: UnresolvedVarId) -> Token { self.unresolved_var_tokens[id.0].clone() }
+    pub fn get_unresolved_var_span(&self, id: UnresolvedVarId) -> Span { self.unresolved_var_spans[id.0].clone() }
 
-    pub fn get_unresolved_func_token(&self, id: UnresolvedFuncId) -> Token { self.unresolved_function_tokens[id.0].clone() }
+    pub fn get_unresolved_func_span(&self, id: UnresolvedFuncId) -> Span { self.unresolved_function_spans[id.0].clone() }
 
-    pub fn get_type_token(&self, id: TypeId) -> Token { self.type_tokens[id.0].clone() }
+    pub fn get_type_span(&self, id: TypeId) -> Span { self.type_spans[id.0].clone() }
 
     pub fn to_type(&mut self, token: Token, ptr_count: usize) -> TypeId {
         match token.kind {
-            TokenKind::Int => self.alloc_type(UnresolvedType::new_int(ptr_count), token),
-            TokenKind::String => self.alloc_type(UnresolvedType::new_string(ptr_count), token),
-            TokenKind::Bool => self.alloc_type(UnresolvedType::new_bool(ptr_count), token),
-            TokenKind::Float => self.alloc_type(UnresolvedType::new_float(ptr_count), token),
+            TokenKind::Int => self.alloc_type(UnresolvedType::new_int(ptr_count), token.span),
+            TokenKind::String => self.alloc_type(UnresolvedType::new_string(ptr_count), token.span),
+            TokenKind::Bool => self.alloc_type(UnresolvedType::new_bool(ptr_count), token.span),
+            TokenKind::Float => self.alloc_type(UnresolvedType::new_float(ptr_count), token.span),
             TokenKind::Identifier(_) => {
                 panic!("[internal hfs error]: this is not how you convert identifiers to types")
             },

@@ -175,19 +175,27 @@ impl fmt::Display for TokenKind {
     }
 }
 
-pub const UNKNOWN_SOURCE: Span = Span { line_number: 0, line_offset: 0, token_width: 0 };
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, PartialOrd, Ord)]
+pub struct Pos {
+    pub line: usize,
+    pub col: usize,
+}
 
 #[derive(Debug, Clone, PartialEq, Hash, Eq, Default, Ord, PartialOrd, Copy)]
 pub struct Span {
-    pub line_number: usize,
-    pub line_offset: usize,
-    pub token_width: usize,
+    pub start: Pos,
+    pub end: Pos,
     // line_string: &'a str,
 }
 impl Span {
     pub fn new(line_number: usize, line_offset: usize, token_width: usize) -> Self {
-        Self { line_number, line_offset, token_width }
+        Self {
+            start: Pos { line: line_number, col: line_offset },
+            end: Pos { line: line_number, col: line_offset + token_width },
+        }
     }
+
+    pub fn merge(self, other: Span) -> Span { Span { start: self.start.min(other.start), end: self.end.max(other.end) } }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -374,7 +382,7 @@ impl TokenKind {
 pub fn get_eof_span(tokens: &Vec<Token>) -> Span {
     if tokens.len() > 0 {
         let last = tokens.last().expect("[internal error] no tokens after len > 0 check");
-        Span::new(last.span.line_number, last.span.line_offset + last.span.token_width, 1)
+        Span::new(last.span.end.line, last.span.end.col, 1)
     } else {
         Span::new(1, 1, 1)
     }

@@ -62,7 +62,7 @@ macro_rules! stack_analyzer_error {
         Err(Box::new(StackAnalyzerError {
             kind: $kind,
             path: $arena.diagnostic_info.path.clone(),
-            span: StackAnalyzerError::span($span),
+            span: $span,
             debug_info: $crate::hfs::diagnostics::error::DebugInfo {
                 compiler_file: file!(),
                 compiler_line: line!(),
@@ -73,18 +73,6 @@ macro_rules! stack_analyzer_error {
     };
 }
 impl StackAnalyzerError {
-    pub fn span(mut span: Vec<Span>) -> Span {
-        span.sort();
-        let first = span.first().unwrap();
-        let last = span.last().unwrap();
-
-        Span {
-            line_number: first.line_number,
-            line_offset: first.line_offset,
-            token_width: last.line_offset + last.token_width - first.line_offset,
-        }
-    }
-
     pub fn dump_ast(arena: &AstArena) -> String {
         let functions = arena.functions.iter().map(|func| func.dump(arena).to_string()).collect::<Vec<String>>().join("\n");
         format!("{}", functions)
@@ -136,39 +124,41 @@ impl CompileError for StackAnalyzerError {
         }
     }
 
-    fn header(&self) -> colored::ColoredString { format!("{} {}", "error:".red().bold(), self.message().0.bold()).into() }
+    fn header(&self) -> ColoredString { format!("{} {}", "error:".red().bold(), self.message().0.bold()).into() }
 
-    fn location(&self) -> colored::ColoredString {
+    // TODO: fix multi-line spans
+    fn location(&self) -> ColoredString {
         format!(
             "{}{} {}:{}:{}",
-            " ".repeat(number_length(self.span.line_number)),
+            " ".repeat(number_length(self.span.start.line)),
             "-->".blue(),
             self.path.to_str().unwrap(),
-            self.span.line_number,
-            self.span.line_offset
+            self.span.start.line,
+            self.span.start.col
         )
         .into()
     }
 
-    fn source_code(&self) -> Result<colored::ColoredString, Box<dyn std::error::Error>> {
+    // TODO: fix multi-line spans and handle disjoint error pointers
+    fn source_code(&self) -> Result<ColoredString, Box<dyn std::error::Error>> {
         let source = fs::read_to_string(&self.path).map_err(|e| format!("Could not read source file: {}", e))?;
 
         let line = source
             .lines()
-            .nth(self.span.line_number - 1)
-            .ok_or_else(|| format!("Line {} not found in file", self.span.line_number))?
+            .nth(self.span.start.line - 1)
+            .ok_or_else(|| format!("Line {} not found in file", self.span.start.line))?
             .replace("\t", "    ");
 
-        let mut error_pointer = " ".repeat(self.span.line_offset - 1);
-        error_pointer.push_str(format!("{} {}", "^".repeat(self.span.token_width), self.message().1).as_str());
+        let mut error_pointer = " ".repeat(self.span.start.col - 1);
+        error_pointer.push_str(format!("{} {}", "^".repeat(self.span.end.col - self.span.start.col), self.message().1).as_str());
         return Ok(ColoredString::from(format!(
             "{} {}\n{} {} {}\n{} {} {}",
-            " ".repeat(number_length(self.span.line_number)),
+            " ".repeat(number_length(self.span.start.line)),
             "|".blue().bold(),
-            self.span.line_number.to_string().blue().bold(),
+            self.span.start.line.to_string().blue().bold(),
             "|".blue().bold(),
             line,
-            " ".repeat(number_length(self.span.line_number)),
+            " ".repeat(number_length(self.span.start.line)),
             "|".blue().bold(),
             error_pointer.red().bold()
         )));
@@ -188,7 +178,8 @@ impl CompileError for StackAnalyzerError {
         return ColoredString::from("");
     }
 
-    fn get_line(&self) -> usize { return self.span.line_number; }
+    // TODO: fix multi-line spans
+    fn get_line(&self) -> usize { return self.span.start.line; }
 }
 
 impl Display for StackAnalyzerError {

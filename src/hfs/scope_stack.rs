@@ -2,7 +2,7 @@ use std::{collections::HashMap, rc::Rc};
 
 use crate::{
     hfs::{
-        Span, Token,
+        Span,
         ast::*,
         error::{CompileError, DiagnosticInfo},
         stack_analyzer_errors::{StackAnalyzerError, StackAnalyzerErrorKind},

@@ -53,7 +53,6 @@ impl LexerError {
 impl CompileError for LexerError {
     fn header(&self) -> ColoredString { format!("{} {}", "error:".red().bold(), self.message().0.bold()).into() }
 
-    // TODO: fix multi-line spans
     fn location(&self) -> ColoredString {
         format!(
             "{}{} {}:{}:{}",
@@ -66,7 +65,6 @@ impl CompileError for LexerError {
         .into()
     }
 
-    // TODO: fix multi-line spans
     fn source_code(&self) -> Result<ColoredString, Box<dyn Error>> {
         let source = fs::read_to_string(&self.path).map_err(|e| format!("Could not read source file: {}", e))?;
 
@@ -119,7 +117,6 @@ impl CompileError for LexerError {
         return ColoredString::from("");
     }
 
-    // TODO: fix multi-line spans
     fn get_line(&self) -> usize { return self.span.start.line; }
 }
 

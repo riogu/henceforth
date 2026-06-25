@@ -930,8 +930,8 @@ impl StackAnalyzer {
             | UnresolvedOperation::LessEqual
             | UnresolvedOperation::Greater
             | UnresolvedOperation::GreaterEqual => {
-                self.has_valid_types_binary(lhs_expr, rhs_expr, *op)?;
-                Ok(self.has_same_types(lhs_expr, rhs_expr)?)
+                self.has_same_types(lhs_expr, rhs_expr)?;
+                Ok(self.has_valid_types_binary(lhs_expr, rhs_expr, *op)?)
             },
             UnresolvedOperation::ArrayAccess => self.has_valid_types_binary(lhs_expr, rhs_expr, *op),
             _ => panic!("[internal error] unary operation being typechecked in binary context"),
@@ -941,7 +941,7 @@ impl StackAnalyzer {
     fn has_same_types(&mut self, lhs_expr: ExprId, rhs_expr: ExprId) -> Result<(), Box<dyn CompileError>> {
         let lhs_type = self.arena.get_type_id_of_expr(lhs_expr)?;
         let rhs_type = self.arena.get_type_id_of_expr(rhs_expr)?;
-        Ok(self.arena.compare_types(lhs_type, rhs_type, vec![self.arena.get_expr_span(lhs_expr).clone()])?)
+        Ok(self.arena.compare_types(rhs_type, lhs_type, vec![self.arena.get_expr_span(rhs_expr).clone()])?)
     }
 
     fn has_valid_types_binary(

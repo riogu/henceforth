@@ -29,7 +29,7 @@ impl RuntimeValue {
     }
 }
 pub struct CallFrame {
-    func_id: IrFuncId,
+    _func_id: IrFuncId,
     inst_values: HashMap<InstId, RuntimeValue>,
     return_stack: Vec<RuntimeValue>,
 }
@@ -136,7 +136,7 @@ impl Interpreter {
         for (param_id, arg_val) in func.parameter_insts.iter().zip(args) {
             inst_values.insert(*param_id, arg_val);
         }
-        self.call_stack.push(CallFrame { func_id, inst_values, return_stack: vec![] });
+        self.call_stack.push(CallFrame { _func_id: func_id, inst_values, return_stack: vec![] });
 
         self.interpret_block(func.entry_block);
 

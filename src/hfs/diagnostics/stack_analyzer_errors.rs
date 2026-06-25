@@ -126,7 +126,6 @@ impl CompileError for StackAnalyzerError {
 
     fn header(&self) -> ColoredString { format!("{} {}", "error:".red().bold(), self.message().0.bold()).into() }
 
-    // TODO: fix multi-line spans
     fn location(&self) -> ColoredString {
         format!(
             "{}{} {}:{}:{}",
@@ -139,29 +138,49 @@ impl CompileError for StackAnalyzerError {
         .into()
     }
 
-    // TODO: fix multi-line spans and handle disjoint error pointers
     fn source_code(&self) -> Result<ColoredString, Box<dyn std::error::Error>> {
         let source = fs::read_to_string(&self.path).map_err(|e| format!("Could not read source file: {}", e))?;
 
-        let line = source
+        let lines: Vec<String> = source
             .lines()
-            .nth(self.span.start.line - 1)
-            .ok_or_else(|| format!("Line {} not found in file", self.span.start.line))?
-            .replace("\t", "    ");
-
+            .skip(self.span.start.line - 1)
+            .take(self.span.end.line - self.span.start.line + 1)
+            .map(|line| line.replace("\t", "    "))
+            .collect();
+        let error_pointer_size = if self.span.is_multiline() {
+            let line_end = lines.first().expect("[internal error] span must include at least one line").len();
+            line_end - self.span.start.col + 1
+        } else {
+            self.span.end.col - self.span.start.col
+        };
         let mut error_pointer = " ".repeat(self.span.start.col - 1);
-        error_pointer.push_str(format!("{} {}", "^".repeat(self.span.end.col - self.span.start.col), self.message().1).as_str());
-        return Ok(ColoredString::from(format!(
-            "{} {}\n{} {} {}\n{} {} {}",
-            " ".repeat(number_length(self.span.start.line)),
+        error_pointer.push_str(format!("{} {}", "^".repeat(error_pointer_size), self.message().1).as_str());
+        let mut error_msg = format!(
+            "{} {}\n{} {} {}\n{} {} {}\n",
+            " ".repeat(number_length(self.span.end.line)),
             "|".blue().bold(),
             self.span.start.line.to_string().blue().bold(),
             "|".blue().bold(),
-            line,
-            " ".repeat(number_length(self.span.start.line)),
+            lines.first().unwrap(),
+            " ".repeat(number_length(self.span.end.line)),
             "|".blue().bold(),
             error_pointer.red().bold()
-        )));
+        );
+
+        error_msg.push_str(
+            &lines[1..]
+                .iter()
+                .enumerate()
+                .map(|(i, line)| {
+                    format!("{} {} {}", (self.span.start.line + 1 + i).to_string().blue().bold(), "|".blue().bold(), line)
+                })
+                .collect::<Vec<_>>()
+                .join("\n"),
+        );
+
+        error_msg.push_str(&format!("\n{} {}", " ".repeat(number_length(self.span.end.line)), "|".blue().bold()));
+
+        Ok(error_msg.into())
     }
 
     fn debug_info(&self) -> ColoredString {
@@ -178,7 +197,6 @@ impl CompileError for StackAnalyzerError {
         return ColoredString::from("");
     }
 
-    // TODO: fix multi-line spans
     fn get_line(&self) -> usize { return self.span.start.line; }
 }
 

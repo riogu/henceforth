@@ -124,80 +124,9 @@ impl CompileError for StackAnalyzerError {
         }
     }
 
-    fn header(&self) -> ColoredString { format!("{} {}", "error:".red().bold(), self.message().0.bold()).into() }
-
-    fn location(&self) -> ColoredString {
-        format!(
-            "{}{} {}:{}:{}",
-            " ".repeat(number_length(self.span.start.line)),
-            "-->".blue(),
-            self.path.to_str().unwrap(),
-            self.span.start.line,
-            self.span.start.col
-        )
-        .into()
-    }
-
-    fn source_code(&self) -> Result<ColoredString, Box<dyn std::error::Error>> {
-        let source = fs::read_to_string(&self.path).map_err(|e| format!("Could not read source file: {}", e))?;
-
-        let lines: Vec<String> = source
-            .lines()
-            .skip(self.span.start.line - 1)
-            .take(self.span.end.line - self.span.start.line + 1)
-            .map(|line| line.replace("\t", "    "))
-            .collect();
-        let error_pointer_size = if self.span.is_multiline() {
-            let line_end = lines.first().expect("[internal error] span must include at least one line").len();
-            line_end - self.span.start.col + 1
-        } else {
-            self.span.end.col - self.span.start.col
-        };
-        let mut error_pointer = " ".repeat(self.span.start.col - 1);
-        error_pointer.push_str(format!("{} {}", "^".repeat(error_pointer_size), self.message().1).as_str());
-        let mut error_msg = format!(
-            "{} {}\n{} {} {}\n{} {} {}\n",
-            " ".repeat(number_length(self.span.end.line)),
-            "|".blue().bold(),
-            self.span.start.line.to_string().blue().bold(),
-            "|".blue().bold(),
-            lines.first().unwrap(),
-            " ".repeat(number_length(self.span.end.line)),
-            "|".blue().bold(),
-            error_pointer.red().bold()
-        );
-
-        error_msg.push_str(
-            &lines[1..]
-                .iter()
-                .enumerate()
-                .map(|(i, line)| {
-                    format!("{} {} {}", (self.span.start.line + 1 + i).to_string().blue().bold(), "|".blue().bold(), line)
-                })
-                .collect::<Vec<_>>()
-                .join("\n"),
-        );
-
-        error_msg.push_str(&format!("\n{} {}", " ".repeat(number_length(self.span.end.line)), "|".blue().bold()));
-
-        Ok(error_msg.into())
-    }
-
-    fn debug_info(&self) -> ColoredString {
-        #[cfg(debug_assertions)]
-        return ColoredString::from(format!(
-            "\n\nDebug info:\n\tprogram crashed at [{} @ {}:{}]\n\nInternal dump:\n{}",
-            self.debug_info.compiler_file,
-            self.debug_info.compiler_line,
-            self.debug_info.compiler_column,
-            self.debug_info.internal_dump
-        ));
-
-        #[cfg(not(debug_assertions))]
-        return ColoredString::from("");
-    }
-
-    fn get_line(&self) -> usize { return self.span.start.line; }
+    fn get_path(&self) -> PathBuf { self.path.clone() }
+    fn get_debug_info(&self) -> DebugInfo { self.debug_info.clone() }
+    fn get_span(&self) -> Span { self.span }
 }
 
 impl Display for StackAnalyzerError {

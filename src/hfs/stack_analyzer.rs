@@ -201,7 +201,7 @@ impl StackAnalyzer {
 
         // we check if the declaration is an array type so we can resolve its length
         let hfs_type =
-            self.resolve_array(unresolved_var.hfs_type, span, |name| StackAnalyzerErrorKind::ArrayLengthMustBeCompileTime(name))?;
+            self.resolve_type(unresolved_var.hfs_type, span, |name| StackAnalyzerErrorKind::ArrayLengthMustBeCompileTime(name))?;
         let var_id = self.arena.alloc_var(VarDeclaration { name: unresolved_var.name.clone(), hfs_type }, span);
         self.scope_resolution_stack.push_variable(&unresolved_var.name, var_id);
         Ok(var_id)
@@ -221,7 +221,7 @@ impl StackAnalyzer {
                     // function parameter type is always a tuple
                     let span = self.unresolved_arena.get_type_span(*param_type).clone();
                     let hfs_type = self
-                        .resolve_array(*param_type, span, |_| StackAnalyzerErrorKind::ArrayLengthMustBeCompileTimeOnParameter)?;
+                        .resolve_type(*param_type, span, |_| StackAnalyzerErrorKind::ArrayLengthMustBeCompileTimeOnParameter)?;
                     new_param_types.push(hfs_type);
 
                     params.push(self.arena.alloc_and_push_to_hfs_stack(
@@ -231,7 +231,7 @@ impl StackAnalyzer {
                     ))
                 }
             }
-            let return_type = self.resolve_array(unresolved_func.return_type, span, |_name| {
+            let return_type = self.resolve_type(unresolved_func.return_type, span, |_name| {
                 StackAnalyzerErrorKind::ArrayLengthMustBeCompileTimeOnReturnType
             })?;
             let param_type =
@@ -274,9 +274,11 @@ impl StackAnalyzer {
                 // condition isnt included in the stack depth count
                 let cond = self.arena.pop_or_error(self.unresolved_arena.get_unresolved_stmt_span(body))?;
                 let cond_type = self.arena.get_type_id_of_expr(cond)?;
-                self.arena.compare_types(cond_type, ElaboratedType::new_bool(0).type_id(), vec![
-                    self.arena.get_expr_span(cond).clone(),
-                ])?;
+                self.arena.compare_types(
+                    cond_type,
+                    ElaboratedType::new_bool(0).type_id(),
+                    vec![self.arena.get_expr_span(cond).clone()],
+                )?;
 
                 // Analyze if body
                 let if_depth_before = self.arena.hfs_stack.len();
@@ -343,12 +345,15 @@ impl StackAnalyzer {
                                 let mut if_body_spans = Vec::new();
                                 for stmt in stmts {
                                     match stmt {
-                                        TopLevelId::VariableDecl(var_id) =>
-                                            if_body_spans.push(self.arena.get_var_span(*var_id).clone()),
-                                        TopLevelId::FunctionDecl(func_id) =>
-                                            if_body_spans.push(self.arena.get_function_span(*func_id).clone()),
-                                        TopLevelId::Statement(stmt_id) =>
-                                            if_body_spans.push(self.arena.get_stmt_span(*stmt_id).clone()),
+                                        TopLevelId::VariableDecl(var_id) => {
+                                            if_body_spans.push(self.arena.get_var_span(*var_id).clone())
+                                        },
+                                        TopLevelId::FunctionDecl(func_id) => {
+                                            if_body_spans.push(self.arena.get_function_span(*func_id).clone())
+                                        },
+                                        TopLevelId::Statement(stmt_id) => {
+                                            if_body_spans.push(self.arena.get_stmt_span(*stmt_id).clone())
+                                        },
                                     }
                                 }
                                 return stack_analyzer_error!(
@@ -381,9 +386,11 @@ impl StackAnalyzer {
                 let stack_depth_before = self.arena.hfs_stack.len();
 
                 let cond_type = self.arena.get_type_id_of_expr(cond)?;
-                self.arena.compare_types(cond_type, ElaboratedType::new_bool(0).type_id(), vec![
-                    self.arena.get_expr_span(cond).clone(),
-                ])?;
+                self.arena.compare_types(
+                    cond_type,
+                    ElaboratedType::new_bool(0).type_id(),
+                    vec![self.arena.get_expr_span(cond).clone()],
+                )?;
 
                 // Analyze the body
                 let body = self.resolve_stmt(body)?;
@@ -396,8 +403,9 @@ impl StackAnalyzer {
                         for stmt in stmts {
                             match stmt {
                                 TopLevelId::VariableDecl(var_id) => while_body_spans.push(*self.arena.get_var_span(*var_id)),
-                                TopLevelId::FunctionDecl(func_id) =>
-                                    while_body_spans.push(*self.arena.get_function_span(*func_id)),
+                                TopLevelId::FunctionDecl(func_id) => {
+                                    while_body_spans.push(*self.arena.get_function_span(*func_id))
+                                },
                                 TopLevelId::Statement(stmt_id) => while_body_spans.push(*self.arena.get_stmt_span(*stmt_id)),
                             }
                         }
@@ -587,9 +595,11 @@ impl StackAnalyzer {
                         Some(ArrayLength::Unresolved(_)) => panic!("[internal error] array length should be resolved by now"),
                         Some(ArrayLength::Resolved(length)) =>
                         // we don't need to check for the provenance of the length expression, that is done when it's resolved
+                        {
                             if *self.arena.get_expr_provenance(idx) == ExprProvenance::CompiletimeValue {
                                 self.check_bounds(&idx, length)?;
-                            },
+                            }
+                        },
                         None => unimplemented!(),
                     }
 
@@ -642,8 +652,9 @@ impl StackAnalyzer {
                         }
                         Ok(identifier)
                     },
-                    Identifier::Function(_) =>
-                        return stack_analyzer_error!(StackAnalyzerErrorKind::AssignValueToFunction, &self.arena, assign_span),
+                    Identifier::Function(_) => {
+                        return stack_analyzer_error!(StackAnalyzerErrorKind::AssignValueToFunction, &self.arena, assign_span);
+                    },
                 }
             },
             _ => unreachable!("[internal error] you're assigning to something that isn't an identifier"),
@@ -658,8 +669,9 @@ impl StackAnalyzer {
         };
         let identifier = self.scope_resolution_stack.find_identifier(&identifier, span, &self.arena)?;
         match identifier {
-            Identifier::GlobalVar(_) | Identifier::Variable(_) =>
-                return stack_analyzer_error!(StackAnalyzerErrorKind::CallVariableAsFunction, &self.arena, assign_span),
+            Identifier::GlobalVar(_) | Identifier::Variable(_) => {
+                return stack_analyzer_error!(StackAnalyzerErrorKind::CallVariableAsFunction, &self.arena, assign_span);
+            },
             Identifier::Function(func_id) => {
                 self.arena.curr_func_call_provenances[func_id.0] = ExprProvenance::RuntimeValue;
                 // doing it this way because we dont really care about evaluating functions at
@@ -687,8 +699,9 @@ impl StackAnalyzer {
                     span,
                 ))
             },
-            UnresolvedExpression::Literal(literal) =>
-                Ok(self.arena.alloc_and_push_to_hfs_stack(Expression::Literal(literal), ExprProvenance::CompiletimeValue, span)),
+            UnresolvedExpression::Literal(literal) => {
+                Ok(self.arena.alloc_and_push_to_hfs_stack(Expression::Literal(literal), ExprProvenance::CompiletimeValue, span))
+            },
             UnresolvedExpression::Tuple { expressions } => {
                 // the tuple's type is formed recursively whenever someone wants it
                 // by calling arena.get_type_of_expr(tuple_expr_id); (dont create it here)
@@ -962,52 +975,72 @@ impl StackAnalyzer {
             | UnresolvedOperation::Mul
             | UnresolvedOperation::Div => {
                 self.arena
-                    .compare_types(lhs_type, ElaboratedType::new_int(0).type_id(), vec![
-                        self.arena.get_expr_span(lhs_expr).clone(),
-                    ])
-                    .or(self.arena.compare_types(lhs_type, ElaboratedType::new_float(0).type_id(), vec![
-                        self.arena.get_expr_span(lhs_expr).clone(),
-                    ]))?;
+                    .compare_types(
+                        lhs_type,
+                        ElaboratedType::new_int(0).type_id(),
+                        vec![self.arena.get_expr_span(lhs_expr).clone()],
+                    )
+                    .or(self.arena.compare_types(
+                        lhs_type,
+                        ElaboratedType::new_float(0).type_id(),
+                        vec![self.arena.get_expr_span(lhs_expr).clone()],
+                    ))?;
                 Ok(self
                     .arena
-                    .compare_types(rhs_type, ElaboratedType::new_int(0).type_id(), vec![
-                        self.arena.get_expr_span(rhs_expr).clone(),
-                    ])
-                    .or(self.arena.compare_types(rhs_type, ElaboratedType::new_float(0).type_id(), vec![
-                        self.arena.get_expr_span(rhs_expr).clone(),
-                    ]))?)
+                    .compare_types(
+                        rhs_type,
+                        ElaboratedType::new_int(0).type_id(),
+                        vec![self.arena.get_expr_span(rhs_expr).clone()],
+                    )
+                    .or(self.arena.compare_types(
+                        rhs_type,
+                        ElaboratedType::new_float(0).type_id(),
+                        vec![self.arena.get_expr_span(rhs_expr).clone()],
+                    ))?)
             },
             UnresolvedOperation::Mod => {
-                self.arena.compare_types(lhs_type, ElaboratedType::new_int(0).type_id(), vec![
-                    self.arena.get_expr_span(lhs_expr).clone(),
-                ])?;
-                Ok(self.arena.compare_types(rhs_type, ElaboratedType::new_int(0).type_id(), vec![
-                    self.arena.get_expr_span(rhs_expr).clone(),
-                ])?)
+                self.arena.compare_types(
+                    lhs_type,
+                    ElaboratedType::new_int(0).type_id(),
+                    vec![self.arena.get_expr_span(lhs_expr).clone()],
+                )?;
+                Ok(self.arena.compare_types(
+                    rhs_type,
+                    ElaboratedType::new_int(0).type_id(),
+                    vec![self.arena.get_expr_span(rhs_expr).clone()],
+                )?)
             },
             UnresolvedOperation::Or | UnresolvedOperation::And => {
-                self.arena.compare_types(lhs_type, ElaboratedType::new_bool(0).type_id(), vec![
-                    self.arena.get_expr_span(lhs_expr).clone(),
-                ])?;
-                Ok(self.arena.compare_types(rhs_type, ElaboratedType::new_bool(0).type_id(), vec![
-                    self.arena.get_expr_span(rhs_expr).clone(),
-                ])?)
+                self.arena.compare_types(
+                    lhs_type,
+                    ElaboratedType::new_bool(0).type_id(),
+                    vec![self.arena.get_expr_span(lhs_expr).clone()],
+                )?;
+                Ok(self.arena.compare_types(
+                    rhs_type,
+                    ElaboratedType::new_bool(0).type_id(),
+                    vec![self.arena.get_expr_span(rhs_expr).clone()],
+                )?)
             },
             UnresolvedOperation::NotEqual | UnresolvedOperation::Equal => Ok(()),
-            UnresolvedOperation::ArrayAccess =>
+            UnresolvedOperation::ArrayAccess => {
                 if let ElaboratedType::Array { length, .. } = self.arena.get_type(lhs_type) {
-                    self.arena.compare_types(rhs_type, ElaboratedType::new_int(0).type_id(), vec![
-                        self.arena.get_expr_span(rhs_expr).clone(),
-                    ])?;
+                    self.arena.compare_types(
+                        rhs_type,
+                        ElaboratedType::new_int(0).type_id(),
+                        vec![self.arena.get_expr_span(rhs_expr).clone()],
+                    )?;
                     match length {
                         Some(ArrayLength::Unresolved(_)) => panic!("[internal error] array length should be resolved by now"),
                         Some(ArrayLength::Resolved(expr)) =>
                         // we don't need to check for the provenance of the length expression, that is done when it's resolved
+                        {
                             if *self.arena.get_expr_provenance(rhs_expr) == ExprProvenance::CompiletimeValue {
                                 self.check_bounds(&rhs_expr, expr)
                             } else {
                                 Ok(()) // emit at runtime
-                            },
+                            }
+                        },
                         None => unimplemented!(),
                     }
                 } else {
@@ -1020,7 +1053,8 @@ impl StackAnalyzer {
                         &self.arena,
                         *self.arena.get_expr_span(lhs_expr)
                     )
-                },
+                }
+            },
             _ => panic!("[internal error] unary operation being typechecked in binary context"),
         }
     }
@@ -1028,11 +1062,13 @@ impl StackAnalyzer {
     fn validate_unary_operand(&mut self, expr: ExprId, op: &UnresolvedOperation) -> Result<(), Box<dyn CompileError>> {
         let lhs_type = self.arena.get_type_id_of_expr(expr)?;
         match op {
-            UnresolvedOperation::Not => Ok(self
-                .arena
-                .compare_types(lhs_type, ElaboratedType::new_bool(0).type_id(), vec![self.arena.get_expr_span(expr).clone()])?),
+            UnresolvedOperation::Not => Ok(self.arena.compare_types(
+                lhs_type,
+                ElaboratedType::new_bool(0).type_id(),
+                vec![self.arena.get_expr_span(expr).clone()],
+            )?),
             UnresolvedOperation::AddressOf => Ok(()),
-            UnresolvedOperation::Dereference =>
+            UnresolvedOperation::Dereference => {
                 if self.arena.get_type(lhs_type).get_ptr_count() > 0 {
                     Ok(())
                 } else {
@@ -1041,7 +1077,8 @@ impl StackAnalyzer {
                         &self.arena,
                         *self.arena.get_expr_span(expr)
                     )
-                },
+                }
+            },
             _ => panic!("[internal error] binary operation being typechecked in unary context"),
         }
     }
@@ -1068,7 +1105,7 @@ impl StackAnalyzer {
 
     fn check_bounds(&self, index: &ExprId, length: &ExprId) -> Result<(), Box<dyn CompileError>> {
         match (self.arena.get_expr(*index), self.arena.get_expr(*length)) {
-            (Expression::Literal(Literal::Integer(idx)), Expression::Literal(Literal::Integer(len))) =>
+            (Expression::Literal(Literal::Integer(idx)), Expression::Literal(Literal::Integer(len))) => {
                 if *idx >= 0 && *idx < *len {
                     Ok(())
                 } else {
@@ -1077,12 +1114,13 @@ impl StackAnalyzer {
                         &self.arena,
                         *self.arena.get_expr_span(*index)
                     );
-                },
+                }
+            },
             (_, _) => Ok(()),
         }
     }
 
-    fn resolve_array(
+    fn resolve_type(
         &mut self,
         hfs_type: TypeId,
         span: Span,
@@ -1090,7 +1128,7 @@ impl StackAnalyzer {
     ) -> Result<TypeId, Box<dyn CompileError>> {
         match self.arena.get_type(hfs_type).clone() {
             ElaboratedType::Array { hfs_type, length: Some(ArrayLength::Unresolved(id)), ptr_count } => {
-                let hfs_type = self.resolve_array(hfs_type, span.clone(), error_fn)?;
+                let hfs_type = self.resolve_type(hfs_type, span.clone(), error_fn)?;
 
                 let resolved_expr_id = self.resolve_expr(id)?;
                 let length_span = self.arena.get_expr_span(resolved_expr_id).clone();
@@ -1110,7 +1148,7 @@ impl StackAnalyzer {
                 let mut resolved_ids = Vec::new();
                 let mut changed = false;
                 for id in type_ids.iter() {
-                    let resolved = self.resolve_array(*id, span.clone(), error_fn)?;
+                    let resolved = self.resolve_type(*id, span.clone(), error_fn)?;
                     changed |= resolved != *id;
                     resolved_ids.push(resolved);
                 }

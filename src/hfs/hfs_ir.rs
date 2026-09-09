@@ -101,6 +101,11 @@ pub enum Instruction {
     Alloca {
         span: Span,
         type_id: TypeId,
+        // number of elements to allocate, 1 for anything that isn't an array. this needs to be a
+        // real operand (not just something reachable through type_id's IrType::Array.length) so
+        // that DCE doesn't delete it out from under us, and so callers never have to care whether
+        // they're allocating an array or not
+        array_len: InstId,
     },
     GlobalAlloca(GlobalIrVarId),
     // this instruction doesnt "exist" because its only present in the global namespace
@@ -138,6 +143,9 @@ pub enum Instruction {
     Tuple {
         span: Span,
         instructions: Vec<InstId>,
+        // TODO: should add
+        // type_id: TypeId,
+        // that will contain the type of the tuple formed by these instructions (no reason to compute it later)
     },
     Operation {
         span: Span,
@@ -153,6 +161,17 @@ pub enum Instruction {
         span: Span,
         index: usize,
         tuple: InstId,
+    },
+    // gep <ptr>, <indices...>
+    // %1 = ptr alloca [10 x [20 x i32]]
+    // %2 = ptr gep %1, 3, 7 // same as '&arr[3][7]' in C
+    // it just calculates address offsets, doesnt get the values
+    // indexes are InstIds and can be runtime values (e.g. `board idx []`)
+    GetElementPtr {
+        span: Span,
+        address: InstId,
+        indexes: Vec<InstId>,
+        type_id: TypeId,
     },
 }
 // Terminator instructions, separated from the others
@@ -182,7 +201,8 @@ impl Instruction {
             | Instruction::Tuple { .. }
             | Instruction::Operation { .. }
             | Instruction::Literal { .. }
-            | Instruction::LoadElement { .. } => false,
+            | Instruction::LoadElement { .. }
+            | Instruction::GetElementPtr { .. } => false,
         }
     }
     pub fn replace_operands(&mut self, new_id: InstId, operand_idx: usize) {
@@ -200,6 +220,12 @@ impl Instruction {
             Instruction::Phi { incoming, .. } => incoming[operand_idx] = new_id,
             Instruction::Tuple { instructions, .. } => instructions[operand_idx] = new_id,
             Instruction::LoadElement { tuple, .. } => *tuple = new_id,
+            Instruction::GetElementPtr { address, indexes, .. } =>
+                if operand_idx == 0 {
+                    *address = new_id
+                } else {
+                    indexes[operand_idx - 1] = new_id
+                },
             Instruction::Operation { op, .. } => match op {
                 IrOperation::Add(inst_id, inst_id1)
                 | IrOperation::Sub(inst_id, inst_id1)
@@ -223,8 +249,8 @@ impl Instruction {
                     },
                 IrOperation::Not(inst_id) => *inst_id = new_id,
             },
+            Instruction::Alloca { array_len, .. } => *array_len = new_id,
             Instruction::Literal { .. }
-            | Instruction::Alloca { .. }
             | Instruction::GlobalAlloca(_)
             | Instruction::Parameter { .. }
             | Instruction::ReturnValue { .. } => panic!("[internal error] can't replace operand of instruction with no operands"),
@@ -238,6 +264,11 @@ impl Instruction {
             Instruction::Phi { incoming, .. } => incoming.values().copied().collect(),
             Instruction::Tuple { instructions, .. } => instructions.clone(),
             Instruction::LoadElement { tuple, .. } => vec![*tuple],
+            Instruction::GetElementPtr { address, indexes, .. } => {
+                let mut operands = vec![*address];
+                operands.extend(indexes.iter().copied());
+                operands
+            },
             Instruction::Operation { op, .. } => match op {
                 IrOperation::Add(inst_id, inst_id1)
                 | IrOperation::Sub(inst_id, inst_id1)
@@ -256,8 +287,8 @@ impl Instruction {
                 },
                 IrOperation::Not(inst_id) => vec![*inst_id],
             },
+            Instruction::Alloca { array_len, .. } => vec![*array_len],
             Instruction::Literal { .. }
-            | Instruction::Alloca { .. }
             | Instruction::GlobalAlloca(_)
             | Instruction::Parameter { .. }
             | Instruction::ReturnValue { .. } => vec![],
@@ -309,7 +340,7 @@ impl Instruction {
         match self {
             Instruction::Load { span, address: _, type_id: _ } => span.clone(),
             Instruction::Store { span, address: _, value: _ } => span.clone(),
-            Instruction::Alloca { span, type_id: _ } => span.clone(),
+            Instruction::Alloca { span, type_id: _, array_len: _ } => span.clone(),
             Instruction::GlobalAlloca(_) => todo!(),
             Instruction::Parameter { span, index: _, type_id: _ } => span.clone(),
             Instruction::ReturnValue { span, type_id: _ } => span.clone(),
@@ -319,6 +350,7 @@ impl Instruction {
             Instruction::Operation { span, op: _ } => span.clone(),
             Instruction::Literal { span, literal: _ } => span.clone(),
             Instruction::LoadElement { span, index: _, tuple: _ } => span.clone(),
+            Instruction::GetElementPtr { span, address: _, indexes: _, type_id: _ } => span.clone(),
         }
     }
 }

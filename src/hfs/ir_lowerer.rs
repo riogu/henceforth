@@ -6,7 +6,7 @@ use slotmap::Key;
 use crate::{
     hfs::{
         ArrayLength, BlockId, ElaboratedType, GlobalIrVarDeclaration, GlobalIrVarId, InstId, Instruction, IrArena, IrFuncId,
-        IrFunction, IrOperation, IrTopLevelId, IrType, PRIMITIVE_TYPE_COUNT, Span, TerminatorInst, Type,
+        IrFunction, IrOperation, IrTopLevelId, IrType, Literal, PRIMITIVE_TYPE_COUNT, Span, TerminatorInst, Type,
         ast::*,
         error::{CompileError, DiagnosticInfo},
         ir_lowerer_errors::IrLowererErrorKind,
@@ -106,16 +106,45 @@ impl IrLowerer {
         self.var_id_to_alloca_map.insert(id, inst_id);
         global_var_id
     }
-    pub fn lower_local_variable_declaration(&mut self, id: VarId) -> InstId {
+    pub fn lower_local_variable_declaration(&mut self, id: VarId) -> Result<InstId, Box<dyn CompileError>> {
         // Note that all variables are allocated at the function entry point to make mem2reg simpler
         // since it only works with allocas at the function entry
-        let var = self.ast_arena.get_var(id);
+        let var = self.ast_arena.get_var(id).clone();
+        let span = *self.ast_arena.get_var_span(id);
         let entry_block = self.arena.get_func(self.ir_context.curr_func).entry_block;
-        let inst_id = self
-            .arena
-            .alloc_inst_for(Instruction::Alloca { span: *self.ast_arena.get_var_span(id), type_id: var.hfs_type }, entry_block);
+
+        let array_len = match self.maybe_materialize_array_length(var.hfs_type)? {
+            Some(length_inst) => length_inst,
+            None => self.arena.alloc_inst_for(Instruction::Literal { span: span.clone(), literal: Literal::Integer(1) }, entry_block),
+        };
+
+        let inst_id = self.arena.alloc_inst_for(Instruction::Alloca { span, type_id: var.hfs_type, array_len }, entry_block);
         self.var_id_to_alloca_map.insert(id, inst_id);
-        inst_id
+        Ok(inst_id)
+    }
+
+    // a local variable's array type always has a resolved, compile-time length (only a parameter's
+    // array type can erase it), but lower_type couldn't turn that length into an instruction since
+    // no block existed yet. patch it in now that we have one. returns None for a non-array type.
+    fn maybe_materialize_array_length(&mut self, type_id: TypeId) -> Result<Option<InstId>, Box<dyn CompileError>> {
+        let ElaboratedType::Array { length: Some(ArrayLength::Resolved(length_expr)), .. } = self.ast_arena.get_type(type_id)
+        else {
+            return Ok(None);
+        };
+        let length_expr = *length_expr;
+
+        match self.arena.get_type(type_id) {
+            IrType::Array { length: Some(existing), .. } => return Ok(Some(*existing)), // already patched
+            IrType::Array { length: None, .. } => {},
+            other => panic!("[internal error] expected an array type, found {:?}", other),
+        }
+
+        let length_inst = self.lower_expr(length_expr)?;
+        match &mut self.arena.types[type_id.0] {
+            IrType::Array { length, .. } => *length = Some(length_inst),
+            _ => unreachable!(),
+        }
+        Ok(Some(length_inst))
     }
 
     pub fn lower_function_declaration(&mut self, id: FuncId) -> Result<IrFuncId, Box<dyn CompileError>> {
@@ -502,7 +531,7 @@ impl IrLowerer {
                 for top_level_id in top_level_ids.clone() {
                     match top_level_id {
                         TopLevelId::VariableDecl(var_id) => {
-                            self.lower_local_variable_declaration(var_id);
+                            self.lower_local_variable_declaration(var_id)?;
                         },
                         TopLevelId::FunctionDecl(_) => panic!("[internal error] local functions are not allowed"),
                         TopLevelId::Statement(stmt_id) => self.lower_stmt(stmt_id, curr_block_context.clone())?,
@@ -648,7 +677,77 @@ impl IrLowerer {
                 }
                 Ok(())
             },
-            Statement::ArrayAssignment { position: _, identifier: _, is_move: _, deref_count: _ } => todo!(),
+            Statement::ArrayAssignment { position: _, identifier, is_move, deref_count } => {
+                // @(value idx) [&]= arr; // move
+                // @(value idx) [:]= arr; // copy
+                let stmt_span = *self.ast_arena.get_stmt_span(id);
+                let (inst_value, inst_idx) = if is_move {
+                    let inst_idx = match self.arena.pop_hfs_stack() {
+                        Some(val) => val,
+                        None =>
+                            return ir_lowerer_error!(IrLowererErrorKind::StackUnderflow, &self.arena, Some(&self.ast_arena), stmt_span),
+                    };
+                    let inst_value = match self.arena.pop_hfs_stack() {
+                        Some(val) => val,
+                        None =>
+                            return ir_lowerer_error!(IrLowererErrorKind::StackUnderflow, &self.arena, Some(&self.ast_arena), stmt_span),
+                    };
+                    (inst_value, inst_idx)
+                } else {
+                    match self.arena.hfs_stack.as_slice() {
+                        [.., value, idx] => (*value, *idx),
+                        _ => return ir_lowerer_error!(
+                            IrLowererErrorKind::ExpectedItemOnStack,
+                            &self.arena,
+                            Some(&self.ast_arena),
+                            stmt_span
+                        ),
+                    }
+                };
+
+                let (mut address, mut type_id) = match identifier {
+                    Identifier::GlobalVar(var_id) | Identifier::Variable(var_id) =>
+                        match self.var_id_to_alloca_map.get(&var_id) {
+                            Some(alloca_inst) => (*alloca_inst, self.ast_arena.get_var(var_id).hfs_type),
+                            None => panic!("[internal error] forgot to alloca a variable before using it"),
+                        },
+                    Identifier::Function(_) => unreachable!("can't happen"),
+                };
+
+                // Chase the pointer chain, same as Statement::Assignment
+                if deref_count > 0 {
+                    for _ in 0..deref_count {
+                        type_id = self.arena.reduce_type_ptr_count(type_id, stmt_span.clone());
+                        address = self.arena.alloc_inst_for(
+                            Instruction::Load { span: stmt_span.clone(), address, type_id },
+                            self.ir_context.curr_insert_block,
+                        );
+                    }
+                }
+
+                let element_type_id = match self.arena.get_type(type_id) {
+                    IrType::Array { hfs_type, .. } => *hfs_type,
+                    _ => panic!("[internal error] array assignment target isn't an array type after typechecking"),
+                };
+
+                let value_type_id = self.arena.get_type_id_of_inst(inst_value)?;
+                self.arena.compare_types(element_type_id, value_type_id, vec![self.arena.get_inst(inst_value).get_span()])?;
+
+                let gep = self.arena.alloc_inst_for(
+                    Instruction::GetElementPtr {
+                        span: stmt_span.clone(),
+                        address,
+                        indexes: vec![inst_idx],
+                        type_id: element_type_id,
+                    },
+                    self.ir_context.curr_insert_block,
+                );
+                self.arena.alloc_inst_for(
+                    Instruction::Store { span: stmt_span, address: gep, value: inst_value },
+                    self.ir_context.curr_insert_block,
+                );
+                Ok(())
+            },
         }
     }
     pub fn lower_expr(&mut self, id: ExprId) -> Result<InstId, Box<dyn CompileError>> {
@@ -728,9 +827,52 @@ impl IrLowerer {
             Operation::Not(expr_id) => IrOperation::Not(self.lower_expr(expr_id)?),
             Operation::AddressOf(_) => todo!(),
             Operation::Dereference(_) => todo!(),
-            Operation::ArrayAccess(_expr_id, _expr_id11) => todo!(),
+            Operation::ArrayAccess(lhs, idx) => return self.lower_array_access(lhs, idx, span),
         };
         Ok(self.arena.alloc_inst_for(Instruction::Operation { span, op: cfg_op }, self.ir_context.curr_insert_block))
+    }
+
+    // `lhs idx []` -> gep + (load, unless the result is itself array-typed, in which case we
+    // leave it as an address so it can be indexed again or moved/copied wholesale)
+    fn lower_array_access(&mut self, lhs: ExprId, idx: ExprId, span: Span) -> Result<InstId, Box<dyn CompileError>> {
+        let base_address = self.lower_array_base_address(lhs)?;
+        let idx_inst = self.lower_expr(idx)?;
+
+        let array_type_id = self.ast_arena.get_type_id_of_expr(lhs)?;
+        let element_type_id = match self.arena.get_type(array_type_id) {
+            IrType::Array { hfs_type, .. } => *hfs_type,
+            _ => panic!("[internal error] array access lhs isn't an array type after typechecking"),
+        };
+
+        let gep = self.arena.alloc_inst_for(
+            Instruction::GetElementPtr { span: span.clone(), address: base_address, indexes: vec![idx_inst], type_id: element_type_id },
+            self.ir_context.curr_insert_block,
+        );
+
+        if matches!(self.arena.get_type(element_type_id), IrType::Array { .. }) {
+            Ok(gep)
+        } else {
+            Ok(self.arena.alloc_inst_for(
+                Instruction::Load { span, address: gep, type_id: element_type_id },
+                self.ir_context.curr_insert_block,
+            ))
+        }
+    }
+
+    // resolves the address of an array-typed expression without loading its (potentially large)
+    // aggregate value - either a plain variable's alloca, or a chained `matrix i [] j []` access
+    fn lower_array_base_address(&mut self, expr_id: ExprId) -> Result<InstId, Box<dyn CompileError>> {
+        match self.ast_arena.get_expr(expr_id).clone() {
+            Expression::Identifier(Identifier::Variable(var_id) | Identifier::GlobalVar(var_id)) => Ok(*self
+                .var_id_to_alloca_map
+                .get(&var_id)
+                .expect("[internal error] tried to index into a variable that hasn't been alloca'd yet")),
+            Expression::Operation(Operation::ArrayAccess(inner_lhs, inner_idx)) => {
+                let span = *self.ast_arena.get_expr_span(expr_id);
+                self.lower_array_access(inner_lhs, inner_idx, span)
+            },
+            _ => panic!("[internal error] array access is only supported on plain array variables or nested array indexing"),
+        }
     }
 
     fn lower_type(&mut self, elaborated: ElaboratedType) -> Result<IrType, Box<dyn CompileError>> {
@@ -740,15 +882,13 @@ impl IrLowerer {
             ElaboratedType::Bool { ptr_count } => Ok(IrType::Bool { ptr_count }),
             ElaboratedType::Float { ptr_count } => Ok(IrType::Float { ptr_count }),
             ElaboratedType::Tuple { type_ids, ptr_count } => Ok(IrType::Tuple { type_ids, ptr_count }),
-            ElaboratedType::Array { hfs_type, length, ptr_count } => Ok(IrType::Array {
+            ElaboratedType::Array { hfs_type, length: _, ptr_count } => Ok(IrType::Array {
                 hfs_type,
-                length: match length {
-                    Some(id) => Some(self.lower_expr(match id {
-                        ArrayLength::Unresolved(_) => panic!("[internal error] array length should be resolved at lowering"),
-                        ArrayLength::Resolved(expr_id) => expr_id,
-                    })?),
-                    None => None,
-                },
+                // this bulk pass runs before any function/block exists, so a length literal has
+                // nowhere to live yet. local variable declarations patch their own array type's
+                // length in once they have a real block (see lower_local_variable_declaration);
+                // a parameter's array type stays None, which is the erased-length case anyway
+                length: None,
                 ptr_count,
             }),
         }

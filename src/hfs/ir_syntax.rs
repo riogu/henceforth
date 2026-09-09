@@ -988,7 +988,9 @@ mod iso {
     }
     pub fn inst_alloca() -> Iso<TypeId, Instruction> {
         Iso::new(
-            |type_id| Some(Instruction::Alloca { span: Span::default(), type_id }),
+            // this textual format doesn't have array alloca syntax, so array_len is a dummy: fine
+            // since nothing here exercises array codegen (same idea as fncall ignoring is_move)
+            |type_id| Some(Instruction::Alloca { span: Span::default(), type_id, array_len: InstId::default() }),
             |inst| {
                 if let Instruction::Alloca { type_id, .. } = inst {
                     Some(type_id)
@@ -1093,6 +1095,20 @@ mod iso {
             |inst| {
                 if let Instruction::LoadElement { index, tuple, .. } = inst {
                     Some((index, tuple))
+                } else {
+                    None
+                }
+            },
+        )
+    }
+    pub fn inst_gep() -> Iso<(InstId, Vec<InstId>), Instruction> {
+        Iso::new(
+            // like load's type_id, this is redundant with the printed `%N = <type>` prefix, so a
+            // placeholder here is fine
+            |(address, indexes)| Some(Instruction::GetElementPtr { span: Span::default(), address, indexes, type_id: TypeId::default() }),
+            |inst| {
+                if let Instruction::GetElementPtr { address, indexes, .. } = inst {
+                    Some((address, indexes))
                 } else {
                     None
                 }
@@ -1218,12 +1234,22 @@ fn syntax_load_element<S: Syntax>(s: &S, names: &NameMap) -> S::Output<Instructi
         s.ignore_left(s.keyword("load_element"), s.product(s.ignore_right(s.uint(), s.whitespace()), s.inst_name(names))),
     )
 }
+fn syntax_gep<S: Syntax>(s: &S, names: &NameMap) -> S::Output<Instruction> {
+    s.iso(
+        iso::inst_gep(),
+        s.ignore_left(
+            s.keyword("gep"),
+            s.product(s.ignore_right(s.inst_name(names), s.symbol(",")), s.sep_by(s.inst_name(names), s.symbol(","))),
+        ),
+    )
+}
 fn syntax_inst<S: Syntax>(s: &S, names: &NameMap) -> S::Output<Instruction> {
     s.choice(vec![
         syntax_load_element(s, names),
         syntax_load(s, names),
         syntax_store(s, names),
         syntax_alloca(s, names),
+        syntax_gep(s, names),
         syntax_binop(s, names),
         syntax_unop(s, names),
         syntax_parameter(s),
@@ -1639,6 +1665,14 @@ pub fn print(func_ids: &[IrFuncId], arena: &IrArena) -> Option<String> {
                     .map(|id| names.type_to_name.get(id).cloned().unwrap_or_else(|| format!("{}", id.0)))
                     .collect();
                 format!("({})", inner.join(" "))
+            },
+            IrType::Array { hfs_type, length, .. } => {
+                let elem_name = names.type_to_name.get(hfs_type).cloned().unwrap_or_else(|| format!("{}", hfs_type.0));
+                let len_repr = match length.map(|id| arena.get_inst(id)) {
+                    Some(Instruction::Literal { literal: Literal::Integer(n), .. }) => n.to_string(),
+                    _ => "n".to_string(),
+                };
+                format!("arr[{}]_{}", len_repr, elem_name)
             },
             _ => continue,
         };

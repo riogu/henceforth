@@ -13,19 +13,55 @@ pub enum RuntimeValue {
     String(String),
     Bool(bool),
     Tuple(Vec<RuntimeValue>),
-    Address(InstId),
+    // homogeneous and GEP-indexable at runtime; tuples use LoadElement instead
+    Array(Vec<RuntimeValue>),
+    // InstId of the alloca/global it points into, plus a path of indices into it; GEP appends to the path
+    Address(InstId, Vec<usize>),
 }
 
 impl RuntimeValue {
-    pub fn default(hfs_type: &IrType) -> RuntimeValue {
+    pub fn default(hfs_type: &IrType, arena: &IrArena) -> RuntimeValue {
         match hfs_type {
             IrType::Int { .. } => RuntimeValue::Integer(0),
             IrType::String { .. } => RuntimeValue::String("".to_string()),
             IrType::Bool { .. } => RuntimeValue::Bool(false),
             IrType::Float { .. } => RuntimeValue::Float(0.0),
+            // tuple fields aren't defaulted either, always fully written before read
             IrType::Tuple { .. } => RuntimeValue::Tuple(Vec::new()),
-            IrType::Array { .. } => todo!(),
+            IrType::Array { hfs_type, length, .. } => {
+                // elements get written one at a time via GEP + Store, so this needs the right shape upfront
+                let len = match length {
+                    Some(length_inst) => match arena.get_inst(*length_inst) {
+                        Instruction::Literal { literal: Literal::Integer(n), .. } => *n as usize,
+                        _ => panic!("[internal error] array length must be a compile-time integer literal"),
+                    },
+                    None => panic!("[internal error] tried to default an array with unknown length"),
+                };
+                let elem_type = arena.get_type(*hfs_type).clone();
+                RuntimeValue::Array(vec![RuntimeValue::default(&elem_type, arena); len])
+            },
         }
+    }
+}
+
+// walks an aggregate by a GEP index path
+fn navigate<'a>(value: &'a RuntimeValue, path: &[usize]) -> &'a RuntimeValue {
+    match path {
+        [] => value,
+        [first, rest @ ..] => match value {
+            RuntimeValue::Array(elems) => navigate(&elems[*first], rest),
+            _ => panic!("[internal error] tried to index into a non-array runtime value"),
+        },
+    }
+}
+
+fn navigate_mut<'a>(value: &'a mut RuntimeValue, path: &[usize]) -> &'a mut RuntimeValue {
+    match path {
+        [] => value,
+        [first, rest @ ..] => match value {
+            RuntimeValue::Array(elems) => navigate_mut(&mut elems[*first], rest),
+            _ => panic!("[internal error] tried to index into a non-array runtime value"),
+        },
     }
 }
 pub struct CallFrame {
@@ -69,7 +105,8 @@ impl Interpreter {
         for inst_id in top_level_insts {
             match inst_id {
                 IrTopLevelId::GlobalVarDecl(ir_var_id) => {
-                    let default_val = RuntimeValue::default(interpreter.arena.get_type_of_var(ir_var_id));
+                    let var_type = interpreter.arena.get_type_of_var(ir_var_id).clone();
+                    let default_val = RuntimeValue::default(&var_type, &interpreter.arena);
                     interpreter.globals.insert(ir_var_id, default_val);
                 },
                 IrTopLevelId::FunctionDecl(_) => { /* do nothing, declarations dont matter for interpreting */ },
@@ -123,10 +160,10 @@ impl Interpreter {
                     RuntimeValue::Float(v) => print!("{}", v),
                     RuntimeValue::String(v) => print!("{}", v),
                     RuntimeValue::Bool(v) => print!("{}", v),
-                    RuntimeValue::Tuple(runtime_values) => {
+                    RuntimeValue::Tuple(runtime_values) | RuntimeValue::Array(runtime_values) => {
                         dbg!(runtime_values);
                     },
-                    RuntimeValue::Address(inst_id) => print!("{:?}", inst_id),
+                    RuntimeValue::Address(inst_id, _) => print!("{:?}", inst_id),
                 }
             }
         }
@@ -242,13 +279,13 @@ impl Interpreter {
             },
 
             Instruction::Store { address, value, .. } => {
-                // address is an InstId whose value is an Address(target)
-                let RuntimeValue::Address(target) = self.curr_call_frame().inst_values[&address] else {
+                // address is an InstId whose value is an Address(target, path)
+                let RuntimeValue::Address(target, path) = self.curr_call_frame().inst_values[&address].clone() else {
                     panic!("[internal error] store to non-address")
                 };
                 let val = self.curr_call_frame().inst_values[&value].clone();
-                // Store the value AT that address
-                self.memory.insert(target, val.clone());
+                let slot = self.memory.get_mut(&target).expect("[internal error] store to unallocated memory");
+                *navigate_mut(slot, &path) = val.clone();
                 val
                 // NOTE: we should never actually use the value of a store for anything...
                 // there is no real representation of the value of a store. and if everything went
@@ -256,15 +293,36 @@ impl Interpreter {
             },
 
             Instruction::Load { address, .. } => {
-                let RuntimeValue::Address(target) = self.curr_call_frame().inst_values[&address] else {
+                let RuntimeValue::Address(target, path) = self.curr_call_frame().inst_values[&address].clone() else {
                     panic!("[internal error] load from non-address")
                 };
-                self.memory[&target].clone()
+                navigate(&self.memory[&target], &path).clone()
             },
-            Instruction::GlobalAlloca(..) | Instruction::Alloca { .. } => {
-                // The alloca itself is just an address. store a placeholder
-                // that we can load/store to. Use the InstId as the "address".
-                RuntimeValue::Address(inst_id)
+            Instruction::GetElementPtr { address, indexes, .. } => {
+                let address = *address;
+                let indexes = indexes.clone();
+                let RuntimeValue::Address(target, mut path) = self.curr_call_frame().inst_values[&address].clone() else {
+                    panic!("[internal error] gep base is not an address")
+                };
+                for idx_inst in indexes {
+                    let RuntimeValue::Integer(i) = self.interpret_instruction(idx_inst) else {
+                        panic!("[internal error] gep index must be an integer")
+                    };
+                    path.push(i as usize);
+                }
+                RuntimeValue::Address(target, path)
+            },
+            Instruction::Alloca { type_id, .. } => {
+                let ty = self.arena.get_type(*type_id).clone();
+                let default_val = RuntimeValue::default(&ty, &self.arena);
+                self.memory.insert(inst_id, default_val);
+                RuntimeValue::Address(inst_id, vec![])
+            },
+            Instruction::GlobalAlloca(global_var_id) => {
+                let ty = self.arena.get_type_of_var(*global_var_id).clone();
+                let default_val = RuntimeValue::default(&ty, &self.arena);
+                self.memory.insert(inst_id, default_val);
+                RuntimeValue::Address(inst_id, vec![])
             },
         }
     }

@@ -376,11 +376,14 @@ impl IrArena {
             Instruction::ReturnValue { span: _, type_id } => Ok(type_id),
             Instruction::Load { span: _, address: _, type_id } => Ok(type_id),
             Instruction::Store { span: _, address: _, value } => Ok(self.get_type_id_of_inst(value)?),
-            Instruction::Alloca { span: _, type_id: _ } => {
+            Instruction::Alloca { span: _, type_id: _, array_len: _ } => {
                 // implement this later
                 panic!("[internal error] asked for the type of an alloca instruction but i don't see why this would happen")
             },
             Instruction::GlobalAlloca(_) => todo!(),
+            // GEP returns an address, but we record the pointee's type on the instruction itself
+            // (mirroring Load/Alloca), so there's no need to chase anything here.
+            Instruction::GetElementPtr { span: _, address: _, indexes: _, type_id } => Ok(type_id),
         }
     }
     pub fn get_type_of_var(&self, var_id: GlobalIrVarId) -> &IrType { self.get_type(self.get_var(var_id).hfs_type) }
@@ -458,6 +461,7 @@ impl IrArena {
             Instruction::Alloca { .. } => None,
             Instruction::LoadElement { .. } => None,
             Instruction::GlobalAlloca(_) => None,
+            Instruction::GetElementPtr { type_id, .. } => Some(*type_id),
         }
     }
 }

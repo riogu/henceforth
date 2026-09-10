@@ -324,16 +324,16 @@ impl IrArena {
 impl IrArena {
     // Only expressions have types!
     pub fn get_type_of_operation(&mut self, op: &IrOperation) -> Result<TypeId, Box<dyn CompileError>> {
+        self.get_type_of_operation_from(op, &mut HashSet::new())
+    }
+
+    fn get_type_of_operation_from(&mut self, op: &IrOperation, visiting: &mut HashSet<InstId>) -> Result<TypeId, Box<dyn CompileError>> {
         match op {
-            // Arithmetic operations: return the operand type
             IrOperation::Add(lhs, _rhs)
             | IrOperation::Sub(lhs, _rhs)
             | IrOperation::Mul(lhs, _rhs)
             | IrOperation::Div(lhs, _rhs)
-            | IrOperation::Mod(lhs, _rhs) => {
-                let lhs_type = self.get_type_id_of_inst(*lhs)?;
-                Ok(lhs_type)
-            },
+            | IrOperation::Mod(lhs, _rhs) => self.get_type_id_of_inst_from(*lhs, visiting),
             IrOperation::Or(_, _)
             | IrOperation::And(_, _)
             | IrOperation::Not(_)
@@ -347,8 +347,15 @@ impl IrArena {
     }
 
     pub fn get_type_id_of_inst(&mut self, inst_id: InstId) -> Result<TypeId, Box<dyn CompileError>> {
-        match self.get_inst(inst_id).clone() {
-            Instruction::Operation { span: _, op } => Ok(self.get_type_of_operation(&op)?),
+        self.get_type_id_of_inst_from(inst_id, &mut HashSet::new())
+    }
+
+    fn get_type_id_of_inst_from(&mut self, inst_id: InstId, visiting: &mut HashSet<InstId>) -> Result<TypeId, Box<dyn CompileError>> {
+        if !visiting.insert(inst_id) {
+            panic!("[internal error] cyclic instruction dependency found while computing the type of {:?}", inst_id);
+        }
+        let result = match self.get_inst(inst_id).clone() {
+            Instruction::Operation { span: _, op } => self.get_type_of_operation_from(&op, visiting),
             Instruction::Literal { span: _, literal } => match literal {
                 Literal::Integer(_) => Ok(IrType::new_int(0).type_id()),
                 Literal::Float(_) => Ok(IrType::new_float(0).type_id()),
@@ -359,7 +366,7 @@ impl IrArena {
                 // Build tuple type from element types
                 let mut element_types = Vec::new();
                 for inst_id in instructions.clone() {
-                    let elem_type = self.get_type_id_of_inst(inst_id)?;
+                    let elem_type = self.get_type_id_of_inst_from(inst_id, visiting)?;
                     element_types.push(elem_type);
                 }
 
@@ -369,13 +376,28 @@ impl IrArena {
             Instruction::Parameter { span: _, index: _, type_id } => Ok(type_id),
             Instruction::FunctionCall { span: _, args: _, func_id, is_move: _, return_values: _ } =>
                 Ok(self.get_func(func_id).return_type),
-            Instruction::Phi { span: _, incoming } => Ok(self.get_type_id_of_inst(
-                *incoming.values().next().expect("[internal error] found phi with no elements in type checking"),
-            )?),
+            Instruction::Phi { span: _, incoming } => {
+                // sometimes a  loop counter's back-edge value is computed from the phi itself. "visiting" is
+                // the set of instructions already being resolved higher up this call, so a phi hitting one of
+                // its own incoming values here just moves on to the next one, so we don't get infinite loops.
+                let mut last_err = None;
+                let found = incoming.values().find_map(|id| match self.get_type_id_of_inst_from(*id, visiting) {
+                    Ok(type_id) => Some(type_id),
+                    Err(e) => {
+                        last_err = Some(e);
+                        None
+                    },
+                });
+                match (found, last_err) {
+                    (Some(type_id), _) => Ok(type_id),
+                    (None, Some(e)) => Err(e),
+                    (None, None) => panic!("[internal error] found phi with no elements in type checking"),
+                }
+            },
             Instruction::LoadElement { span: _, index: _, tuple: _ } => todo!(),
             Instruction::ReturnValue { span: _, type_id } => Ok(type_id),
             Instruction::Load { span: _, address: _, type_id } => Ok(type_id),
-            Instruction::Store { span: _, address: _, value } => Ok(self.get_type_id_of_inst(value)?),
+            Instruction::Store { span: _, address: _, value } => self.get_type_id_of_inst_from(value, visiting),
             Instruction::Alloca { span: _, type_id: _, array_len: _ } => {
                 // implement this later
                 panic!("[internal error] asked for the type of an alloca instruction but i don't see why this would happen")
@@ -384,7 +406,9 @@ impl IrArena {
             // GEP returns an address, but we record the pointee's type on the instruction itself
             // (mirroring Load/Alloca), so there's no need to chase anything here.
             Instruction::GetElementPtr { span: _, address: _, indexes: _, type_id } => Ok(type_id),
-        }
+        };
+        visiting.remove(&inst_id);
+        result
     }
     pub fn get_type_of_var(&self, var_id: GlobalIrVarId) -> &IrType { self.get_type(self.get_var(var_id).hfs_type) }
     pub fn get_type_of_func(&self, func_id: IrFuncId) -> &IrType { self.get_type(self.get_func(func_id).return_type) }
@@ -409,12 +433,16 @@ impl IrArena {
 
     // these functions are only used for printing so we don't have to pass a mutable reference to an arena everywhere
     pub fn get_type_of_operation_no_alloc(&self, op: &IrOperation) -> Option<TypeId> {
+        self.get_type_of_operation_no_alloc_from(op, &mut HashSet::new())
+    }
+
+    fn get_type_of_operation_no_alloc_from(&self, op: &IrOperation, visiting: &mut HashSet<InstId>) -> Option<TypeId> {
         match op {
             IrOperation::Add(lhs, _rhs)
             | IrOperation::Sub(lhs, _rhs)
             | IrOperation::Mul(lhs, _rhs)
             | IrOperation::Div(lhs, _rhs)
-            | IrOperation::Mod(lhs, _rhs) => self.get_type_id_of_inst_no_alloc(*lhs),
+            | IrOperation::Mod(lhs, _rhs) => self.get_type_id_of_inst_no_alloc_from(*lhs, visiting),
             IrOperation::Or(_, _)
             | IrOperation::And(_, _)
             | IrOperation::Not(_)
@@ -428,8 +456,16 @@ impl IrArena {
     }
 
     pub fn get_type_id_of_inst_no_alloc(&self, inst_id: InstId) -> Option<TypeId> {
-        match self.get_inst(inst_id) {
-            Instruction::Operation { op, .. } => self.get_type_of_operation_no_alloc(op),
+        self.get_type_id_of_inst_no_alloc_from(inst_id, &mut HashSet::new())
+    }
+
+    // see get_type_id_of_inst_from - same cyclic-phi hazard, same fix
+    fn get_type_id_of_inst_no_alloc_from(&self, inst_id: InstId, visiting: &mut HashSet<InstId>) -> Option<TypeId> {
+        if !visiting.insert(inst_id) {
+            return None;
+        }
+        let result = match self.get_inst(inst_id) {
+            Instruction::Operation { op, .. } => self.get_type_of_operation_no_alloc_from(op, visiting),
             Instruction::Literal { literal, .. } => match literal {
                 Literal::Integer(_) => Some(IrType::new_int(0).type_id()),
                 Literal::Float(_) => Some(IrType::new_float(0).type_id()),
@@ -438,7 +474,7 @@ impl IrArena {
             },
             Instruction::Tuple { instructions, .. } => {
                 let element_types: Option<Vec<TypeId>> =
-                    instructions.iter().map(|id| self.get_type_id_of_inst_no_alloc(*id)).collect();
+                    instructions.iter().map(|id| self.get_type_id_of_inst_no_alloc_from(*id, visiting)).collect();
                 let element_types = element_types?;
                 self.types.iter().enumerate().find_map(|(i, t)| {
                     if let IrType::Tuple { type_ids, .. } = t {
@@ -454,14 +490,17 @@ impl IrArena {
             },
             Instruction::Parameter { type_id, .. } => Some(*type_id),
             Instruction::FunctionCall { func_id, .. } => Some(self.get_func(*func_id).return_type),
-            Instruction::Phi { incoming, .. } => self.get_type_id_of_inst_no_alloc(*incoming.values().next()?),
+            Instruction::Phi { incoming, .. } =>
+                incoming.values().find_map(|id| self.get_type_id_of_inst_no_alloc_from(*id, visiting)),
             Instruction::ReturnValue { type_id, .. } => Some(*type_id),
             Instruction::Load { type_id, .. } => Some(*type_id),
-            Instruction::Store { value, .. } => self.get_type_id_of_inst_no_alloc(*value),
+            Instruction::Store { value, .. } => self.get_type_id_of_inst_no_alloc_from(*value, visiting),
             Instruction::Alloca { .. } => None,
             Instruction::LoadElement { .. } => None,
             Instruction::GlobalAlloca(_) => None,
             Instruction::GetElementPtr { type_id, .. } => Some(*type_id),
-        }
+        };
+        visiting.remove(&inst_id);
+        result
     }
 }

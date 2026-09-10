@@ -42,7 +42,7 @@ impl ScopeStack {
                 name: diagnostic_info.path.to_string_lossy().to_string() + "%",
                 kind: ScopeKind::Global,
                 inner_count: 0,
-                curr_func_return_type: TypeId(0),
+                curr_func_return_type: INT_TYPE_ID, // placeholder, the global scope has no function return type
             }],
             mangled_global_vars: HashMap::new(),
             mangled_locals: HashMap::new(),

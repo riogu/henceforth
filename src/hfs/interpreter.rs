@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use slotmap::Key;
 
-use crate::hfs::{IrArena, IrType, hfs_ir::*, scope_stack::*, token::*};
+use crate::hfs::{Builtin, IrArena, IrType, find_builtin, hfs_ir::*, scope_stack::*, token::*};
 
 //---------------------------------------------------------------------------
 // Runtime values
@@ -29,13 +29,16 @@ impl RuntimeValue {
             // tuple fields aren't defaulted either, always fully written before read
             IrType::Tuple { .. } => RuntimeValue::Tuple(Vec::new()),
             IrType::Array { hfs_type, length, .. } => {
-                // elements get written one at a time via GEP + Store, so this needs the right shape upfront
+                // elements are written one at a time via GEP + Store, so this needs the right shape
+                // upfront. decayed arrays have no length to build that shape from, but they're always
+                // overwritten by a whole-array store before anything indexes into them, so an empty
+                // placeholder is fine here
                 let len = match length {
                     Some(length_inst) => match arena.get_inst(*length_inst) {
                         Instruction::Literal { literal: Literal::Integer(n), .. } => *n as usize,
                         _ => panic!("[internal error] array length must be a compile-time integer literal"),
                     },
-                    None => panic!("[internal error] tried to default an array with unknown length"),
+                    None => 0,
                 };
                 let elem_type = arena.get_type(*hfs_type).clone();
                 RuntimeValue::Array(vec![RuntimeValue::default(&elem_type, arena); len])
@@ -64,12 +67,58 @@ fn navigate_mut<'a>(value: &'a mut RuntimeValue, path: &[usize]) -> &'a mut Runt
         },
     }
 }
+
+fn print_runtime_value(value: &RuntimeValue) {
+    match value {
+        RuntimeValue::Integer(v) => print!("{}", v),
+        RuntimeValue::Float(v) => print!("{}", v),
+        RuntimeValue::String(v) => print!("{}", v),
+        RuntimeValue::Bool(v) => print!("{}", v),
+        RuntimeValue::Array(elems) | RuntimeValue::Tuple(elems) => {
+            print!("[");
+            for (i, elem) in elems.iter().enumerate() {
+                if i > 0 {
+                    print!(", ");
+                }
+                print_runtime_value(elem);
+            }
+            print!("]");
+        },
+        RuntimeValue::Address(inst_id, path) => print!("{:?}{:?}", inst_id, path),
+    }
+}
+
+// flushes stdout first, in case a prompt was just printed without a trailing newline
+fn read_input_line() -> String {
+    use std::io::Write;
+    let _ = std::io::stdout().flush();
+    let mut line = String::new();
+    std::io::stdin().read_line(&mut line).expect("[internal error] failed to read from stdin");
+    line
+}
+
+fn call_builtin(builtin: Builtin, args: Vec<RuntimeValue>) -> Vec<RuntimeValue> {
+    match builtin {
+        Builtin::Print => {
+            for arg in &args {
+                print_runtime_value(arg);
+            }
+            vec![]
+        },
+        // there's no error-propagation path from a builtin back into the language yet, so
+        // malformed input just becomes 0/0.0 instead of crashing the interpreter
+        Builtin::InputInt => vec![RuntimeValue::Integer(read_input_line().trim().parse().unwrap_or(0))],
+        Builtin::InputFloat => vec![RuntimeValue::Float(read_input_line().trim().parse().unwrap_or(0.0))],
+        Builtin::InputStr => vec![RuntimeValue::String(read_input_line().trim_end_matches(['\n', '\r']).to_string())],
+    }
+}
+
 pub struct CallFrame {
     _func_id: IrFuncId,
     inst_values: HashMap<InstId, RuntimeValue>,
     return_stack: Vec<RuntimeValue>,
-    // per-invocation, since interpret_block recurses into a callee's blocks for a FunctionCall -
-    // these can't live on Interpreter itself or a callee's block visits stomp on the caller's
+    // per-invocation. interpret_block recurses into a callee's blocks for a FunctionCall, so these
+    // can't live on Interpreter itself, or a callee's block visits stomp on the caller's
     prev_block_id: BlockId,
     curr_block_id: BlockId,
 }
@@ -153,19 +202,8 @@ impl Interpreter {
     */
     fn call_declared_function(&mut self, func_id: IrFuncId, args: Vec<RuntimeValue>) -> Vec<RuntimeValue> {
         let func = self.arena.get_func(func_id);
-        if func.name == "print" {
-            for arg in &args {
-                match arg {
-                    RuntimeValue::Integer(v) => print!("{}", v),
-                    RuntimeValue::Float(v) => print!("{}", v),
-                    RuntimeValue::String(v) => print!("{}", v),
-                    RuntimeValue::Bool(v) => print!("{}", v),
-                    RuntimeValue::Tuple(runtime_values) | RuntimeValue::Array(runtime_values) => {
-                        dbg!(runtime_values);
-                    },
-                    RuntimeValue::Address(inst_id, _) => print!("{:?}", inst_id),
-                }
-            }
+        if let Some(builtin) = find_builtin(&func.name).map(|spec| spec.builtin) {
+            return call_builtin(builtin, args);
         }
 
         // bind all the parameters before interpreting the function

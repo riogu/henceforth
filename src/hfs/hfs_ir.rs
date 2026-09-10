@@ -370,10 +370,10 @@ impl IrArena {
             out.push_str(&format!("        label=\"fn {}\";\n", func_name));
 
             let mut names = crate::hfs::ir_syntax::NameMap::default();
-            names.type_to_name.insert(crate::hfs::TypeId(0), "i32".to_string());
-            names.type_to_name.insert(crate::hfs::TypeId(1), "f32".to_string());
-            names.type_to_name.insert(crate::hfs::TypeId(2), "bool".to_string());
-            names.type_to_name.insert(crate::hfs::TypeId(3), "str".to_string());
+            names.type_to_name.insert(crate::hfs::INT_TYPE_ID, "i32".to_string());
+            names.type_to_name.insert(crate::hfs::FLOAT_TYPE_ID, "f32".to_string());
+            names.type_to_name.insert(crate::hfs::BOOL_TYPE_ID, "bool".to_string());
+            names.type_to_name.insert(crate::hfs::STRING_TYPE_ID, "str".to_string());
 
             let mut inst_counter = 0usize;
             for bid in self.get_blocks_in(*func_id) {

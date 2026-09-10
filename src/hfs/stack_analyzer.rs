@@ -211,12 +211,20 @@ pub struct StackAnalyzer {
     unresolved_arena: UnresolvedAstArena,
     arena: AstArena,
     scope_resolution_stack: ScopeStack,
+    // builtins actually called somewhere in the program, see ensure_builtin_registered. kept
+    // separately so resolve() can prepend them to the top-level list once resolution is done
+    registered_builtins: Vec<FuncId>,
 }
 
 impl StackAnalyzer {
     pub fn new(unresolved: UnresolvedAstArena, diagnostic_info: Rc<DiagnosticInfo>) -> Self {
         let arena = AstArena::new(diagnostic_info.clone());
-        Self { arena, unresolved_arena: unresolved, scope_resolution_stack: ScopeStack::new(diagnostic_info) }
+        Self {
+            arena,
+            unresolved_arena: unresolved,
+            scope_resolution_stack: ScopeStack::new(diagnostic_info),
+            registered_builtins: Vec::new(),
+        }
     }
 
     pub fn resolve(
@@ -229,8 +237,83 @@ impl StackAnalyzer {
             let elaborated = stack_parser.elaborate(unresolved.get_type(TypeId(type_id)).clone())?;
             stack_parser.arena.alloc_type(elaborated, unresolved.get_type_span(TypeId(type_id)));
         }
-        let resolved_top_level = stack_parser.resolve_top_level(top_level)?;
+        let mut resolved_top_level = stack_parser.resolve_top_level(top_level)?;
+        // builtins have to appear in the top-level list too or IrLowerer never lowers them, and
+        // they go first so they're already in func_id_map before any user function calls them
+        let builtin_top_level = stack_parser.registered_builtins.iter().map(|id| TopLevelId::FunctionDecl(*id));
+        resolved_top_level.splice(0..0, builtin_top_level);
         Ok((resolved_top_level, stack_parser.arena, stack_parser.scope_resolution_stack))
+    }
+
+    // registers a builtin (see builtins.rs) as a real function the first time its name is
+    // actually called, so a program that never uses print/input doesn't end up with them in its
+    // function list. called from resolve_func_call_identifier before normal name resolution.
+    fn ensure_builtin_registered(&mut self, name: &str) -> Result<(), Box<dyn CompileError>> {
+        if self.scope_resolution_stack.find_function(name).is_some() {
+            return Ok(()); // already registered, either a builtin or a user function of the same name
+        }
+        let Some(spec) = find_builtin(name) else {
+            return Ok(()); // not a builtin; let normal name resolution report "undeclared identifier"
+        };
+        let func_id = self.register_builtin(spec)?;
+        self.registered_builtins.push(func_id);
+        Ok(())
+    }
+
+    fn register_builtin(&mut self, spec: &BuiltinSpec) -> Result<FuncId, Box<dyn CompileError>> {
+        let span = Span::default();
+        // this can run mid-resolution of whatever function is being resolved when a builtin is
+        // first called, so it must not disturb that function's in-progress stack state
+        let caller_stack = std::mem::take(&mut self.arena.hfs_stack);
+
+        let param_type = self.arena.alloc_type(ElaboratedType::Tuple { type_ids: spec.params.to_vec(), ptr_count: 0 }, span.clone());
+        let return_type =
+            self.arena.alloc_type(ElaboratedType::Tuple { type_ids: spec.returns.to_vec(), ptr_count: 0 }, span.clone());
+
+        // push the parameters onto the abstract stack, same as a real function's body would see them
+        let mut parameter_exprs = Vec::new();
+        for (index, type_id) in spec.params.iter().enumerate() {
+            parameter_exprs.push(self.arena.alloc_and_push_to_hfs_stack(
+                Expression::Parameter { index, type_id: *type_id },
+                ExprProvenance::RuntimeValue,
+                span.clone(),
+            ));
+        }
+
+        let func =
+            FunctionDeclaration { name: spec.name.to_string(), param_type, return_type, body: StmtId(0), parameter_exprs };
+        let func_id = self.push_function_and_scope_and_alloc(spec.name, func, span.clone());
+
+        // body: pop every parameter, then push one placeholder literal per return value. matches
+        // what a real `@pop;`-style stub body would leave on the stack for validate_return_stack
+        for _ in spec.params {
+            self.arena.hfs_stack.pop();
+        }
+        let mut return_exprs = Vec::new();
+        for type_id in spec.returns {
+            let literal = match self.arena.get_type(*type_id) {
+                ElaboratedType::Int { .. } => Literal::Integer(0),
+                ElaboratedType::Float { .. } => Literal::Float(0.0),
+                ElaboratedType::Bool { .. } => Literal::Bool(false),
+                ElaboratedType::String { .. } => Literal::String(String::new()),
+                other => panic!("[internal error] builtin return type must be a primitive, found {:?}", other),
+            };
+            return_exprs.push(self.arena.alloc_and_push_to_hfs_stack(
+                Expression::Literal(literal),
+                ExprProvenance::CompiletimeValue,
+                span.clone(),
+            ));
+        }
+
+        let body = self
+            .arena
+            .alloc_stmt(Statement::StackBlock { expr_ids: return_exprs, consumed_count: spec.params.len() }, span.clone());
+        self.arena.get_func_mut(func_id).body = body;
+
+        self.arena.validate_return_stack(return_type, span.clone())?;
+        self.scope_resolution_stack.pop();
+        self.arena.hfs_stack = caller_stack;
+        Ok(func_id)
     }
 
     fn resolve_top_level(&mut self, nodes: Vec<UnresolvedTopLevelId>) -> Result<Vec<TopLevelId>, Box<dyn CompileError>> {
@@ -598,8 +681,12 @@ impl StackAnalyzer {
                         self.arena.hfs_stack.push(arg_expr);
                     }
                 }
-                // first make sure calling this function is valid given the stack state
-                self.arena.validate_func_call(func_decl.param_type, arg_type_id, arg_expr_spans)?;
+                // first make sure calling this function is valid given the stack state, except for
+                // print, which is the one builtin that genuinely accepts any argument type
+                let is_print = matches!(find_builtin(&func_decl.name), Some(spec) if spec.builtin == Builtin::Print);
+                if !is_print {
+                    self.arena.validate_func_call(func_decl.param_type, arg_type_id, arg_expr_spans)?;
+                }
 
                 // now make sure the stack is updated based on the return type of the function
                 let ElaboratedType::Tuple { type_ids: return_types, .. } = self.arena.get_type(func_decl.return_type) else {
@@ -652,7 +739,8 @@ impl StackAnalyzer {
                                 self.check_bounds(&idx, length)?;
                             }
                         },
-                        None => unimplemented!(),
+                        // a decayed array parameter has no length, so there's nothing to bounds-check at compile time
+                        None => {},
                     }
 
                     self.arena.compare_types(value_type_id, *hfs_type, vec![self.arena.get_expr_span(value).clone()])?;
@@ -714,11 +802,12 @@ impl StackAnalyzer {
     }
     fn resolve_func_call_identifier(&mut self, id: UnresolvedExprId, assign_span: Span) -> Result<FuncId, Box<dyn CompileError>> {
         // dont allocate an expression for these cases
-        let identifier = self.unresolved_arena.get_unresolved_expr(id);
-        let span = self.unresolved_arena.get_unresolved_expr_span(id);
+        let identifier = self.unresolved_arena.get_unresolved_expr(id).clone();
+        let span = self.unresolved_arena.get_unresolved_expr_span(id).clone();
         let UnresolvedExpression::Identifier(identifier) = identifier else {
             panic!("[internal error] function call must have identifier")
         };
+        self.ensure_builtin_registered(&identifier)?;
         let identifier = self.scope_resolution_stack.find_identifier(&identifier, span, &self.arena)?;
         match identifier {
             Identifier::GlobalVar(_) | Identifier::Variable(_) => {
@@ -1093,7 +1182,8 @@ impl StackAnalyzer {
                                 Ok(()) // emit at runtime
                             }
                         },
-                        None => unimplemented!(),
+                        // a decayed array parameter has no length, so there's nothing to bounds-check at compile time
+                        None => Ok(()),
                     }
                 } else {
                     stack_analyzer_error!(

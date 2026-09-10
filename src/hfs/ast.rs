@@ -212,6 +212,13 @@ impl PartialEq for AstArena {
     }
 }
 
+// every arena (AstArena, IrArena, UnresolvedAstArena) allocates its primitive types in this same
+// order at startup, so these TypeIds are the same everywhere and don't need re-deriving each time
+pub const INT_TYPE_ID: TypeId = TypeId(0);
+pub const FLOAT_TYPE_ID: TypeId = TypeId(1);
+pub const BOOL_TYPE_ID: TypeId = TypeId(2);
+pub const STRING_TYPE_ID: TypeId = TypeId(3);
+
 // had to move this here because i wanted to the arena's private members to be available to the parser
 // for better code structure (without making arena members public)
 impl AstArena {

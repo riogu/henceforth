@@ -1,0 +1,10 @@
+//? COMPILE
+fn main: () -> () {
+    let x: i32; @() &> input_int; &= x;
+    let f: f32; @() &> input_float; &= f;
+    let s: str; @() &> input_str; &= s;
+
+    @(x) &> print;
+    @(f) &> print;
+    @(s) &> print;
+}

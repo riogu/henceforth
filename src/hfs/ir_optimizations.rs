@@ -3,7 +3,9 @@ use std::collections::{HashMap, HashSet};
 use indexmap::IndexMap;
 use slotmap::Key;
 
-use crate::hfs::{BlockId, DefUseInfo, DominatorTree, InstId, InstOrTermId, Instruction, IrArena, IrFuncId, TerminatorInst};
+use crate::hfs::{
+    BlockId, DefUseInfo, DominatorTree, InstId, InstOrTermId, Instruction, IrArena, IrFuncId, IrType, Literal, TerminatorInst,
+};
 
 // these are the basic traits and APIs our passes/pipelines must meet
 pub trait IrPass {
@@ -324,10 +326,15 @@ impl Mem2Reg {
             for inst_id in arena.get_block(successor).instructions.clone() {
                 // For each successor block, if it has a phi for one of our allocas,
                 // fill in the phi operand for the current block's edge with the top of the alloca's stack.
-                if let Some(alloca) = phi_to_alloca.get(&inst_id)
-                    && let Instruction::Phi { incoming, .. } = arena.get_inst_mut(inst_id)
-                {
-                    let latest_def = *alloca_stacks[alloca].last().expect("[internal error] found no value for alloca");
+                let Some(&alloca) = phi_to_alloca.get(&inst_id) else { continue };
+                if !matches!(arena.get_inst(inst_id), Instruction::Phi { .. }) {
+                    continue;
+                }
+                let latest_def = match alloca_stacks.get(&alloca).and_then(|stack| stack.last()) {
+                    Some(def) => *def,
+                    None => Mem2Reg::undefined_value_for(arena, alloca, block_id),
+                };
+                if let Instruction::Phi { incoming, .. } = arena.get_inst_mut(inst_id) {
                     incoming.entry(block_id).insert_entry(latest_def);
                 }
             }
@@ -342,6 +349,24 @@ impl Mem2Reg {
                 alloca_stacks.get_mut(&alloca).unwrap().truncate(len);
             }
         }
+    }
+
+    // a variable declared inside a conditional block (e.g. `let tmp` inside an `if`) can reach a
+    // phi through an edge that never stores to it at all (the edge that skips the `if`). the phi
+    // will be dead in practice but it still needs a well-formed value for every incoming edge, so
+    // we hand it an arbitrary default rather than leaving it unfilled
+    fn undefined_value_for(arena: &mut IrArena, alloca: InstId, block_id: BlockId) -> InstId {
+        let Instruction::Alloca { span, type_id, .. } = arena.get_inst(alloca).clone() else {
+            panic!("[internal error] expected an alloca")
+        };
+        let literal = match arena.get_type(type_id) {
+            IrType::Int { .. } => Literal::Integer(0),
+            IrType::Float { .. } => Literal::Float(0.0),
+            IrType::Bool { .. } => Literal::Bool(false),
+            IrType::String { .. } => Literal::String(String::new()),
+            other => panic!("[internal error] promotable alloca had unexpected type {:?}", other),
+        };
+        arena.alloc_inst_for(Instruction::Literal { span, literal }, block_id)
     }
 }
 

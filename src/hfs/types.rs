@@ -74,10 +74,10 @@ impl Type for UnresolvedType {
 
     fn type_id(&self) -> TypeId {
         match self {
-            UnresolvedType::Int { ptr_count: _ } => TypeId(0),
-            UnresolvedType::String { ptr_count: _ } => TypeId(3),
-            UnresolvedType::Bool { ptr_count: _ } => TypeId(2),
-            UnresolvedType::Float { ptr_count: _ } => TypeId(1),
+            UnresolvedType::Int { ptr_count: _ } => INT_TYPE_ID,
+            UnresolvedType::String { ptr_count: _ } => STRING_TYPE_ID,
+            UnresolvedType::Bool { ptr_count: _ } => BOOL_TYPE_ID,
+            UnresolvedType::Float { ptr_count: _ } => FLOAT_TYPE_ID,
             _ => panic!("[internal error] cannot get type id of non-primitive type"),
         }
     }
@@ -174,10 +174,10 @@ impl Type for ElaboratedType {
 
     fn type_id(&self) -> TypeId {
         match self {
-            ElaboratedType::Int { ptr_count: _ } => TypeId(0),
-            ElaboratedType::String { ptr_count: _ } => TypeId(3),
-            ElaboratedType::Bool { ptr_count: _ } => TypeId(2),
-            ElaboratedType::Float { ptr_count: _ } => TypeId(1),
+            ElaboratedType::Int { ptr_count: _ } => INT_TYPE_ID,
+            ElaboratedType::String { ptr_count: _ } => STRING_TYPE_ID,
+            ElaboratedType::Bool { ptr_count: _ } => BOOL_TYPE_ID,
+            ElaboratedType::Float { ptr_count: _ } => FLOAT_TYPE_ID,
             _ => panic!("[internal error] cannot get type id of non-primitive type"),
         }
     }
@@ -268,10 +268,10 @@ impl Type for IrType {
 
     fn type_id(&self) -> TypeId {
         match self {
-            IrType::Int { ptr_count: _ } => TypeId(0),
-            IrType::String { ptr_count: _ } => TypeId(3),
-            IrType::Bool { ptr_count: _ } => TypeId(2),
-            IrType::Float { ptr_count: _ } => TypeId(1),
+            IrType::Int { ptr_count: _ } => INT_TYPE_ID,
+            IrType::String { ptr_count: _ } => STRING_TYPE_ID,
+            IrType::Bool { ptr_count: _ } => BOOL_TYPE_ID,
+            IrType::Float { ptr_count: _ } => FLOAT_TYPE_ID,
             _ => panic!("[internal error] cannot get type id of non-primitive type"),
         }
     }

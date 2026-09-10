@@ -36,7 +36,10 @@ use std::{
     rc::Rc,
 };
 
-use crate::hfs::{BlockId, InstId, Instruction, IrArena, IrFuncId, IrFunction, IrType, Literal, Span, TerminatorInst, TypeId};
+use crate::hfs::{
+    BOOL_TYPE_ID, BlockId, FLOAT_TYPE_ID, INT_TYPE_ID, InstId, Instruction, IrArena, IrFuncId, IrFunction, IrType, Literal,
+    STRING_TYPE_ID, Span, TerminatorInst, TypeId,
+};
 
 #[derive(Default)]
 pub struct NameMap {
@@ -1406,7 +1409,7 @@ fn collect_tuple_type(name: &str, arena: &mut IrArena, names: &mut NameMap) {
 // Simple scan over the text for functions, blocks and instructions
 fn collect_names(input: &str, arena: &mut IrArena, names: &mut NameMap) {
     let placeholder_inst = || Instruction::Literal { span: Span::default(), literal: Literal::Integer(0) };
-    let placeholder_type = TypeId(0);
+    let placeholder_type = INT_TYPE_ID;
 
     let mut current_func: Option<IrFuncId> = None;
 
@@ -1597,14 +1600,14 @@ pub fn parse(input: &str, arena: &mut IrArena) -> Option<Vec<IrFuncId>> {
         unmangled_to_block: HashMap::new(),
     };
 
-    names.type_to_name.insert(TypeId(0), "i32".to_string());
-    names.name_to_type.insert("i32".to_string(), TypeId(0));
-    names.type_to_name.insert(TypeId(1), "f32".to_string());
-    names.name_to_type.insert("f32".to_string(), TypeId(1));
-    names.type_to_name.insert(TypeId(2), "bool".to_string());
-    names.name_to_type.insert("bool".to_string(), TypeId(2));
-    names.type_to_name.insert(TypeId(3), "str".to_string());
-    names.name_to_type.insert("str".to_string(), TypeId(3));
+    names.type_to_name.insert(INT_TYPE_ID, "i32".to_string());
+    names.name_to_type.insert("i32".to_string(), INT_TYPE_ID);
+    names.type_to_name.insert(FLOAT_TYPE_ID, "f32".to_string());
+    names.name_to_type.insert("f32".to_string(), FLOAT_TYPE_ID);
+    names.type_to_name.insert(BOOL_TYPE_ID, "bool".to_string());
+    names.name_to_type.insert("bool".to_string(), BOOL_TYPE_ID);
+    names.type_to_name.insert(STRING_TYPE_ID, "str".to_string());
+    names.name_to_type.insert("str".to_string(), STRING_TYPE_ID);
 
     collect_names(input, arena, &mut names);
 
@@ -1662,14 +1665,14 @@ pub fn print(func_ids: &[IrFuncId], arena: &IrArena) -> Option<String> {
         unmangled_to_block: HashMap::new(),
     };
 
-    names.type_to_name.insert(TypeId(0), "i32".to_string());
-    names.name_to_type.insert("i32".to_string(), TypeId(0));
-    names.type_to_name.insert(TypeId(1), "f32".to_string());
-    names.name_to_type.insert("f32".to_string(), TypeId(1));
-    names.type_to_name.insert(TypeId(2), "bool".to_string());
-    names.name_to_type.insert("bool".to_string(), TypeId(2));
-    names.type_to_name.insert(TypeId(3), "str".to_string());
-    names.name_to_type.insert("str".to_string(), TypeId(3));
+    names.type_to_name.insert(INT_TYPE_ID, "i32".to_string());
+    names.name_to_type.insert("i32".to_string(), INT_TYPE_ID);
+    names.type_to_name.insert(FLOAT_TYPE_ID, "f32".to_string());
+    names.name_to_type.insert("f32".to_string(), FLOAT_TYPE_ID);
+    names.type_to_name.insert(BOOL_TYPE_ID, "bool".to_string());
+    names.name_to_type.insert("bool".to_string(), BOOL_TYPE_ID);
+    names.type_to_name.insert(STRING_TYPE_ID, "str".to_string());
+    names.name_to_type.insert("str".to_string(), STRING_TYPE_ID);
     for (i, typ) in arena.types.iter().enumerate() {
         let type_id = TypeId(i);
         if names.type_to_name.contains_key(&type_id) {

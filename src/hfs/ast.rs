@@ -284,6 +284,22 @@ impl AstArena {
             return self.alloc_type_uncached(hfs_type, span);
         }
 
+        // for tuples we can do the same check, but we only check if their inner type ids are the same
+        if let ElaboratedType::Tuple { type_ids, ptr_count } = &hfs_type {
+            if let Some(existing_id) = self.types.iter().enumerate().find_map(|(idx, hfs_type)| match hfs_type {
+                ElaboratedType::Tuple { type_ids: found_ids, ptr_count: found_ptr_count } => {
+                    if *type_ids == *found_ids && *found_ptr_count == *ptr_count {
+                        Some(TypeId(idx))
+                    } else {
+                        None
+                    }
+                },
+                _ => None,
+            }) {
+                return existing_id;
+            }
+            return self.alloc_type_uncached(hfs_type, span);
+        }
         // Check if this type already exists
         if let Some(&existing_id) = self.type_cache.get(&hfs_type) {
             return existing_id;

@@ -54,7 +54,7 @@ fn tic_tac_toe: ([9]str i32 str) -> ([9]str) {
         @(board);
     } else {
         let board_ptr: [9]str; 
-        @(player 8) [&]= board;   // board[board_pos] = player;
+        @(player board_pos) [&]= board;   // board[board_pos] = player;
         @(board) :> print_board;
     }
 }

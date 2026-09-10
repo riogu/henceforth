@@ -68,6 +68,10 @@ pub struct CallFrame {
     _func_id: IrFuncId,
     inst_values: HashMap<InstId, RuntimeValue>,
     return_stack: Vec<RuntimeValue>,
+    // per-invocation, since interpret_block recurses into a callee's blocks for a FunctionCall -
+    // these can't live on Interpreter itself or a callee's block visits stomp on the caller's
+    prev_block_id: BlockId,
+    curr_block_id: BlockId,
 }
 
 //---------------------------------------------------------------------------
@@ -76,8 +80,6 @@ pub struct Interpreter {
     globals: HashMap<GlobalIrVarId, RuntimeValue>,
     call_stack: Vec<CallFrame>,
     disable_cache: bool, // NOTE: not really used yet (but we should probably)
-    prev_block_id: BlockId,
-    curr_block_id: BlockId,
 
     memory: HashMap<InstId, RuntimeValue>,
 }
@@ -94,8 +96,6 @@ impl Interpreter {
             globals: HashMap::new(),
             call_stack: Vec::new(),
             disable_cache: false,
-            prev_block_id: BlockId::null(),
-            curr_block_id: BlockId::null(),
             memory: HashMap::new(),
         }
     }
@@ -173,7 +173,13 @@ impl Interpreter {
         for (param_id, arg_val) in func.parameter_insts.iter().zip(args) {
             inst_values.insert(*param_id, arg_val);
         }
-        self.call_stack.push(CallFrame { _func_id: func_id, inst_values, return_stack: vec![] });
+        self.call_stack.push(CallFrame {
+            _func_id: func_id,
+            inst_values,
+            return_stack: vec![],
+            prev_block_id: BlockId::null(),
+            curr_block_id: BlockId::null(),
+        });
 
         self.interpret_block(func.entry_block);
 
@@ -183,8 +189,8 @@ impl Interpreter {
         let mut next_block = Some(block_id);
 
         while let Some(block_id) = next_block {
-            self.prev_block_id = self.curr_block_id;
-            self.curr_block_id = block_id;
+            self.curr_call_frame_mut().prev_block_id = self.curr_call_frame().curr_block_id;
+            self.curr_call_frame_mut().curr_block_id = block_id;
             let block = self.arena.get_block(block_id);
             let term = block.terminator;
 
@@ -253,7 +259,7 @@ impl Interpreter {
                 RuntimeValue::Tuple(runtime_return_values)
             },
             Instruction::Phi { span: _, incoming } =>
-                if let Some(inst_id) = incoming.get(&self.prev_block_id) {
+                if let Some(inst_id) = incoming.get(&self.curr_call_frame().prev_block_id) {
                     self.interpret_instruction(*inst_id)
                 } else {
                     panic!("[internal error] reached phi without going through one of its predecessor blocks")

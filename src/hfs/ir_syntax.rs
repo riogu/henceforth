@@ -56,7 +56,7 @@ pub struct NameMap {
 struct RawBlock {
     id: BlockId,
     insts: Vec<RawInst>,
-    term: TerminatorInst,
+    term: Option<TerminatorInst>,
 }
 
 #[derive(Debug, Clone)]
@@ -1295,6 +1295,20 @@ pub fn syntax_term<S: Syntax>(s: &S, names: &NameMap) -> S::Output<TerminatorIns
     s.choice(vec![syntax_return(s, names), syntax_branch(s, names), syntax_jump(s, names)])
 }
 
+fn syntax_term_opt<S: Syntax>(s: &S, names: &NameMap) -> S::Output<Option<TerminatorInst>> {
+    s.choice(vec![
+        s.iso(
+            Iso::new(|t| Some(Some(t)), |opt: Option<TerminatorInst>| opt.clone()),
+            syntax_term(s, names),
+        ),
+        s.iso(
+            Iso::new(|_: ()| Some(None), |opt: Option<TerminatorInst>| if opt.is_none() { Some(()) } else { None }),
+            s.keyword("<no terminator>"),
+        ),
+    ])
+}
+
+
 fn syntax_raw_inst<S: Syntax>(s: &S, names: &NameMap) -> S::Output<RawInst> {
     let named = s.iso(
         Iso::new(
@@ -1327,7 +1341,7 @@ fn syntax_raw_inst<S: Syntax>(s: &S, names: &NameMap) -> S::Output<RawInst> {
 
 fn syntax_raw_block<S: Syntax>(s: &S, names: &NameMap) -> S::Output<RawBlock> {
     let iso = Iso::new(
-        |(id, insts, term): (BlockId, Vec<RawInst>, TerminatorInst)| Some(RawBlock { id, insts, term }),
+        |(id, insts, term): (BlockId, Vec<RawInst>, Option<TerminatorInst>)| Some(RawBlock { id, insts, term }),
         |rb| Some((rb.id, rb.insts, rb.term)),
     );
     s.iso(
@@ -1335,10 +1349,11 @@ fn syntax_raw_block<S: Syntax>(s: &S, names: &NameMap) -> S::Output<RawBlock> {
         s.product3(
             s.ignore_right(s.ignore_left(s.opt_whitespace(), s.block_name(names)), s.ignore_right(s.symbol(":"), s.newline())),
             s.sep_by(s.ignore_left(s.indent(), s.ignore_right(syntax_raw_inst(s, names), s.newline())), s.opt_whitespace()),
-            s.ignore_left(s.indent(), s.ignore_right(syntax_term(s, names), s.newline())),
+            s.ignore_left(s.indent(), s.ignore_right(syntax_term_opt(s, names), s.newline())),
         ),
     )
 }
+
 
 fn syntax_raw_function<S: Syntax>(s: &S, names: &NameMap) -> S::Output<RawFunction> {
     let iso = Iso::new(
@@ -1526,7 +1541,9 @@ fn parse_function<'a>(
             }
         }
 
-        arena.alloc_terminator_for(raw_block.term, raw_block.id);
+        if let Some(term) = raw_block.term {
+            arena.alloc_terminator_for(term, raw_block.id);
+        }
     }
 
     let entry_block = match entry_block {
@@ -1731,11 +1748,7 @@ pub fn print(func_ids: &[IrFuncId], arena: &IrArena) -> Option<String> {
                 insts.push(raw);
             }
 
-            let term = match terminator {
-                Some(id) => arena.get_term(id).clone(),
-                None => unimplemented!("TODO: add <no terminator>"),
-            };
-
+            let term = terminator.map(|id| arena.get_term(id).clone());
             blocks.push(RawBlock { id: *block_id, insts, term });
         }
 

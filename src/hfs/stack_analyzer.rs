@@ -139,6 +139,58 @@ impl AstArena {
                 }
                 Ok(())
             },
+            (
+                ElaboratedType::Array { hfs_type: actual_elem_type_id, length: actual_length, ptr_count: actual_ptr_count },
+                ElaboratedType::Array { hfs_type: expected_elem_type_id, length: expected_length, ptr_count: expected_ptr_count },
+            ) => {
+                if actual_ptr_count != expected_ptr_count {
+                    return stack_analyzer_error!(
+                        StackAnalyzerErrorKind::IncorrectPointerCount(*actual_ptr_count, *expected_ptr_count),
+                        self,
+                        span
+                    );
+                }
+
+                match expected_length {
+                    Some(ArrayLength::Resolved(expected_length_id)) => match self.get_expr(*expected_length_id) {
+                        Expression::Literal(Literal::Integer(expected_len)) => match actual_length {
+                            Some(ArrayLength::Resolved(actual_length_id)) => match self.get_expr(*actual_length_id) {
+                                Expression::Literal(Literal::Integer(actual_len)) => {
+                                    if *actual_len != *expected_len {
+                                        return stack_analyzer_error!(
+                                            StackAnalyzerErrorKind::TypeMismatch(
+                                                expected_type.get_repr(&self),
+                                                actual_type.get_repr(&self)
+                                            ),
+                                            self,
+                                            span
+                                        );
+                                    }
+                                },
+                                Expression::Literal(_) => {
+                                    panic!("[internal error] somehow got a non integer array length past the type checker")
+                                },
+                                _ => unimplemented!("non literal array lengths are currently unimplemented"),
+                            },
+                            Some(ArrayLength::Unresolved(_)) => {
+                                panic!("[internal error] somehow got an unresolved array length past the type checker")
+                            },
+                            // only happens if passing an already decayed array to another function
+                            None => {},
+                        },
+                        Expression::Literal(_) => {
+                            panic!("[internal error] somehow got a non integer array length past the type checker")
+                        },
+                        _ => unimplemented!("non literal array lengths are currently unimplemented"),
+                    },
+                    Some(ArrayLength::Unresolved(_)) => {
+                        panic!("[internal error] somehow got an unresolved array length past the type checker")
+                    },
+                    None => {},
+                }
+
+                self.compare_types(*actual_elem_type_id, *expected_elem_type_id, vec![*self.get_type_span(*actual_elem_type_id)])
+            },
             (actual, expected) if actual == expected => Ok(()),
             (actual, expected) => stack_analyzer_error!(
                 StackAnalyzerErrorKind::TypeMismatch(expected.get_repr(&self), actual.get_repr(&self)),
@@ -173,9 +225,9 @@ impl StackAnalyzer {
         diagnostic_info: Rc<DiagnosticInfo>,
     ) -> Result<(Vec<TopLevelId>, AstArena, ScopeStack), Box<dyn CompileError>> {
         let mut stack_parser = StackAnalyzer::new(unresolved.clone(), diagnostic_info);
-        for unresolved_type in unresolved.types[PRIMITIVE_TYPE_COUNT..].iter() {
-            let elaborated = stack_parser.elaborate(unresolved_type.clone())?;
-            stack_parser.arena.types.push(elaborated);
+        for type_id in PRIMITIVE_TYPE_COUNT..unresolved.types.len() {
+            let elaborated = stack_parser.elaborate(unresolved.get_type(TypeId(type_id)).clone())?;
+            stack_parser.arena.alloc_type(elaborated, unresolved.get_type_span(TypeId(type_id)));
         }
         let resolved_top_level = stack_parser.resolve_top_level(top_level)?;
         Ok((resolved_top_level, stack_parser.arena, stack_parser.scope_resolution_stack))

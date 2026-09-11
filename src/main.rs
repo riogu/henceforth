@@ -14,8 +14,9 @@ use henceforth::hfs::{
 #[command(author, version, about)]
 struct Args {
     source: PathBuf,
-    #[arg(short, long, default_value = "./a.out")]
-    output: PathBuf,
+    // NOTE: enable when cranelift backend is implemented
+    // #[arg(short, long, default_value = "./a.out")]
+    // output: PathBuf,
 }
 
 fn run() -> Result<(), Box<dyn CompileError>> {

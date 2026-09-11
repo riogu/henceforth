@@ -1,77 +1,93 @@
 # henceforth
 
-A statically-typed stack-based programming language exploring middle-end compiler design with SSA-form IR, CFG construction and dataflow-driven optimization.
+[![Build](https://github.com/riogu/henceforth/actions/workflows/rust.yml/badge.svg)](https://github.com/riogu/henceforth/actions/workflows/rust.yml)
+
+#### A statically-typed stack-based programming language with an imperative twist.
+
+> **Status:** work in progress. Version 1.0 coming soon.
+
+## What Is Henceforth?
+
+The stack-based language world can seem scary for most programmers. Henceforth aims to ease that transition by combining imperative language features with a stack-based approach.
+This is achieved by several features, including:
+1. Static typing and compile-time verified stack consistency
+2. Move and copy semantics for assignments and function calls, made explicit at every use
+3. Familiar control flow structure despite the stack-based core
+4. Simple type system with primitive types (`i32`, `f32`, `bool`, `str`) and arrays
+
+## How It Works
+
+Internally, Henceforth has a hand-written frontend (lexer, recursive-descent parser, two-pass stack/semantic analyzer) into an SSA intermediate representation akin to LLVM IR, where optimization passes (Mem2Reg, DCE, CleanCFG, etc.) run before interpretation. A Cranelift backend is also coming in the near future.
+
+## Getting Started
+
+The quickest way to try Henceforth is building the binary directly from source.
+Run the following commands:
+```
+$ git clone https://github.com/riogu/henceforth.git
+$ cd henceforth
+$ cargo install --path .
+```
+This will install the `henceforth` binary directly to your path.
+
+Then, you can write your code in a `.hfs` file and run the Henceforth interpreter:
+```v
+$ cat helloworld.hfs
+fn main: () -> () {
+    @("Hello, world!\n") &> print;
+}
+$ henceforth helloworld.hfs
+Hello, world!
+```
+
+When version 1.0 comes out, Henceforth will be available on `crates.io` and other package managers.
 
 ## Example
 
 ```rust
-fn print: (str) -> () { @pop } // this is an intrinsic (satisify the compiler for now)
-fn factorial: (i32) -> (i32) {
-    let n: i32;
-    let result: i32;
-    &= n;
-    @(1) &= result;
-    while @(n 1 >) {
-        @(result n *) &= result;
-        @(n 1 -) &= n;
-    }
-    @(result);
-}
+fn bubble_sort: ([]i32) -> ([]i32) {
+    let arr: []i32; &= arr;
+    let i: i32; @(0) &= i;
 
+    while @(i 5 !=) {
+        let j: i32; @(0) &= j;
+        while @(j 4 i - !=) {
+            if @(arr j [] arr j 1 + [] >) {
+                let tmp: i32; @(arr j []) &= tmp;
+                @(arr j 1 + [] j) [&]= arr;
+                @(tmp j 1 +) [&]= arr;
+            }
+            @(j 1 +) &= j;
+        }
+        @(i 1 +) &= i;
+    }
+    @(arr);
+}
 fn main: () -> () {
-    @(5) &> factorial;
-    if @(@dup 120 ==) {
-        @("factorial example\n") &> print;
-    }
-    @pop
+    let arr: [5]i32;
+    @(5 0) [&]= arr;
+    @(3 1) [&]= arr;
+    @(4 2) [&]= arr;
+    @(1 3) [&]= arr;
+    @(2 4) [&]= arr;
+    @(arr) &> bubble_sort;
+    &> print;
 }
 ```
-
-Stack blocks (`@(...)`) make data flow explicit. Values are pushed, manipulated, and consumed through stack operations rather than implicit variable binding. All branches must leave the stack in a consistent state, enforced at compile time.
-
-## Language
-
-**Types:** `i32`, `f32`, `bool`, `str`, pointers, and tuple types for function signatures.
-
-**Stack operations:** `@(expr)` pushes values, `@dup` duplicates, `@pop` discards, `@depth` introspects. `:=`/`:>` copy, `&=`/`&>` move.
-
-**Control flow:** `if`/`else if`/`else`, `while` loops with `break`/`continue`. Stack depth and types are verified across all control flow paths at compile time.
-
-**Functions:** Stack-based signatures `(params) -> (returns)` with function-scoped stacks.
-
-## Compiler Pipeline
-
-```
-Source → Lexer → Parser → Stack Analyzer → CFG Analyzer → MIR → Optimizer → Interpreter
-```
-
-The frontend is hand-written: lexer, recursive descent parser, two-pass stack analyzer for identifier resolution and type checking. The CFG analyzer lowers the AST to MIR, validating stack depth and types at control flow boundaries.
-
-## Middle-End
-
-The compiler's middle-end operates on an SSA-form MIR with explicit control flow graphs, backed by a generational arena (SlotMap) for stable instruction references across optimization passes.
-
-### Analysis Infrastructure
-
-- **Def-use chains:** per-function use-def computation with user tracking, RAUW support, and incremental user removal for worklist algorithms.
-- **Dominator tree:** Cooper-Harvey-Kennedy iterative algorithm, with dominance frontier computation for phi placement.
-- **Reverse postorder** traversal for forward dataflow analysis.
-
-### Optimization Passes
-
-- **Mem2Reg:** SSA construction via iterated dominance frontier phi insertion and dominator-tree-driven renaming. Promotes alloca/load/store chains to SSA values with phi nodes.
-- **Dead code elimination:** worklist-driven DCE using def-use chains. Removes unused instructions and propagates liveness through operands.
-- **Stale ID cleanup:** removes invalidated instruction references from basic blocks after transformation passes.
-
-### Planned
-
-- Aggressive dead code elimination (ADCE) using post-dominance and control dependence.
-- CFG simplification (redundant branch folding, empty block removal, block merging).
-- Constant propagation / SCCP.
-- Global value numbering.
-- Loop-invariant code motion.
-- Backend targeting Cranelift for native code generation.
-
 ## Documentation
 
-Language specification and usage docs at [riogu.github.io/henceforth](https://riogu.github.io/henceforth).
+Language reference and usage docs can be found [here](https://riogu.github.io/henceforth).
+
+## Command Line Usage
+
+Henceforth has a very simple CLI:
+```
+Usage: henceforth <SOURCE>
+```
+
+## Reporting a Bug
+
+If you find a bug, check the open issues to see if it has already been reported. If not, feel free to open a new issue.
+If you have a fix for the bug, you can open a pull request with your changes. Our team is always happy to help with anything and answer all questions.
+
+If your PR has been waiting for a while, you can ping @riogu or @joao-novo.

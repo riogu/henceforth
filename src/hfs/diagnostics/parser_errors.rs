@@ -1,11 +1,11 @@
-use std::{error::Error, fmt::Display, fs, path::PathBuf};
+use std::{fmt::Display, path::PathBuf};
 
 use colored::{ColoredString, Colorize, CustomColor};
 
 use crate::hfs::{
     Span, TokenKind, Type, UnresolvedAstArena, UnresolvedExpression, UnresolvedFunctionDeclaration, UnresolvedOperation,
     UnresolvedStatement, UnresolvedTopLevelId, UnresolvedType, UnresolvedVarDeclaration,
-    error::{CompileError, DebugInfo, Dumpable, number_length},
+    error::{CompileError, DebugInfo, Dumpable},
 };
 
 #[derive(Debug)]

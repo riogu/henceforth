@@ -1,10 +1,10 @@
-use std::{fmt::Display, fs, path::PathBuf};
+use std::{fmt::Display, path::PathBuf};
 
-use colored::{ColoredString, Colorize};
+use colored::ColoredString;
 
 use crate::hfs::{
     AstArena, IrArena, IrFuncId, Span,
-    error::{CompileError, DebugInfo, number_length},
+    error::{CompileError, DebugInfo},
     prettify_ir, print,
     stack_analyzer_errors::StackAnalyzerError,
 };

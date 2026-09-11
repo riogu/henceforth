@@ -1,15 +1,13 @@
 use std::{
-    error::Error,
     fmt::{self, Display},
-    fs,
     path::PathBuf,
 };
 
-use colored::{ColoredString, Colorize};
+use colored::ColoredString;
 
 use crate::hfs::{
     Span, Token, VALID_STACK_KEYWORDS,
-    error::{CompileError, DebugInfo, number_length},
+    error::{CompileError, DebugInfo},
 };
 
 #[derive(Debug)]

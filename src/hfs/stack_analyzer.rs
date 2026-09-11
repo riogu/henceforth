@@ -447,8 +447,8 @@ impl StackAnalyzer {
                                         }
                                         return stack_analyzer_error!(
                                             StackAnalyzerErrorKind::MismatchingStackDepths(
-                                                if_depth_after - if_depth_before,
-                                                else_depth_after - if_depth_before,
+                                                if_depth_after as i64 - if_depth_before as i64,
+                                                else_depth_after as i64 - if_depth_before as i64,
                                             ),
                                             &self.arena,
                                             merge_spans(else_body_spans)
@@ -492,7 +492,9 @@ impl StackAnalyzer {
                                     }
                                 }
                                 return stack_analyzer_error!(
-                                    StackAnalyzerErrorKind::ExpectedNetZeroStackEffectIfStmt(if_depth_after - if_depth_before),
+                                    StackAnalyzerErrorKind::ExpectedNetZeroStackEffectIfStmt(
+                                        if_depth_after as i64 - if_depth_before as i64
+                                    ),
                                     &self.arena,
                                     merge_spans(if_body_spans)
                                 );
@@ -510,15 +512,17 @@ impl StackAnalyzer {
                 }
             },
             UnresolvedStatement::While { body, cond } => {
+                // measured before the condition, since a full cycle (condition + body) must return
+                // here, not just to what the condition leaves once its own bool is popped. this is
+                // what lets a copy-mode condition call hand a value through to the body
+                let stack_depth_before = self.arena.hfs_stack.len();
+
                 let mut condition_statements = Vec::new();
                 for stmt in cond {
                     condition_statements.push(self.resolve_stmt(stmt)?);
                 }
 
                 let cond = self.arena.pop_or_error(self.unresolved_arena.get_unresolved_stmt_span(body))?;
-                // condition isnt included in the stack depth count since its popped when entering
-                // each while loop (our stack state is left right after the condition is popped)
-                let stack_depth_before = self.arena.hfs_stack.len();
 
                 let cond_type = self.arena.get_type_id_of_expr(cond)?;
                 self.arena.compare_types(
@@ -545,7 +549,9 @@ impl StackAnalyzer {
                             }
                         }
                         return stack_analyzer_error!(
-                            StackAnalyzerErrorKind::ExpectedNetZeroStackEffectWhileLoop(stack_depth_after - stack_depth_before),
+                            StackAnalyzerErrorKind::ExpectedNetZeroStackEffectWhileLoop(
+                                stack_depth_after as i64 - stack_depth_before as i64
+                            ),
                             &self.arena,
                             merge_spans(while_body_spans)
                         );

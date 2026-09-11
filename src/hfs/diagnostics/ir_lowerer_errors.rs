@@ -19,7 +19,7 @@ pub enum IrLowererErrorKind {
     StackUnderflow,
     ExpectedItemOnStack,
     ExpectedNetZeroStackEffectIfStmt(usize),
-    ExpectedNetZeroStackEffectWhileLoop(usize),
+    ExpectedNetZeroStackEffectWhileLoop(i64),
 }
 
 #[derive(Debug)]

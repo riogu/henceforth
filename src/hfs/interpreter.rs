@@ -352,6 +352,9 @@ impl Interpreter {
                     let RuntimeValue::Integer(i) = self.interpret_instruction(idx_inst) else {
                         panic!("[internal error] gep index must be an integer")
                     };
+                    if i < 0 {
+                        panic!("array index out of bounds: index is negative ({})", i);
+                    }
                     path.push(i as usize);
                 }
                 RuntimeValue::Address(target, path)

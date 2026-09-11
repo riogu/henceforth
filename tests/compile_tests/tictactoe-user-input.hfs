@@ -69,8 +69,7 @@ fn main: () -> () {
     @(board) &> print_board;
     // play the game
     let is_player1_turn: bool; @(false) &= is_player1_turn;
-    while @(board) &> game_not_ended {
-        @(board)
+    while @(board) :> game_not_ended {
         @("please input a move") &> print;
         if @(is_player1_turn) { 
             @(" (player X's turn):\n") &> print; @("X")

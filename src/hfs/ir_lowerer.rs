@@ -445,6 +445,9 @@ impl IrLowerer {
 
                 //--------------------------------------------------------------------------
                 // set up the context for lowering the while body
+                // measured before the condition, since a full cycle (condition + body) must
+                // return here, matching the same check (and same reasoning) in stack_analyzer.rs
+                let stack_depth_before = self.arena.hfs_stack.len();
                 self.ir_context.curr_insert_block = while_cond_block;
                 for stmt in &cond {
                     self.lower_stmt(*stmt, curr_block_context.clone())?;
@@ -474,7 +477,6 @@ impl IrLowerer {
                     stack_snapshots: vec![],
                 };
 
-                let stack_depth_before = self.arena.hfs_stack.len();
                 self.ir_context.curr_insert_block = while_body_block;
                 self.lower_stmt(body, curr_block_context)?;
 
@@ -482,7 +484,9 @@ impl IrLowerer {
                 let stack_depth_after = self.arena.hfs_stack.len();
                 if stack_depth_before != stack_depth_after {
                     return ir_lowerer_error!(
-                        IrLowererErrorKind::ExpectedNetZeroStackEffectWhileLoop(stack_depth_after - stack_depth_before),
+                        IrLowererErrorKind::ExpectedNetZeroStackEffectWhileLoop(
+                            stack_depth_after as i64 - stack_depth_before as i64
+                        ),
                         &self.arena,
                         Some(&self.ast_arena),
                         *self.ast_arena.get_stmt_span(body)

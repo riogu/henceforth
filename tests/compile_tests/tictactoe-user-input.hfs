@@ -1,0 +1,93 @@
+fn print_board: ([9]str) -> () {
+    let board: [9]str;
+    &= board;
+    let idx: i32; @(0) &= idx;
+    while @(idx 9 !=) {
+        if @(idx 3 % 0 ==) { @(" |-----------|\n") &> print; }
+
+        @(" | ") &> print; @(board idx []) &> print;
+
+        if @(idx 3 % 2 ==) { @(" |\n") &> print; }
+
+        @(idx 1 +) &= idx;
+    }
+    @(" |-----------|\n") &> print
+}
+fn player_win: ([9]str str) -> (bool) {
+    let player: str; &= player;
+    let board: [9]str; &= board;
+    @(
+      // horizontal win
+      board 0 [] player ==  board 1 [] player == && board 2 [] player == &&
+      board 3 [] player ==  board 4 [] player == && board 5 [] player == &&
+      board 6 [] player ==  board 7 [] player == && board 8 [] player == &&
+      // vertical win
+      board 0 [] player ==  board 3 [] player == && board 6 [] player == &&
+      board 1 [] player ==  board 4 [] player == && board 7 [] player == &&
+      board 2 [] player ==  board 5 [] player == && board 8 [] player == &&
+      // diagonal win
+      board 0 [] player ==  board 4 [] player == && board 8 [] player == &&
+      board 2 [] player ==  board 4 [] player == && board 6 [] player == &&
+      || || || || || || ||
+     )
+}
+
+fn game_not_ended: ([9]str) -> (bool) {
+    if @("X") &> player_win {
+        @(false)
+    } else if @("O") &> player_win {
+        @(false)
+    } else {
+        @pop @(true)
+    }
+}
+
+fn tic_tac_toe: ([9]str str i32) -> ([9]str) {
+    let board_pos: i32; @(1 -) &= board_pos; // where to play in the board
+    let player: str;    &= player; // "X" or "O"
+    let board: [9]str;  &= board;
+
+    if @(board board_pos [] " " !=) {
+        @("you tried assigning to an already filled position!\ntry again:\n") &> print;
+    } else {
+        @(player board_pos) [&]= board; // board[board_pos] = player;
+    }
+    @(board) :> print_board
+}
+
+fn main: () -> () {
+    let N: i32 @(9) &= N; // board size
+    let board: [9]str;
+
+    let idx: i32; @(0) &= idx;
+    while @(idx N !=) {
+        @(" " idx) [&]= board; // board[idx] = " ";
+        @(idx 1 +) &= idx;     // idx += 1;
+    }
+
+    @("\nBeginning Tic-Tac-Toe:\n\n") &> print;
+    @(board) &> print_board @("\n") &> print;
+    // play the game
+    let is_player1_turn: bool; @(false) &= is_player1_turn;
+    while @(board) &> game_not_ended {
+        @(board)
+        @("please input a move") &> print;
+        if @(is_player1_turn) { 
+            @(" (player X's turn):\n") &> print; @("X")
+        } else {
+            @(" (player O's turn):\n") &> print; @("O")
+        }
+        :> input_int &> tic_tac_toe &= board;
+        @(is_player1_turn !) &= is_player1_turn; // swap the player
+    }
+
+    @(board)
+    if @("X") &> player_win {
+        @("the winner was player 'X'!\n") 
+    } else if @("O") &> player_win {
+        @("the winner was player 'O'!\n") 
+    } else {
+        @pop @("no one won!\n")
+    }
+    &> print;
+}

@@ -287,7 +287,6 @@ impl IrLowerer {
             self.arena.alloc_block("if_end", self.ir_context.curr_func)
         } else {
             // validate that we aren't getting a different stack depth
-            dbg!(&stack_after_body);
             self.arena.compare_stacks(
                 &stack_after_body,
                 &curr_block_context.prev_stack_change,

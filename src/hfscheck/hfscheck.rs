@@ -386,7 +386,8 @@ mod assertion_tests {
     fn test_no_errors() {
         let path = PathBuf::from("tests/compile_tests/operations.hfs");
         let assertions = find_assertions(&path, fs::read_to_string(&path).expect("Could not read file."));
-        assert_eq!(assertions.len(), 0);
+        // 1 for the COMPILE directive
+        assert_eq!(assertions.len(), 1);
     }
 
     #[test]

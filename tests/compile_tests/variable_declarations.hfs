@@ -1,6 +1,0 @@
-fn main: () -> () {
-	let a: i32;
-	let b: f32;
-	let c: str;
-	let d: bool;
-}

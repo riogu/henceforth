@@ -1,3 +1,4 @@
+//? COMPILE
 fn no_return_type: (i32) -> () {
 	@pop;
 }

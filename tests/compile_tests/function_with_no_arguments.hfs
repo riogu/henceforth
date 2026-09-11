@@ -1,3 +1,4 @@
+//? COMPILE
 fn no_args: () -> (i32) {
 	@(4);
 }

@@ -1,5 +1,4 @@
-fn print: ([]i32) -> () { @pop }
-
+//? COMPILE
 fn bubble_sort: ([]i32) -> ([]i32) {
     let arr: []i32; &= arr;
     let i: i32; @(0) &= i;

@@ -1,7 +1,4 @@
-
-// builtin function
-fn print: (str) -> (str) {}
-
+//? COMPILE
 fn fizz_buzz: (i32) -> (str) {
 	if @(15 % 0 ==) {
 		@("fizzbuzz");
@@ -16,7 +13,6 @@ fn fizz_buzz: (i32) -> (str) {
 }
 
 fn main: () -> () {
-	@(67) &> fizz_buzz;
+	@(69) &> fizz_buzz;
 	&> print;
-	@pop
 }

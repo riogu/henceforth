@@ -1,3 +1,4 @@
+//? COMPILE
 fn main: () -> () {
 	let copy: i32;
 	let move: i32;

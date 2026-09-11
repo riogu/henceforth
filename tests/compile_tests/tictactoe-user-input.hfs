@@ -1,7 +1,7 @@
 fn print_board: ([9]str) -> () {
-    let board: [9]str;
-    &= board;
+    let board: [9]str; &= board;
     let idx: i32; @(0) &= idx;
+    @("\n") &> print;
     while @(idx 9 !=) {
         if @(idx 3 % 0 ==) { @(" |-----------|\n") &> print; }
 
@@ -11,7 +11,7 @@ fn print_board: ([9]str) -> () {
 
         @(idx 1 +) &= idx;
     }
-    @(" |-----------|\n") &> print
+    @(" |-----------|\n\n") &> print
 }
 fn player_win: ([9]str str) -> (bool) {
     let player: str; &= player;
@@ -48,7 +48,7 @@ fn tic_tac_toe: ([9]str str i32) -> ([9]str) {
     let board: [9]str;  &= board;
 
     if @(board board_pos [] " " !=) {
-        @("you tried assigning to an already filled position!\ntry again:\n") &> print;
+        @("you tried assigning to an already filled position! try again.\n") &> print;
     } else {
         @(player board_pos) [&]= board; // board[board_pos] = player;
     }
@@ -65,8 +65,8 @@ fn main: () -> () {
         @(idx 1 +) &= idx;     // idx += 1;
     }
 
-    @("\nBeginning Tic-Tac-Toe:\n\n") &> print;
-    @(board) &> print_board @("\n") &> print;
+    @("\nBeginning Tic-Tac-Toe:\n") &> print;
+    @(board) &> print_board;
     // play the game
     let is_player1_turn: bool; @(false) &= is_player1_turn;
     while @(board) &> game_not_ended {

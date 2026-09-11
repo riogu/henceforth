@@ -17,7 +17,7 @@ This is achieved by several features, including:
 
 ## How It Works
 
-Internally, Henceforth has a hand-written frontend (lexer, recursive-descent parser, two-pass stack/semantic analyzer) into an SSA intermediate representation akin to LLVM IR, where optimization passes (Mem2Reg, DCE, CleanCFG, etc.) run before interpretation. A Cranelift backend is also coming in the near future.
+Internally, Henceforth has a hand-written frontend (lexer, recursive-descent parser, two-pass stack/semantic analyzer) that compiles to an SSA intermediate representation akin to LLVM IR, where optimization passes (Mem2Reg, DCE, CleanCFG, etc.), which is ran before interpretation. A Cranelift backend is also coming in the near future as an alternative to the implemented interpreter, and it is the main intended target of the compiler (as it was designed with the goal of compiling a stack language, rather than interpreting it).
 
 ## Getting Started
 

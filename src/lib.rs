@@ -7,7 +7,9 @@ pub mod hfscheck {
 pub mod hfs {
     pub mod ast;
     // pub mod ast_interpreter;
+    pub mod backend;
     pub mod builtins;
+    pub mod data_layout;
     pub mod diagnostics;
     pub mod hfs_ir;
     pub mod interpreter;
@@ -26,7 +28,9 @@ pub mod hfs {
     pub mod unresolved_ast;
     pub mod utils;
     pub use ast::*;
+    pub use backend::*;
     pub use builtins::*;
+    pub use data_layout::*;
     pub use diagnostics::*;
     pub use hfs_ir::*;
     pub use interpreter::*;

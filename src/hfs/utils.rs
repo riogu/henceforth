@@ -87,5 +87,9 @@ pub fn run_until(
         return Ok(Rc::new(ir_arena));
     }
 
-    Ok(Rc::new(())) // Interpreter case
+    // Phase::Interpreter deliberately doesn't run the interpreter: some compile_tests fixtures
+    // (e.g. new_whiles.hfs) loop forever or block on stdin by design, since these tests only
+    // check that compilation succeeds. Actually running them needs curated fixtures/timeouts,
+    // which belongs with the parity-testing work, not here.
+    Ok(Rc::new(()))
 }

@@ -14,12 +14,17 @@ use henceforth::hfs::{
 #[command(author, version, about)]
 struct Args {
     source: PathBuf,
-    // NOTE: enable when cranelift backend is implemented
-    // #[arg(short, long, default_value = "./a.out")]
-    // output: PathBuf,
+    #[arg(short, long, default_value = "./a.out")]
+    output: PathBuf,
+    #[arg(long, value_enum, default_value = "interpret")]
+    backend: hfs::BackendKind,
+    #[arg(long)]
+    print_ir_pre_opt: bool,
+    #[arg(long)]
+    print_ir_post_opt: bool,
 }
 
-fn run() -> Result<(), Box<dyn CompileError>> {
+fn run() -> Result<i32, Box<dyn CompileError>> {
     let args = Args::parse();
     let file = hfs::File::new(args.source);
     let file_name = file.path.to_str().unwrap().to_string();
@@ -35,18 +40,25 @@ fn run() -> Result<(), Box<dyn CompileError>> {
     let (top_level_insts, mut ir_arena) =
         hfs::IrLowerer::lower_to_mir(top_level_nodes, ast_arena.clone(), diagnostic_info.clone())?;
 
-    // println!("\nIR before optimizations:{}", IrLowererError::dump_ast_and_ir(None, &ir_arena));
+    if args.print_ir_pre_opt {
+        println!("IR before optimizations:{}", IrLowererError::dump_ast_and_ir(None, &ir_arena));
+    }
+
     hfs::OptPipeline::run_iteratively(&mut hfs::O0::new(), &mut ir_arena);
-    // println!("IR after optimizations:{}", IrLowererError::dump_ast_and_ir(None, &ir_arena));
 
-    hfs::Interpreter::interpret(ir_arena, top_level_insts, scope_stack);
+    if args.print_ir_post_opt {
+        println!("IR after optimizations:{}", IrLowererError::dump_ast_and_ir(None, &ir_arena));
+    }
 
-    Ok(())
+    Ok(hfs::backend::run(args.backend, ir_arena, top_level_insts, scope_stack, Some(args.output)))
 }
 
 fn main() {
-    if let Err(e) = run() {
-        eprintln!("{}", e);
-        exit(1);
+    match run() {
+        Ok(exit_code) => exit(exit_code),
+        Err(e) => {
+            eprintln!("{}", e);
+            exit(1);
+        },
     }
 }

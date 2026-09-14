@@ -9,6 +9,11 @@ slotmap = { version = "1.0" }
 indexmap  = { version = "2.13" }
 colored = "3.1.1"
 libtest-mimic = "0.8.2"
+cranelift-codegen = { version = "0.128.4", optional = true }
+cranelift-frontend = { version = "0.128.4", optional = true }
+cranelift-module = { version = "0.128.4", optional = true }
+cranelift-object = { version = "0.128.4", optional = true }
+cranelift-native = { version = "0.128.4", optional = true }
 
 [dev-dependencies]
 pretty_assertions = "1.4.1"
@@ -31,3 +36,13 @@ harness = false
 name = "compile_tests"
 path = "tests/compile_tests.rs"
 harness = false
+
+[features]
+default = ["cranelift"]
+cranelift = [
+  "dep:cranelift-codegen",
+  "dep:cranelift-frontend",
+  "dep:cranelift-module",
+  "dep:cranelift-object",
+  "dep:cranelift-native",
+]

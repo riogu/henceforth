@@ -170,7 +170,14 @@ impl AstArena {
                                 Expression::Literal(_) => {
                                     panic!("[internal error] somehow got a non integer array length past the type checker")
                                 },
-                                _ => unimplemented!("non literal array lengths are currently unimplemented"),
+                                _ => return stack_analyzer_error!(
+                                        StackAnalyzerErrorKind::TypeMismatch(
+                                            expected_type.get_repr(&self),
+                                            actual_type.get_repr(&self)
+                                        ),
+                                        self,
+                                        span
+                                    ),
                             },
                             Some(ArrayLength::Unresolved(_)) => {
                                 panic!("[internal error] somehow got an unresolved array length past the type checker")
@@ -181,7 +188,36 @@ impl AstArena {
                         Expression::Literal(_) => {
                             panic!("[internal error] somehow got a non integer array length past the type checker")
                         },
-                        _ => unimplemented!("non literal array lengths are currently unimplemented"),
+                        expected_expr => match actual_length {
+                            Some(ArrayLength::Unresolved(_)) => {
+                                panic!("[internal error] somehow got an unresolved array length past the type checker")
+                            },
+                            Some(ArrayLength::Resolved(actual_expr_id)) => match self.get_expr(*actual_expr_id) {
+                                Expression::Literal(Literal::Integer(_)) => return stack_analyzer_error!(
+                                        StackAnalyzerErrorKind::TypeMismatch(
+                                            expected_type.get_repr(&self),
+                                            actual_type.get_repr(&self)
+                                        ),
+                                        self,
+                                        span
+                                    ),
+                                Expression::Literal(_) => {
+                                    panic!("[internal error] somehow got a non integer array length past the type checker")
+                                },
+                                actual_expr => if *expected_expr != *actual_expr {
+                                    return stack_analyzer_error!(
+                                        StackAnalyzerErrorKind::TypeMismatch(
+                                            expected_type.get_repr(&self),
+                                            actual_type.get_repr(&self)
+                                        ),
+                                        self,
+                                        span
+                                    );
+                                    
+                                }
+                            },
+                            None => {},
+                        },
                     },
                     Some(ArrayLength::Unresolved(_)) => {
                         panic!("[internal error] somehow got an unresolved array length past the type checker")
@@ -334,9 +370,17 @@ impl StackAnalyzer {
         let unresolved_var = self.unresolved_arena.get_unresolved_var(id).clone();
         let span = self.unresolved_arena.get_unresolved_var_span(id);
 
-        // we check if the declaration is an array type so we can resolve its length
         let hfs_type =
             self.resolve_type(unresolved_var.hfs_type, span, |name| StackAnalyzerErrorKind::ArrayLengthMustBeCompileTime(name))?;
+
+        if let ElaboratedType::Array { length: None, .. } = self.arena.get_type(hfs_type) {
+            return stack_analyzer_error!(
+                StackAnalyzerErrorKind::ArrayLengthMustExistOnVarDeclaration(self.arena.get_type(hfs_type).get_repr(&self.arena)),
+                &self.arena,
+                *self.arena.get_type_span(hfs_type)
+            );
+        }
+        
         let var_id = self.arena.alloc_var(VarDeclaration { name: unresolved_var.name.clone(), hfs_type }, span);
         self.scope_resolution_stack.push_variable(&unresolved_var.name, var_id);
         Ok(var_id)
@@ -1282,10 +1326,10 @@ impl StackAnalyzer {
                 let length_span = self.arena.get_expr_span(resolved_expr_id).clone();
                 self.arena.pop_or_error(length_span.clone())?;
 
-                if *self.arena.get_expr_provenance(resolved_expr_id) != ExprProvenance::CompiletimeValue {
-                    let name = self.arena.get_type(hfs_type).get_repr(&self.arena);
-                    return stack_analyzer_error!(error_fn(name), &self.arena, length_span);
-                }
+                // if *self.arena.get_expr_provenance(resolved_expr_id) != ExprProvenance::CompiletimeValue {
+                //     let name = self.arena.get_type(hfs_type).get_repr(&self.arena);
+                //     return stack_analyzer_error!(error_fn(name), &self.arena, length_span);
+                // }
 
                 Ok(self.arena.alloc_type(
                     ElaboratedType::Array { hfs_type, length: Some(ArrayLength::Resolved(resolved_expr_id)), ptr_count },

@@ -286,6 +286,8 @@ impl AstArena {
         // for resolving arrays, we need to check if their lengths are EQUIVALENT, since they can have different ExprIds
         if let ElaboratedType::Array { hfs_type: elem_type, length: Some(ArrayLength::Resolved(expr_id)), ptr_count } = hfs_type {
             if let Some(existing_id) = self.find_equivalent_array_type(elem_type, expr_id, ptr_count) {
+                // we update the span so we can get better errors
+                self.type_spans[existing_id.0] = span;
                 return existing_id;
             }
             return self.alloc_type_uncached(hfs_type, span);
@@ -296,6 +298,7 @@ impl AstArena {
             if let Some(existing_id) = self.types.iter().enumerate().find_map(|(idx, hfs_type)| match hfs_type {
                 ElaboratedType::Tuple { type_ids: found_ids, ptr_count: found_ptr_count } => {
                     if *type_ids == *found_ids && *found_ptr_count == *ptr_count {
+                        self.type_spans[idx] = span;
                         Some(TypeId(idx))
                     } else {
                         None
@@ -324,12 +327,26 @@ impl AstArena {
                         match self.get_expr(*other_expr) {
                             Expression::Literal(Literal::Integer(other_len)) if other_len == len => Some(TypeId(idx)),
                             Expression::Literal(_) => panic!("[internal error] tried to alloc array before typechecking"),
-                            _ => unimplemented!(),
+                            _ => None,
                         },
                     _ => None,
                 }),
             Expression::Literal(_) => panic!("[internal error] tried to alloc array before typechecking"),
-            _ => unimplemented!(),
+            expr => 
+                self.types.iter().enumerate().find_map(|(idx, hfs_type)| match hfs_type {
+                    ElaboratedType::Array { hfs_type: t, length: Some(ArrayLength::Resolved(other_expr)), ptr_count: p }
+                        if *t == elem_type && *p == ptr_count =>
+                        match self.get_expr(*other_expr) {
+                            Expression::Literal(Literal::Integer(_)) => None,
+                            Expression::Literal(_) => panic!("[internal error] tried to alloc array before typechecking"),
+                            other_expr => if *other_expr == *expr {
+                                Some(TypeId(idx))
+                            } else {
+                                None
+                            },
+                        },
+                    _ => None,
+                }),
         }
     }
     pub fn get_stack_change(&self, stack_start: Vec<ExprId>, mut hfs_stack: Vec<ExprId>) -> (Vec<ExprId>, usize) {

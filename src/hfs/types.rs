@@ -135,7 +135,8 @@ impl Type for ElaboratedType {
                             Some(ArrayLength::Resolved(id)) => match arena.get_expr(*id) {
                                 Expression::Literal(Literal::Integer(n)) => n.to_string(),
                                 Expression::Literal(_) => panic!("[internal error] typechecking array before its length"),
-                                _ => unimplemented!(),
+                                _ if *arena.get_expr_provenance(*id) == ExprProvenance::CompiletimeValue => "unknown".to_string(),
+                                _ => "unknown".to_string(),
                             },
                             Some(ArrayLength::Unresolved(_)) => format!("UNRESOLVED_LENGTH"),
                             None => String::new(),

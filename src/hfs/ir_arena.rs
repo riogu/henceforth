@@ -310,6 +310,54 @@ impl IrArena {
                 }
                 Ok(())
             },
+            (
+                IrType::Array { hfs_type: actual_elem_type_id, length: actual_length, ptr_count: actual_ptr_count },
+                IrType::Array { hfs_type: expected_elem_type_id, length: expected_length, ptr_count: expected_ptr_count },
+            ) => {
+                if actual_ptr_count != expected_ptr_count {
+                    return ir_lowerer_error!(
+                        IrLowererErrorKind::IncorrectPointerCount(*actual_ptr_count, *expected_ptr_count),
+                        self,
+                        None,
+                        span
+                    );
+                }
+
+                match expected_length {
+                    Some(expected_length_id) => match self.get_inst(*expected_length_id) {
+                        Instruction::Literal { literal: Literal::Integer(expected_len), .. } =>  match actual_length {
+                            Some(actual_length_id) => match self.get_inst(*actual_length_id) {
+                                Instruction::Literal { literal: Literal::Integer(actual_len), .. } => {
+                                    if *actual_len != *expected_len {
+                                        return ir_lowerer_error!(
+                                            IrLowererErrorKind::MismatchingTypes(
+                                                expected_type.get_repr(&self),
+                                                actual_type.get_repr(&self)
+                                            ),
+                                            self,
+                                            None,
+                                            span
+                                        );
+                                    }
+                                },
+                                Instruction::Literal { .. } => {
+                                    panic!("[internal error] somehow got a non integer array length past the type checker")
+                                },
+                                _ => unimplemented!("non literal array lengths are currently unimplemented"),
+                            },
+                            // only happens if passing an already decayed array to another function
+                            None => {},
+                        },
+                        Instruction::Literal { .. } => {
+                            panic!("[internal error] somehow got a non integer array length past the type checker")
+                        },
+                        _ => unimplemented!("non literal array lengths are currently unimplemented"),
+                    },
+                    None => {},
+                }
+
+                self.compare_types(*actual_elem_type_id, *expected_elem_type_id, vec![span])
+            },
             (actual, expected) if actual == expected => Ok(()),
             (actual, expected) => ir_lowerer_error!(
                 IrLowererErrorKind::MismatchingTypes(actual.get_repr(&self), expected.get_repr(&self)),

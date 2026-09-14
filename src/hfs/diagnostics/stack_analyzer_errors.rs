@@ -46,6 +46,7 @@ pub enum StackAnalyzerErrorKind {
     ArrayLengthMustBeCompileTime(String),
     ArrayLengthMustBeCompileTimeOnParameter,
     ArrayLengthMustBeCompileTimeOnReturnType,
+    ArrayLengthMustExistOnVarDeclaration(String)
 }
 
 #[derive(Debug)]
@@ -121,6 +122,7 @@ impl CompileError for StackAnalyzerError {
                 (format!("found runtime value on length expression for parameter"), String::new()),
             StackAnalyzerErrorKind::ArrayLengthMustBeCompileTimeOnReturnType =>
                 (format!("found runtime value on length expression for return type"), String::new()),
+            StackAnalyzerErrorKind::ArrayLengthMustExistOnVarDeclaration(actual) => (format!("array variable must have a known length, found {}", actual), String::new()),
         }
     }
 

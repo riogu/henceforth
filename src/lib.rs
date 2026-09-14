@@ -9,6 +9,8 @@ pub mod hfs {
     // pub mod ast_interpreter;
     pub mod backend;
     pub mod builtins;
+    pub mod cranelift_object_backend;
+    pub mod cranelift_translate;
     pub mod data_layout;
     pub mod diagnostics;
     pub mod hfs_ir;
@@ -30,6 +32,8 @@ pub mod hfs {
     pub use ast::*;
     pub use backend::*;
     pub use builtins::*;
+    pub use cranelift_object_backend::*;
+    pub use cranelift_translate::*;
     pub use data_layout::*;
     pub use diagnostics::*;
     pub use hfs_ir::*;

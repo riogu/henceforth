@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use crate::hfs::{Interpreter, IrArena, IrTopLevelId, ScopeStack};
+use crate::hfs::{Interpreter, IrArena, IrTopLevelId, ScopeStack, cranelift_object_backend};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
 pub enum BackendKind {
@@ -15,9 +15,14 @@ pub fn run(kind: BackendKind, arena: IrArena, top_level_insts: Vec<IrTopLevelId>
             0
         },
         BackendKind::Cranelift => {
-            let _ = output;
-            eprintln!("the cranelift backend is not implemented yet");
-            1
+            let output = output.expect("[internal error] --backend cranelift requires an output path");
+            match cranelift_object_backend::compile_and_link(&arena, &output) {
+                Ok(code) => code,
+                Err(e) => {
+                    eprintln!("cranelift backend error: {e}");
+                    1
+                },
+            }
         },
     }
 }

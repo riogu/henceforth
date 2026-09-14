@@ -200,6 +200,24 @@ impl Interpreter {
         call func, (1 2 3);
     }
     */
+    // an array's length here comes from array_len, a real operand of the Alloca that
+    // optimizations track and rewrite like any other, not from IrType::Array.length: that field is
+    // just a plain value sitting in the type table, invisible to DCE/Mem2Reg, so once its source
+    // variable gets promoted it can end up pointing at an instruction that's already been deleted
+    fn default_value_for_alloca(&mut self, hfs_type: &IrType, array_len: InstId) -> RuntimeValue {
+        let IrType::Array { hfs_type: elem_type_id, .. } = hfs_type else {
+            return RuntimeValue::default(hfs_type, &self.arena);
+        };
+        let RuntimeValue::Integer(len) = self.interpret_instruction(array_len) else {
+            panic!("[internal error] array length must evaluate to an integer")
+        };
+        if len < 0 {
+            panic!("array length is negative ({})", len);
+        }
+        let elem_type = self.arena.get_type(*elem_type_id).clone();
+        RuntimeValue::Array(vec![RuntimeValue::default(&elem_type, &self.arena); len as usize])
+    }
+
     fn call_declared_function(&mut self, func_id: IrFuncId, args: Vec<RuntimeValue>) -> Vec<RuntimeValue> {
         let func = self.arena.get_func(func_id);
         if let Some(builtin) = find_builtin(&func.name).map(|spec| spec.builtin) {
@@ -359,9 +377,10 @@ impl Interpreter {
                 }
                 RuntimeValue::Address(target, path)
             },
-            Instruction::Alloca { type_id, .. } => {
+            Instruction::Alloca { type_id, array_len, .. } => {
                 let ty = self.arena.get_type(*type_id).clone();
-                let default_val = RuntimeValue::default(&ty, &self.arena);
+                let array_len = *array_len;
+                let default_val = self.default_value_for_alloca(&ty, array_len);
                 self.memory.insert(inst_id, default_val);
                 RuntimeValue::Address(inst_id, vec![])
             },

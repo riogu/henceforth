@@ -43,7 +43,7 @@ pub trait CompileError: Display + Debug {
         let mut error_pointer = " ".repeat(self.get_span().start.col - 1);
         error_pointer.push_str(format!("{} {}", "^".repeat(error_pointer_size), self.message().1).as_str());
         let mut error_msg = format!(
-            "{} {}\n{} {} {}\n{} {} {}\n",
+            "{} {}\n{} {} {}\n{} {} {}",
             " ".repeat(number_length(self.get_span().end.line)),
             "|".blue().bold(),
             self.get_span().start.line.to_string().blue().bold(),

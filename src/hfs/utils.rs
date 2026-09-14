@@ -87,5 +87,5 @@ pub fn run_until(
         return Ok(Rc::new(ir_arena));
     }
 
-    Ok(Rc::new(())) // Interpreter case
+    Ok(Rc::new(()))
 }

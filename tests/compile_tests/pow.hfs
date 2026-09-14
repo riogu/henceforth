@@ -1,0 +1,19 @@
+//? COMPILE
+fn pow: (i32 i32) -> (i32) {
+    let exp: i32;  &= exp;   // `&=` pops the top of the stack, so the
+    let base: i32; &= base;  // last argument binds first
+
+    let i: i32; @(0) &= i;   // `@( ... )` is a stack expression, in postfix
+
+    @(1)  // begin accumulating the result on the stack
+    while @(i exp !=) {
+        @(base *)        // acc *= base (we never name the accumulator)
+        @(i 1 +)  &= i;  // i += 1
+    }
+    // the accumulator is still sitting on the stack, and whatever
+    // the body leaves behind is the return value
+}
+
+fn main: () -> () {
+    @(2 10) &> pow; @pop
+}

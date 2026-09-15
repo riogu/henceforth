@@ -39,3 +39,21 @@ pub fn const_array_len(length: Option<InstId>, arena: &IrArena) -> Option<u32> {
         _ => None,
     }
 }
+
+// lays out a sequence of possibly differently-typed values one after another, each at its own
+// natural alignment - like a plain, unpacked struct. Used for a function's StructReturn buffer,
+// where several logically separate return values are bundled into one caller-provided block of
+// memory. Returns each value's offset, the buffer's total size, and its required alignment.
+pub fn sequential_layout(type_ids: &[TypeId], arena: &IrArena) -> (Vec<u32>, u32, u32) {
+    let mut offsets = Vec::with_capacity(type_ids.len());
+    let mut cursor: u32 = 0;
+    let mut max_align: u32 = 1;
+    for &type_id in type_ids {
+        let align = align_of(type_id, arena);
+        max_align = max_align.max(align);
+        cursor = cursor.div_ceil(align) * align;
+        offsets.push(cursor);
+        cursor += size_of(type_id, arena);
+    }
+    (offsets, cursor, max_align)
+}

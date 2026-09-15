@@ -1,0 +1,14 @@
+//? COMPILE
+// a function returning more values than fit in registers needs Cranelift's StructReturn
+// convention (a caller-provided buffer) instead of a native multi-value return - and mixing
+// scalar types here exercises the buffer's field-by-field alignment, not just its size.
+fn mixed: () -> (i32 bool i32 bool) {
+    @(10 true 20 false)
+}
+
+fn main: () -> (i32) {
+    @() &> mixed;
+    @pop
+    @pop
+    @pop
+}

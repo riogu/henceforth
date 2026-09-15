@@ -1,0 +1,21 @@
+//? COMPILE
+// an accumulator threaded across loop iterations purely on the stack (never bound to a
+// named variable), combined with a `continue` that skips updating it on some iterations.
+// regression coverage for: the accumulator's multiply used to always read the pre-loop
+// value instead of the previous iteration's, and separately, the phi Mem2Reg places for
+// this shape can legitimately reference itself on the `continue` edge (a value never
+// dominance-invalid, since the loop header dominates its own back-edges - just something
+// the interpreter's naive phi caching couldn't resolve without recursing forever).
+fn main: () -> (i32) {
+    let i: i32; @(0) &= i;
+
+    @(0)
+    while @(i 6 !=) {
+        if @(i 2 ==) {
+            @(i 1 +) &= i;
+            continue;
+        }
+        @(i +)
+        @(i 1 +) &= i;
+    }
+}

@@ -1,0 +1,20 @@
+//? COMPILE
+// a named variable that's only reassigned on some loop iterations (not the one that
+// `continue`s), so Mem2Reg's phi for it at the loop header has an incoming edge that's
+// itself again on the `continue` predecessor - the same shape as
+// while_stack_value_continue.hfs, but through a real `let` variable instead of a stack
+// value, to cover the more general case of Mem2Reg producing this pattern at all.
+fn main: () -> (i32) {
+    let i: i32; @(0) &= i;
+    let acc: i32; @(0) &= acc;
+
+    while @(i 6 !=) {
+        if @(i 2 ==) {
+            @(i 1 +) &= i;
+            continue;
+        }
+        @(acc i +) &= acc;
+        @(i 1 +) &= i;
+    }
+    @(acc)
+}

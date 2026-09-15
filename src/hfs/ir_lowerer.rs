@@ -26,6 +26,12 @@ pub struct BlockContext {
     // we use this to track what the stack is for each construct
     // such as if statements. we build it up on the first branch, and then after that we compare
     // the new branches with the first one, for the same context
+    // (alloca, value loaded from it at loop entry) for each value the nearest enclosing while
+    // loop carries on the stack across iterations. a `continue` needs this to store the
+    // current value back before jumping, same as the loop body's own natural end does -
+    // nested constructs (if/else, ...) must thread this through unchanged from their own
+    // curr_block_context, same as continue_to_block/break_to_block
+    loop_temps: Vec<(InstId, InstId)>,
 }
 
 #[derive(Debug, Default)]
@@ -193,6 +199,7 @@ impl IrLowerer {
             end_block: None,
             prev_stack_change: vec![],
             stack_snapshots: vec![],
+            loop_temps: vec![],
         };
 
         self.lower_stmt(body, curr_block_context)?;
@@ -298,6 +305,26 @@ impl IrLowerer {
         Ok((if_end_block, stack_after_body))
     }
 
+    // Stores each of a while loop's stack-carried values back into its temp alloca, but only
+    // for the slots that actually changed this iteration (still equal to the value loaded at
+    // loop entry means the body never touched that slot). Skipping the store for an untouched
+    // slot matters: it's exactly why a named variable that's never reassigned inside a loop
+    // never ends up with a pointless phi either - Mem2Reg's phi placement is driven by where
+    // stores happen, so an alloca with only its one pre-loop store never gets a phi at all.
+    // Called both at the natural end of the loop body and from a `continue`, so a value
+    // carried across iterations behaves the same regardless of which edge loops back.
+    fn store_changed_loop_temps(&mut self, loop_temps: &[(InstId, InstId)], span: &Span) {
+        let current_stack = self.arena.hfs_stack.clone();
+        for (&(alloca, loaded_value), &current_val) in loop_temps.iter().zip(&current_stack) {
+            if current_val != loaded_value {
+                self.arena.alloc_inst_for(
+                    Instruction::Store { span: span.clone(), address: alloca, value: current_val },
+                    self.ir_context.curr_insert_block,
+                );
+            }
+        }
+    }
+
     pub fn generate_merge_phis(&mut self, if_end_block: BlockId, stack_snapshots: &[(BlockId, Vec<InstId>)], span: &Span) {
         // to solve stack balancing, we keep track of the entire stack across branches
         // then, we compare what changed from one branch to the other
@@ -380,6 +407,7 @@ impl IrLowerer {
                             let curr_block_context = BlockContext {
                                 continue_to_block: curr_block_context.continue_to_block,
                                 break_to_block: curr_block_context.break_to_block,
+                                loop_temps: curr_block_context.loop_temps.clone(),
                                 end_block: Some(if_end_block),
                                 prev_stack_change: stack_after_if_body,
                                 stack_snapshots: stack_snapshots.clone(),
@@ -438,17 +466,60 @@ impl IrLowerer {
                 let while_body_block = self.arena.alloc_block("while_body", self.ir_context.curr_func);
                 let while_end_block = self.arena.alloc_block("while_end", self.ir_context.curr_func);
 
-                self.arena.alloc_terminator_for(
-                    TerminatorInst::Jump { span: span.clone(), target: while_cond_block },
-                    self.ir_context.curr_insert_block,
-                ); // finish the previous block with a jump
+                let pre_loop_block = self.ir_context.curr_insert_block;
 
                 //--------------------------------------------------------------------------
                 // set up the context for lowering the while body
                 // measured before the condition, since a full cycle (condition + body) must
                 // return here, matching the same check (and same reasoning) in stack_analyzer.rs
                 let stack_depth_before = self.arena.hfs_stack.len();
+
+                // A value threaded across loop iterations purely on the stack (not through a
+                // named `let` variable) still needs somewhere to live between iterations - so
+                // give it a real alloca/store/load, exactly like a `let` variable gets, instead
+                // of hand-building a phi here. Mem2Reg already knows how to place a correct phi
+                // for an arbitrary CFG - continue included - so this reuses that instead of
+                // duplicating a weaker version of it.
+                let pre_loop_stack = self.arena.hfs_stack.clone();
+                let entry_block = self.arena.get_func(self.ir_context.curr_func).entry_block;
+                let mut loop_allocas = Vec::new();
+                for &pre_val in &pre_loop_stack {
+                    let type_id = self.arena.get_type_id_of_inst(pre_val)?;
+                    let one = self.arena.alloc_inst_for(Instruction::Literal { span: span.clone(), literal: Literal::Integer(1) }, entry_block);
+                    let alloca = self.arena.alloc_inst_for(Instruction::Alloca { span: span.clone(), type_id, array_len: one }, entry_block);
+                    self.arena.alloc_inst_for(Instruction::Store { span: span.clone(), address: alloca, value: pre_val }, pre_loop_block);
+                    loop_allocas.push((alloca, type_id));
+                }
+
+                self.arena.alloc_terminator_for(
+                    TerminatorInst::Jump { span: span.clone(), target: while_cond_block },
+                    pre_loop_block,
+                ); // finish the previous block with a jump
+
                 self.ir_context.curr_insert_block = while_cond_block;
+                // load the current per-iteration value(s) back onto the stack so the
+                // condition/body see them like any other value
+                let mut loop_stack = Vec::new();
+                let mut loop_temps = Vec::new();
+                for (i, &pre_val) in pre_loop_stack.iter().enumerate() {
+                    let (alloca, type_id) = loop_allocas[i];
+                    let load = self.arena.alloc_inst_for(Instruction::Load { span: span.clone(), address: alloca, type_id }, while_cond_block);
+                    // lower_expr caches ExprId -> InstId (see its own comment on why), and a
+                    // stack reference inside the loop resolves through that cache to whichever
+                    // expression produced it - pre-loop, that's something from before the loop
+                    // even started. Overwriting arena.hfs_stack alone doesn't reach that: the
+                    // cache has to be redirected too, or every use inside the loop keeps
+                    // resolving to the stale pre-loop value instead of this load.
+                    for cached_id in self.lowered_expr_cache.values_mut() {
+                        if *cached_id == pre_val {
+                            *cached_id = load;
+                        }
+                    }
+                    loop_stack.push(load);
+                    loop_temps.push((alloca, load));
+                }
+                self.arena.hfs_stack = loop_stack;
+
                 for stmt in &cond {
                     self.lower_stmt(*stmt, curr_block_context.clone())?;
                 }
@@ -475,6 +546,7 @@ impl IrLowerer {
                     end_block: None,
                     prev_stack_change: vec![],
                     stack_snapshots: vec![],
+                    loop_temps: loop_temps.clone(),
                 };
 
                 self.ir_context.curr_insert_block = while_body_block;
@@ -492,14 +564,29 @@ impl IrLowerer {
                         *self.ast_arena.get_stmt_span(body)
                     );
                 }
+
+                // same store-only-if-changed rule as a `continue` uses (see
+                // store_changed_loop_temps) - this is just the loop's other back-edge, the
+                // natural fall-through at the end of the body
+                self.store_changed_loop_temps(&loop_temps, &span);
+
                 if self.arena.get_block(self.ir_context.curr_insert_block).terminator.is_none() {
                     self.arena.alloc_terminator_for(
-                        TerminatorInst::Jump { span, target: while_cond_block },
+                        TerminatorInst::Jump { span: span.clone(), target: while_cond_block },
                         self.ir_context.curr_insert_block,
                     );
                 }
+
                 // dont forget to put the context where it should be after we are done with the while loop
                 self.ir_context.curr_insert_block = while_end_block;
+                // whatever's now in the temps is the loop's final value(s), whether we looped
+                // zero or many times - Mem2Reg turns this load into the correct phi on its own
+                let mut final_stack = Vec::new();
+                for &(alloca, type_id) in &loop_allocas {
+                    let load = self.arena.alloc_inst_for(Instruction::Load { span: span.clone(), address: alloca, type_id }, while_end_block);
+                    final_stack.push(load);
+                }
+                self.arena.hfs_stack = final_stack;
                 Ok(())
                 //--------------------------------------------------------------------------
             },
@@ -570,6 +657,10 @@ impl IrLowerer {
             Statement::Continue => {
                 // the entry_block is meant to be the block that we came from to start this current
                 // context. its meant to allow the start of the next iteration
+                //
+                // a stack-carried value has to be stored back into its loop temp here too, same
+                // as the loop body's natural end does - this is just the loop's other back-edge
+                self.store_changed_loop_temps(&curr_block_context.loop_temps, &span);
                 self.arena.alloc_terminator_for(
                     TerminatorInst::Jump {
                         span,

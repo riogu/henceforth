@@ -253,10 +253,15 @@ impl Interpreter {
             for inst_id in block.instructions.clone() {
                 // Invalidate cached values for this block's instructions
                 // so that loads and operations are re-evaluated on each visit.
-                if !matches!(self.arena.get_inst(inst_id), Instruction::Parameter { .. } | Instruction::ReturnValue { .. }) {
+                let should_invalidate = match self.arena.get_inst(inst_id) {
                     // parameters should only be interpreted once at the start of a block
                     // return values are bound by function calls which means we never wanna invalidate them from the cache
                     // as each function call overwrites them correctly
+                    Instruction::Parameter { .. } | Instruction::ReturnValue { .. } => false,
+                    Instruction::Phi { incoming, .. } => incoming.get(&self.curr_call_frame().prev_block_id) != Some(&inst_id),
+                    _ => true,
+                };
+                if should_invalidate {
                     self.curr_call_frame_mut().inst_values.remove(&inst_id);
                 }
 

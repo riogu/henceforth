@@ -78,6 +78,11 @@ fn main: () -> () {
 
 Language reference and usage docs can be found [here](https://riogu.github.io/henceforth).
 
+## Contributing
+
+We are always happy to receive pull requests. If you want to contribute, you can start by looking at the open issues, and see if something interests you. Otherwise, feel free to open an issue to discuss a new feature with the maintainers.
+Contributing guidelines and details about the development and testing process can be found [here](./CONTRIBUTING.md).
+
 ## Command Line Usage
 
 Henceforth has a very simple CLI:

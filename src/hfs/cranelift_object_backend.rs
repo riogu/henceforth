@@ -55,9 +55,10 @@ fn link(obj_path: &Path, output: &Path) -> Result<(), String> {
 }
 
 fn find_linker() -> Result<String, String> {
-    ["cc", "clang", "gcc"]
-        .into_iter()
-        .find(|candidate| Command::new(candidate).arg("--version").output().is_ok())
-        .map(str::to_string)
-        .ok_or_else(|| "no system linker found (looked for cc, clang, gcc)".to_string())
+    for candidate in ["cc", "clang", "gcc"] {
+        if Command::new(candidate).arg("--version").output().is_ok() {
+            return Ok(candidate.to_string());
+        }
+    }
+    Err("no system linker found (looked for cc, clang, gcc)".to_string())
 }

@@ -50,19 +50,19 @@ fn make_signature(func: &IrFunction, arena: &IrArena, module: &dyn Module) -> ir
 // builtins (print, input_*) are IrFunctions in name/signature only - the real signature callers
 // see is the placeholder one in builtins.rs, and there's no real IR body to declare against.
 pub fn declare_all_functions(arena: &IrArena, module: &mut dyn Module) -> HashMap<IrFuncId, ClifFuncId> {
-    arena
-        .functions
-        .iter()
-        .filter(|(_, func)| find_builtin(&func.name).is_none())
-        .map(|(func_id, func)| {
-            let sig = make_signature(func, arena, module);
-            let linkage = if func.name == "main" { Linkage::Export } else { Linkage::Local };
-            let clif_id = module
-                .declare_function(&func.name, linkage, &sig)
-                .unwrap_or_else(|e| panic!("[cranelift backend] failed to declare '{}': {e}", func.name));
-            (func_id, clif_id)
-        })
-        .collect()
+    let mut func_ids = HashMap::new();
+    for (func_id, func) in arena.functions.iter() {
+        if find_builtin(&func.name).is_some() {
+            continue;
+        }
+        let sig = make_signature(func, arena, module);
+        let linkage = if func.name == "main" { Linkage::Export } else { Linkage::Local };
+        let clif_id = module
+            .declare_function(&func.name, linkage, &sig)
+            .unwrap_or_else(|e| panic!("[cranelift backend] failed to declare '{}': {e}", func.name));
+        func_ids.insert(func_id, clif_id);
+    }
+    func_ids
 }
 
 // Operation/Phi/Literal don't carry an explicit type_id (unlike Load/Alloca/Parameter/
@@ -105,7 +105,13 @@ fn try_infer_clif_type(inst_id: InstId, arena: &IrArena, visiting: &mut Vec<Inst
         | Instruction::GetElementPtr { type_id, .. } => Some(ir_type_to_clif(*type_id, arena)),
         Instruction::Phi { incoming, .. } => {
             visiting.push(inst_id);
-            let result = incoming.values().find_map(|&candidate| try_infer_clif_type(candidate, arena, visiting));
+            let mut result = None;
+            for &candidate in incoming.values() {
+                result = try_infer_clif_type(candidate, arena, visiting);
+                if result.is_some() {
+                    break;
+                }
+            }
             visiting.pop();
             result
         },
@@ -255,7 +261,10 @@ fn translate_instruction(
                 panic!("[cranelift backend] builtin '{}' isn't supported yet (see Phase 3)", builtin.name);
             }
             let func_ref = module.declare_func_in_func(func_ids[&func_id], builder.func);
-            let arg_vals: Vec<ir::Value> = args.iter().map(|a| values[a]).collect();
+            let mut arg_vals = Vec::new();
+            for a in &args {
+                arg_vals.push(values[a]);
+            }
             let call_inst = builder.ins().call(func_ref, &arg_vals);
             let results = builder.inst_results(call_inst).to_vec();
             for (retval_inst, result) in return_values.iter().zip(results) {
@@ -275,18 +284,17 @@ fn block_args_for(
     phi_order: &HashMap<BlockId, Vec<InstId>>,
     values: &HashMap<InstId, ir::Value>,
 ) -> Vec<ir::BlockArg> {
-    phi_order[&target]
-        .iter()
-        .map(|phi_inst| {
-            let Instruction::Phi { incoming, .. } = arena.get_inst(*phi_inst) else {
-                panic!("[internal error] phi_order must only contain Instruction::Phi")
-            };
-            let incoming_val = incoming
-                .get(&from)
-                .unwrap_or_else(|| panic!("[internal error] jump to a block whose phi has no entry for predecessor {from:?}"));
-            ir::BlockArg::from(values[incoming_val])
-        })
-        .collect()
+    let mut args = Vec::new();
+    for phi_inst in &phi_order[&target] {
+        let Instruction::Phi { incoming, .. } = arena.get_inst(*phi_inst) else {
+            panic!("[internal error] phi_order must only contain Instruction::Phi")
+        };
+        let incoming_val = incoming
+            .get(&from)
+            .unwrap_or_else(|| panic!("[internal error] jump to a block whose phi has no entry for predecessor {from:?}"));
+        args.push(ir::BlockArg::from(values[incoming_val]));
+    }
+    args
 }
 
 fn translate_terminator(
@@ -312,7 +320,10 @@ fn translate_terminator(
             let Instruction::Tuple { instructions, .. } = arena.get_inst(*return_tuple) else {
                 panic!("[internal error] a Return's return_tuple is always an Instruction::Tuple")
             };
-            let vals: Vec<ir::Value> = instructions.iter().map(|i| values[i]).collect();
+            let mut vals = Vec::new();
+            for i in instructions {
+                vals.push(values[i]);
+            }
             builder.ins().return_(&vals);
         },
         // matches the interpreter's own handling: this terminator is never expected to actually
@@ -330,7 +341,10 @@ pub fn translate_function(func_id: IrFuncId, arena: &IrArena, module: &mut dyn M
     let mut builder = FunctionBuilder::new(&mut clif_func, &mut fb_ctx);
 
     let block_ids = arena.get_blocks_in(func_id);
-    let clif_blocks: HashMap<BlockId, ir::Block> = block_ids.iter().map(|&id| (id, builder.create_block())).collect();
+    let mut clif_blocks = HashMap::new();
+    for &block_id in &block_ids {
+        clif_blocks.insert(block_id, builder.create_block());
+    }
 
     let mut values: HashMap<InstId, ir::Value> = HashMap::new();
     let mut phi_order: HashMap<BlockId, Vec<InstId>> = HashMap::new();

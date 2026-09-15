@@ -1,0 +1,15 @@
+//? COMPILE
+fn main: () -> (i32) {
+    let i: i32; @(0) &= i;
+    let acc: i32; @(0) &= acc;
+
+    while @(i 6 !=) {
+        if @(i 2 ==) {
+            @(i 1 +) &= i;
+            continue;
+        }
+        @(acc i +) &= acc;
+        @(i 1 +) &= i;
+    }
+    @(acc)
+}

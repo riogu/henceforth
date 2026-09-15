@@ -1,0 +1,14 @@
+//? COMPILE
+fn main: () -> (i32) {
+    let i: i32; @(0) &= i;
+
+    @(0)
+    while @(i 6 !=) {
+        if @(i 2 ==) {
+            @(i 1 +) &= i;
+            continue;
+        }
+        @(i +)
+        @(i 1 +) &= i;
+    }
+}

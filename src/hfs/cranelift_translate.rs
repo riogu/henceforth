@@ -9,7 +9,7 @@ use cranelift_module::{FuncId as ClifFuncId, Linkage, Module};
 
 use crate::hfs::{
     BlockId, InstId, Instruction, IrArena, IrFuncId, IrFunction, IrOperation, IrType, Literal, TerminatorInst, Type, TypeId,
-    cranelift_builtins::{BuiltinsContext, translate_builtin_call},
+    cranelift_builtins::{BuiltinsContext, data_ptr, declare_cstring, translate_builtin_call},
     data_layout, find_builtin,
 };
 
@@ -22,7 +22,7 @@ pub fn ir_type_to_clif(type_id: TypeId, arena: &IrArena) -> ir::Type {
         IrType::Int { .. } => ir::types::I32,
         IrType::Float { .. } => ir::types::F32,
         IrType::Bool { .. } => ir::types::I8,
-        IrType::String { .. } => panic!("[cranelift backend] strings aren't supported yet (see Phase 4)"),
+        IrType::String { .. } => ir::types::I128,
         IrType::Tuple { .. } => panic!("[cranelift backend] a Tuple type has no single Cranelift representation"),
         IrType::Array { .. } => panic!("[cranelift backend] arrays aren't supported yet (see Phase 5)"),
     }
@@ -37,10 +37,12 @@ fn return_type_ids(func: &IrFunction, arena: &IrArena) -> Vec<TypeId> {
 
 fn uses_struct_return(return_types: &[TypeId]) -> bool { return_types.len() > 1 }
 
+fn is_main(func: &IrFunction) -> bool { func.name == "main" }
+
 fn make_signature(func: &IrFunction, arena: &IrArena, module: &dyn Module) -> ir::Signature {
     let mut sig = module.make_signature();
     let return_types = return_type_ids(func, arena);
-    if uses_struct_return(&return_types) {
+    if !is_main(func) && uses_struct_return(&return_types) {
         sig.params.push(ir::AbiParam::special(module.target_config().pointer_type(), ir::ArgumentPurpose::StructReturn));
     }
     let IrType::Tuple { type_ids: param_types, .. } = arena.get_type(func.param_type) else {
@@ -49,7 +51,9 @@ fn make_signature(func: &IrFunction, arena: &IrArena, module: &dyn Module) -> ir
     for type_id in param_types {
         sig.params.push(ir::AbiParam::new(ir_type_to_clif(*type_id, arena)));
     }
-    if !uses_struct_return(&return_types) {
+    if is_main(func) {
+        sig.returns.push(ir::AbiParam::new(ir::types::I32));
+    } else if !uses_struct_return(&return_types) {
         for type_id in &return_types {
             sig.returns.push(ir::AbiParam::new(ir_type_to_clif(*type_id, arena)));
         }
@@ -94,7 +98,7 @@ fn try_infer_clif_type(inst_id: InstId, arena: &IrArena, visiting: &mut Vec<Inst
             Literal::Integer(_) => ir::types::I32,
             Literal::Float(_) => ir::types::F32,
             Literal::Bool(_) => ir::types::I8,
-            Literal::String(_) => panic!("[cranelift backend] strings aren't supported yet (see Phase 4)"),
+            Literal::String(_) => ir::types::I128,
         }),
         Instruction::Load { type_id, .. }
         | Instruction::Alloca { type_id, .. }
@@ -223,7 +227,14 @@ fn translate_instruction(
                 Literal::Integer(n) => builder.ins().iconst(ir::types::I32, n as i64),
                 Literal::Float(f) => builder.ins().f32const(f),
                 Literal::Bool(b) => builder.ins().iconst(ir::types::I8, b as i64),
-                Literal::String(_) => panic!("[cranelift backend] strings aren't supported yet (see Phase 4)"),
+                Literal::String(s) => {
+                    let name = format!("__hfs_str_lit_{:x}", slotmap::Key::data(&inst_id).as_ffi());
+                    let data_id = declare_cstring(module, &name, &s);
+                    let ptr_ty = module.target_config().pointer_type();
+                    let ptr = data_ptr(builder, module, data_id, ptr_ty);
+                    let len = builder.ins().iconst(ir::types::I64, s.len() as i64);
+                    builder.ins().iconcat(ptr, len)
+                },
             };
             values.insert(inst_id, val);
         },
@@ -325,6 +336,7 @@ fn translate_terminator(
     values: &HashMap<InstId, ir::Value>,
     return_types: &[TypeId],
     sret_ptr: Option<ir::Value>,
+    translating_main: bool,
 ) {
     match arena.get_term(term_id) {
         TerminatorInst::Jump { target, .. } => {
@@ -340,6 +352,14 @@ fn translate_terminator(
             let Instruction::Tuple { instructions, .. } = arena.get_inst(*return_tuple) else {
                 panic!("[internal error] a Return's return_tuple is always an Instruction::Tuple")
             };
+            if translating_main {
+                let exit_value = match (instructions.as_slice(), return_types) {
+                    ([single], [return_type]) if ir_type_to_clif(*return_type, arena) == ir::types::I32 => values[single],
+                    _ => builder.ins().iconst(ir::types::I32, 0),
+                };
+                builder.ins().return_(&[exit_value]);
+                return;
+            }
             match sret_ptr {
                 Some(ptr) => {
                     let (offsets, ..) = data_layout::sequential_layout(return_types, arena);
@@ -399,9 +419,12 @@ pub fn translate_function(
     let return_types = return_type_ids(func, arena);
     let entry_clif_block = clif_blocks[&func.entry_block];
     builder.append_block_params_for_function_params(entry_clif_block);
-    // when using StructReturn, make_signature put that pointer first, ahead of the function's
-    // own parameters - so parameter_insts (which never include it) bind starting one slot in.
-    let sret_ptr = if uses_struct_return(&return_types) { Some(builder.block_params(entry_clif_block)[0]) } else { None };
+    let translating_main = is_main(func);
+    let sret_ptr = if !translating_main && uses_struct_return(&return_types) {
+        Some(builder.block_params(entry_clif_block)[0])
+    } else {
+        None
+    };
     let param_offset = if sret_ptr.is_some() { 1 } else { 0 };
     for (i, &param_inst) in func.parameter_insts.iter().enumerate() {
         values.insert(param_inst, builder.block_params(entry_clif_block)[i + param_offset]);
@@ -413,7 +436,18 @@ pub fn translate_function(
             translate_instruction(inst_id, arena, &mut builder, module, func_ids, builtins_ctx, &mut values);
         }
         let term_id = arena.get_block(block_id).terminator.expect("[internal error] block with no terminator");
-        translate_terminator(term_id, block_id, arena, &mut builder, &clif_blocks, &phi_order, &values, &return_types, sret_ptr);
+        translate_terminator(
+            term_id,
+            block_id,
+            arena,
+            &mut builder,
+            &clif_blocks,
+            &phi_order,
+            &values,
+            &return_types,
+            sret_ptr,
+            translating_main,
+        );
     }
 
     builder.seal_all_blocks();

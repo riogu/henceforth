@@ -1,0 +1,7 @@
+//? COMPILE
+fn main: () -> () {
+    @("a literal string") &> print;
+
+    let s: str; @() &> input_str; &= s;
+    @(s) &> print;
+}

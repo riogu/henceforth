@@ -1,1 +1,3 @@
 /target
+*.patch
+PHASE_*_SUMMARY.md

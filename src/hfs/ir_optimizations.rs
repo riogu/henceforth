@@ -456,7 +456,7 @@ impl CleanCFG {
             // the entry block specifically.
             return false;
         }
-        for pred in preds {
+        for &pred in &preds {
             let &term = if let Some(pred_block) = arena.try_get_block(pred) {
                 arena.get_term(pred_block.terminator.expect("[internal error] found block with no terminator"))
             } else {
@@ -481,6 +481,19 @@ impl CleanCFG {
                 },
                 TerminatorInst::Return { .. } | TerminatorInst::Unreachable =>
                     panic!("[internal error] predecessor block ended with return/unreachable terminator"),
+            }
+        }
+        // when deleting empty blocks, phis that referenced this block need to be updated to
+        // reference each predecessor that replaces the empty block instead, otherwise we reference
+        // a block that doesn't exist.
+        for inst_id in arena.get_block(target).instructions.clone() {
+            if let Instruction::Phi { incoming, .. } = arena.get_inst_mut(inst_id) {
+                // remove the old block from this phi if we referenced it
+                if let Some(value) = incoming.shift_remove(&block_id) {
+                    for &pred in &preds { // add every predecessor to the phi as a replacement
+                        incoming.insert(pred, value);
+                    }
+                }
             }
         }
         arena.invalidate_block(block_id);

@@ -1,0 +1,25 @@
+//? COMPILE
+// two nested while loops sharing the same counter variable, each with its own
+// stack-carried accumulator, and a `continue` in the inner loop. Regression coverage
+// for: CleanCFG's empty-block removal rewires a removed block's predecessors to jump
+// straight to its jump target, but never updated that target's phi instructions to
+// replace the removed block's incoming edge with one edge per predecessor it just
+// rewired - so a phi ended up keyed on a block that no longer had any edge into it at
+// all, and the interpreter (correctly) couldn't resolve it.
+fn main: () -> (i32) {
+    let i: i32; @(0) &= i;
+
+    @(0)
+    while @(i 6 !=) {
+        @(0)
+        while @(i 6 !=) {
+            if @(i 2 ==) {
+                @(i 1 +) &= i;
+                continue;
+            }
+            @(i +)
+            @(i 1 +) &= i;
+        }
+        @pop
+    }
+}

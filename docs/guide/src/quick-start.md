@@ -8,20 +8,18 @@ This guide will help you go from zero to a running program in just a few steps.
 First, create a new directory and a file for your program:
 
 ```bash
-mkdir hello-world
-cd hello-world
-touch main.hfs
+$ mkdir hello-world
+$ cd hello-world
+$ touch main.hfs
 ```
 
 ## 2. Write your first program
 
 Open `main.hfs` in your favorite text editor and add the following code:
 
-```
-// main.hfs
+```rs
 fn main: () -> () {
   @("Hello, world!") &> print;
-  @pop;
 }
 ```
 
@@ -31,10 +29,7 @@ This simple program prints "Hello, world!" to the terminal. If you don't underst
 
 Once your file is ready, run it from the command line:
 ```bash
-henceforth main.hfs
-```
-Expected output:
-```
+$ henceforth main.hfs
 Hello, world!
 ```
 

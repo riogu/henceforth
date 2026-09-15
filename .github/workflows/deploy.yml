@@ -25,15 +25,16 @@ jobs:
       
       - name: Build Reference
         run: cd docs/reference && mdbook build
-      
+
       - name: Combine output
         run: |
-          mkdir -p docs/output
-          cp -r docs/guide/book/* docs/output/guide/book
-          mkdir -p docs/output/reference
-          cp -r docs/reference/book/* docs/output/reference/book
+          set -euo pipefail
+          mkdir -p docs/output/guide/book
+          cp -r docs/guide/book/* docs/output/guide/book/
+          mkdir -p docs/output/reference/book
+          cp -r docs/reference/book/* docs/output/reference/book/
           cp docs/index.html docs/output/index.html
-
+      
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:

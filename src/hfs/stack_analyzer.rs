@@ -1106,8 +1106,6 @@ impl StackAnalyzer {
                 );
                 Ok(())
             },
-
-            "@print" => Ok(()),
             _ => {
                 panic!("[internal error] invalid stack keyword")
             },

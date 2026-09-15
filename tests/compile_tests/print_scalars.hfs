@@ -1,0 +1,15 @@
+//? COMPILE
+// print's argument type isn't checked against a fixed signature (see builtins.rs) - this
+// exercises print with each scalar type it actually needs to format differently (int, float,
+// bool), plus input_int/input_float feeding straight back into print.
+fn main: () -> () {
+    @(42) &> print;
+    @(3.5) &> print;
+    @(true) &> print;
+    @(false) &> print;
+
+    let x: i32; @() &> input_int; &= x;
+    let f: f32; @() &> input_float; &= f;
+    @(x) &> print;
+    @(f) &> print;
+}

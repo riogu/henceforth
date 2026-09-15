@@ -9,6 +9,7 @@ use cranelift_module::{FuncId as ClifFuncId, Linkage, Module};
 
 use crate::hfs::{
     BlockId, InstId, Instruction, IrArena, IrFuncId, IrFunction, IrOperation, IrType, Literal, TerminatorInst, Type, TypeId,
+    cranelift_builtins::{BuiltinsContext, translate_builtin_call},
     data_layout, find_builtin,
 };
 
@@ -92,7 +93,7 @@ pub fn declare_all_functions(arena: &IrArena, module: &mut dyn Module) -> HashMa
 // being resolved (`visiting`) to skip an edge that leads back into one of them rather than
 // recursing forever. Only if every edge of a phi leads back to itself with no terminal value
 // is that a real problem - see the panic message below for why that happens.
-fn infer_clif_type(inst_id: InstId, arena: &IrArena) -> ir::Type {
+pub fn infer_clif_type(inst_id: InstId, arena: &IrArena) -> ir::Type {
     try_infer_clif_type(inst_id, arena, &mut Vec::new()).unwrap_or_else(|| {
         panic!(
             "[cranelift backend] couldn't find a terminal type for this value - every path leads back through a phi with \
@@ -235,6 +236,7 @@ fn translate_instruction(
     builder: &mut FunctionBuilder,
     module: &mut dyn Module,
     func_ids: &HashMap<IrFuncId, ClifFuncId>,
+    builtins_ctx: &BuiltinsContext,
     values: &mut HashMap<InstId, ir::Value>,
 ) {
     match arena.get_inst(inst_id).clone() {
@@ -275,7 +277,8 @@ fn translate_instruction(
         Instruction::FunctionCall { args, func_id, return_values, .. } => {
             let callee = arena.get_func(func_id);
             if let Some(builtin) = find_builtin(&callee.name) {
-                panic!("[cranelift backend] builtin '{}' isn't supported yet (see Phase 3)", builtin.name);
+                translate_builtin_call(builtin.builtin, &args, &return_values, arena, builder, module, builtins_ctx, values);
+                return;
             }
             let func_ref = module.declare_func_in_func(func_ids[&func_id], builder.func);
             let callee_returns = return_type_ids(callee, arena);
@@ -388,7 +391,13 @@ fn translate_terminator(
     }
 }
 
-pub fn translate_function(func_id: IrFuncId, arena: &IrArena, module: &mut dyn Module, func_ids: &HashMap<IrFuncId, ClifFuncId>) -> ir::Function {
+pub fn translate_function(
+    func_id: IrFuncId,
+    arena: &IrArena,
+    module: &mut dyn Module,
+    func_ids: &HashMap<IrFuncId, ClifFuncId>,
+    builtins_ctx: &BuiltinsContext,
+) -> ir::Function {
     let func = arena.get_func(func_id);
     let sig = make_signature(func, arena, module);
     let user_func_name = ir::UserFuncName::user(0, func_ids[&func_id].as_u32());
@@ -431,7 +440,7 @@ pub fn translate_function(func_id: IrFuncId, arena: &IrArena, module: &mut dyn M
     for &block_id in &block_ids {
         builder.switch_to_block(clif_blocks[&block_id]);
         for &inst_id in &arena.get_block(block_id).instructions.clone() {
-            translate_instruction(inst_id, arena, &mut builder, module, func_ids, &mut values);
+            translate_instruction(inst_id, arena, &mut builder, module, func_ids, builtins_ctx, &mut values);
         }
         let term_id = arena.get_block(block_id).terminator.expect("[internal error] block with no terminator");
         translate_terminator(term_id, block_id, arena, &mut builder, &clif_blocks, &phi_order, &values, &return_types, sret_ptr);

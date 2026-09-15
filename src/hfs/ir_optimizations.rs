@@ -341,12 +341,17 @@ impl Mem2Reg {
         }
         // recursively continue renaming in dominator tree successor order
         for dom_successor in dom_tree.successors(block_id) {
-            // store the state the stack had before we went into a successor block
-            let snapshot: Vec<(InstId, usize)> = alloca_stacks.iter().map(|(k, v)| (*k, v.len())).collect();
+            let mut snapshot = Vec::new();
+            for alloca in promotable_allocas {
+                let len = alloca_stacks.get(alloca).map_or(0, Vec::len);
+                snapshot.push((*alloca, len));
+            }
             Mem2Reg::rename_variables(arena, phi_to_alloca, promotable_allocas, dom_tree, def_use, alloca_stacks, *dom_successor);
             // restore the alloca_stacks back to how it was before the successor changed it
             for (alloca, len) in snapshot {
-                alloca_stacks.get_mut(&alloca).unwrap().truncate(len);
+                if let Some(stack) = alloca_stacks.get_mut(&alloca) {
+                    stack.truncate(len);
+                }
             }
         }
     }

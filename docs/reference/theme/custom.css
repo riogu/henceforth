@@ -1,0 +1,17 @@
+.hover-button {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 1000;
+  padding: 12px 20px;
+  border-radius: 999px;
+  background: #282d3f;
+  color: #bcbdd0;
+  font-weight: bold;
+  text-decoration: none;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  transition: background 0.2s;
+}
+.hover-button:hover {
+  background: #393e4f;
+}

@@ -1,3 +1,4 @@
 /target
 *.patch
 PHASE_*_SUMMARY.md
+docs/**/book/

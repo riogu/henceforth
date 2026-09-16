@@ -90,7 +90,7 @@ When running the test suite, if it finds a file with directives in the right fol
 | . | Matches a single character |
 | * | Matches 0 or more characters |
 | {a, b, c} | Matches `a`, `b`, or `c` |
-| {a-c} | Matches anything in the range between `a` and `c` |
+| [a-c] | Matches anything in the range between `a` and `c` |
 
 Similarly to FileCheck, any usage of regular expressions must be wrapped in `{{...}}`. Keep in mind you can chain multiple regex elements in a single block, e.g. `{{{0, 1, 2}[A-Z]}}` matches a number from 0 to 2 and then a letter from A to Z.
 

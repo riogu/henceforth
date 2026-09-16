@@ -304,10 +304,10 @@ impl Mem2Reg {
                     },
                 Instruction::Load { address, .. } =>
                     if promotable_allocas.contains(address) {
-                        // we found a load from one of the allocas we are replacing.
-                        // all uses of this loaded value should be replaced with the latest value in
-                        // our alloca value tracking stack
-                        let latest_def = *alloca_stacks[address].last().expect("[internal error] found no value for alloca");
+                        let latest_def = match alloca_stacks.get(address).and_then(|stack| stack.last()) {
+                            Some(def) => *def,
+                            None => Mem2Reg::undefined_value_for(arena, *address, block_id, Some(inst_id)),
+                        };
                         def_use.replace_all_uses_with(inst_id, latest_def, arena);
                         arena.invalidate_inst(inst_id); // invalidate to cleanup later
                     },
@@ -332,7 +332,7 @@ impl Mem2Reg {
                 }
                 let latest_def = match alloca_stacks.get(&alloca).and_then(|stack| stack.last()) {
                     Some(def) => *def,
-                    None => Mem2Reg::undefined_value_for(arena, alloca, block_id),
+                    None => Mem2Reg::undefined_value_for(arena, alloca, block_id, None),
                 };
                 if let Instruction::Phi { incoming, .. } = arena.get_inst_mut(inst_id) {
                     incoming.entry(block_id).insert_entry(latest_def);
@@ -356,14 +356,18 @@ impl Mem2Reg {
         }
     }
 
-    // a variable declared inside a conditional block (e.g. `let tmp` inside an `if`) can reach a
-    // phi through an edge that never stores to it at all (the edge that skips the `if`). the phi
-    // will be dead in practice but it still needs a well-formed value for every incoming edge, so
-    // we hand it an arbitrary default rather than leaving it unfilled
-    fn undefined_value_for(arena: &mut IrArena, alloca: InstId, block_id: BlockId) -> InstId {
+    fn undefined_value_for(arena: &mut IrArena, alloca: InstId, block_id: BlockId, anchor: Option<InstId>) -> InstId {
+        let insert = |arena: &mut IrArena, inst: Instruction| match anchor {
+            Some(before) => arena.alloc_inst_before(inst, block_id, before),
+            None => arena.alloc_inst_for(inst, block_id),
+        };
         let Instruction::Alloca { span, type_id, .. } = arena.get_inst(alloca).clone() else {
             panic!("[internal error] expected an alloca")
         };
+        if let IrType::Array { .. } = arena.get_type(type_id) {
+            let one = insert(arena, Instruction::Literal { span: span.clone(), literal: Literal::Integer(1) });
+            return insert(arena, Instruction::Alloca { span, type_id, array_len: one });
+        }
         let literal = match arena.get_type(type_id) {
             IrType::Int { .. } => Literal::Integer(0),
             IrType::Float { .. } => Literal::Float(0.0),
@@ -371,7 +375,7 @@ impl Mem2Reg {
             IrType::String { .. } => Literal::String(String::new()),
             other => panic!("[internal error] promotable alloca had unexpected type {:?}", other),
         };
-        arena.alloc_inst_for(Instruction::Literal { span, literal }, block_id)
+        insert(arena, Instruction::Literal { span, literal })
     }
 }
 

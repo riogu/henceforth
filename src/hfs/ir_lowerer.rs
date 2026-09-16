@@ -133,17 +133,16 @@ impl IrLowerer {
             return Ok(None);
         };
         let length_expr = *length_expr;
-
-        match self.arena.get_type(type_id) {
-            IrType::Array { length: Some(existing), .. } => return Ok(Some(*existing)), // already patched
-            IrType::Array { length: None, .. } => {},
-            other => panic!("[internal error] expected an array type, found {:?}", other),
-        }
-
-        let length_inst = self.lower_expr(length_expr)?;
+        let length_inst = match self.ast_arena.get_expr(length_expr).clone() {
+            Expression::Literal(literal) => {
+                let span = *self.ast_arena.get_expr_span(length_expr);
+                self.arena.alloc_inst_for(Instruction::Literal { span, literal }, self.ir_context.curr_insert_block)
+            },
+            _ => self.lower_expr(length_expr)?,
+        };
         match &mut self.arena.types[type_id.0] {
             IrType::Array { length, .. } => *length = Some(length_inst),
-            _ => unreachable!(),
+            other => panic!("[internal error] expected an array type, found {:?}", other),
         }
         Ok(Some(length_inst))
     }

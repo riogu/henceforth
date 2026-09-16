@@ -85,9 +85,46 @@ Contributing guidelines and details about the development and testing process ca
 
 ## Command Line Usage
 
-Henceforth has a very simple CLI:
+Henceforth has a few different flags and arguments:
 ```
-Usage: henceforth <SOURCE>
+$ henceforth --help
+An optimizing compiler for an imperative stack-based language
+
+Usage: henceforth [OPTIONS] <SOURCE>
+
+Arguments:
+  <SOURCE>
+          Path to the Henceforth source file to compile
+
+Options:
+  -o, --output <OUTPUT>
+          Path to write the compiled output to. Ignored if backend is set to 'interpret'
+          
+          [default: ./a.out]
+
+      --backend <BACKEND>
+          Which backend to use for execution
+
+          Possible values:
+          - interpret: Walks the IR directly without compiling to native code
+          - cranelift: Compiles to native code using the Cranelift backend
+          
+          [default: interpret]
+
+      --print-ir-pre-opt
+          Print the IR before optimizations are applied
+
+      --print-ir-post-opt
+          Print the IR after optimizations are applied
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+  -V, --version
+          Print version
+
+Example:
+  henceforth main.hfs --backend cranelift -o main.out
 ```
 
 ## Reporting a Bug

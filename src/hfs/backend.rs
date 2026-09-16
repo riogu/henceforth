@@ -4,7 +4,9 @@ use crate::hfs::{Interpreter, IrArena, IrTopLevelId, ScopeStack, cranelift_objec
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
 pub enum BackendKind {
+    /// Walks the IR directly without compiling to native code
     Interpret,
+    /// Compiles to native code using the Cranelift backend
     Cranelift,
 }
 

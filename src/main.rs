@@ -11,15 +11,20 @@ use henceforth::hfs::{
 };
 
 #[derive(Parser, Debug, Clone)]
-#[command(author, version, about)]
+#[command(version, about = "An optimizing compiler for an imperative stack-based language", after_help="Example:\n  henceforth main.hfs --backend cranelift -o main.out")]
 struct Args {
+    /// Path to the Henceforth source file to compile
     source: PathBuf,
+    /// Path to write the compiled output to. Ignored if backend is set to 'interpret'
     #[arg(short, long, default_value = "./a.out")]
     output: PathBuf,
+    /// Which backend to use for execution
     #[arg(long, value_enum, default_value = "interpret")]
     backend: hfs::BackendKind,
+    /// Print the IR before optimizations are applied
     #[arg(long)]
     print_ir_pre_opt: bool,
+    /// Print the IR after optimizations are applied
     #[arg(long)]
     print_ir_post_opt: bool,
 }

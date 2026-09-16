@@ -46,9 +46,9 @@ fn main: () -> () {
   start_3:
     %21 = i32 67
     %22 = (str) call fizz_buzz(%21)
-    %23 = str retval str
+    %23 = str retval
     %24 = (str) call print(%23)
-    %25 = str retval str
+    %25 = str retval
     %26 = () ()
     return %26
 }

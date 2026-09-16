@@ -989,31 +989,19 @@ mod iso {
             },
         )
     }
-    pub fn inst_alloca() -> Iso<TypeId, Instruction> {
+    pub fn inst_alloca() -> Iso<(), Instruction> {
         Iso::new(
             // this textual format doesn't have array alloca syntax, so array_len is a dummy: fine
             // since nothing here exercises array codegen (same idea as fncall ignoring is_move)
-            |type_id| Some(Instruction::Alloca { span: Span::default(), type_id, array_len: InstId::default() }),
-            |inst| {
-                if let Instruction::Alloca { type_id, .. } = inst {
-                    Some(type_id)
-                } else {
-                    None
-                }
-            },
+            |()| Some(Instruction::Alloca { span: Span::default(), type_id: TypeId::default(), array_len: InstId::default() }),
+            |inst| if matches!(inst, Instruction::Alloca { .. }) { Some(()) } else { None },
         )
     }
 
-    pub fn inst_retval() -> Iso<TypeId, Instruction> {
+    pub fn inst_retval() -> Iso<(), Instruction> {
         Iso::new(
-            |type_id| Some(Instruction::ReturnValue { span: Span::default(), type_id }),
-            |inst| {
-                if let Instruction::ReturnValue { type_id, .. } = inst {
-                    Some(type_id)
-                } else {
-                    None
-                }
-            },
+            |()| Some(Instruction::ReturnValue { span: Span::default(), type_id: TypeId::default() }),
+            |inst| if matches!(inst, Instruction::ReturnValue { .. }) { Some(()) } else { None },
         )
     }
 
@@ -1172,11 +1160,11 @@ fn syntax_parameter<S: Syntax>(s: &S) -> S::Output<Instruction> {
     )
 }
 
-fn syntax_alloca<S: Syntax>(s: &S, names: &NameMap) -> S::Output<Instruction> {
-    s.iso(iso::inst_alloca(), s.ignore_left(s.keyword("alloca"), s.type_name(names)))
+fn syntax_alloca<S: Syntax>(s: &S) -> S::Output<Instruction> {
+    s.iso(iso::inst_alloca(), s.literal_str("alloca"))
 }
-fn syntax_retval<S: Syntax>(s: &S, names: &NameMap) -> S::Output<Instruction> {
-    s.iso(iso::inst_retval(), s.ignore_left(s.keyword("retval"), s.type_name(names)))
+fn syntax_retval<S: Syntax>(s: &S) -> S::Output<Instruction> {
+    s.iso(iso::inst_retval(), s.literal_str("retval"))
 }
 fn syntax_fncall<S: Syntax>(s: &S, names: &NameMap) -> S::Output<Instruction> {
     s.iso(
@@ -1251,12 +1239,12 @@ fn syntax_inst<S: Syntax>(s: &S, names: &NameMap) -> S::Output<Instruction> {
         syntax_load_element(s, names),
         syntax_load(s, names),
         syntax_store(s, names),
-        syntax_alloca(s, names),
+        syntax_alloca(s),
         syntax_gep(s, names),
         syntax_binop(s, names),
         syntax_unop(s, names),
         syntax_parameter(s),
-        syntax_retval(s, names),
+        syntax_retval(s),
         syntax_fncall(s, names),
         syntax_phi(s, names),
         syntax_tuple(s, names),
@@ -1535,7 +1523,12 @@ fn parse_function<'a>(
 
         for raw_inst in raw_block.insts {
             match raw_inst {
-                RawInst::Named(id, _, inst) => {
+                RawInst::Named(id, type_id, inst) => {
+                    let inst = match inst {
+                        Instruction::Alloca { span, array_len, .. } => Instruction::Alloca { span, type_id, array_len },
+                        Instruction::ReturnValue { span, .. } => Instruction::ReturnValue { span, type_id },
+                        other => other,
+                    };
                     arena.fill_inst(id, inst, raw_block.id);
                 },
                 RawInst::Unnamed(inst) => {
@@ -1692,7 +1685,7 @@ pub fn print(func_ids: &[IrFuncId], arena: &IrArena) -> Option<String> {
                     Some(Instruction::Literal { literal: Literal::Integer(n), .. }) => n.to_string(),
                     _ => "n".to_string(),
                 };
-                format!("arr[{}]_{}", len_repr, elem_name)
+                format!("arr[{}]{}", len_repr, elem_name)
             },
             _ => continue,
         };
@@ -1743,6 +1736,7 @@ pub fn print(func_ids: &[IrFuncId], arena: &IrArena) -> Option<String> {
                 let inst = arena.get_inst(*inst_id).clone();
                 let raw = match &inst {
                     Instruction::Store { .. } => RawInst::Unnamed(inst),
+                    Instruction::Alloca { type_id, .. } => RawInst::Named(*inst_id, *type_id, inst),
                     _ => {
                         let type_id = arena.get_type_id_of_inst_no_alloc(*inst_id).unwrap_or_default();
                         RawInst::Named(*inst_id, type_id, inst)

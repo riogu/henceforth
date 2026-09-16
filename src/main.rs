@@ -19,7 +19,7 @@ struct Args {
     #[arg(short, long, default_value = "./a.out")]
     output: PathBuf,
     /// Which backend to use for execution
-    #[arg(long, value_enum, default_value = "interpret")]
+    #[arg(long, value_enum, default_value = "cranelift")]
     backend: hfs::BackendKind,
     /// Print the IR before optimizations are applied
     #[arg(long)]

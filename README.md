@@ -17,7 +17,7 @@ This is achieved by several features, including:
 
 ## How It Works
 
-Internally, Henceforth has a hand-written frontend (lexer, recursive-descent parser, two-pass stack/semantic analyzer) that compiles to an SSA intermediate representation akin to LLVM IR, where optimization passes (Mem2Reg, DCE, CleanCFG, etc.), which is ran before interpretation. A Cranelift backend is also coming in the near future as an alternative to the implemented interpreter, and it is the main intended target of the compiler (as it was designed with the goal of compiling a stack language, rather than interpreting it).
+Internally, Henceforth has a hand-written frontend (lexer, recursive-descent parser, two-pass stack/semantic analyzer) that compiles to an SSA intermediate representation akin to LLVM IR, where optimization passes (Mem2Reg, DCE, CleanCFG, etc.) run before either backend sees it. A [Cranelift](https://cranelift.dev/) backend compiles that IR to a real native executable, and is the default (`--backend cranelift`) - it was the main intended target of the compiler from the start, since Henceforth was designed with the goal of compiling a stack language, rather than interpreting it. The original tree-walking interpreter (`--backend interpret`) is kept as a reference implementation.
 
 ## Getting Started
 
@@ -30,7 +30,7 @@ $ cargo install --path .
 ```
 This will install the `henceforth` binary directly to your path.
 
-Then, you can write your code in a `.hfs` file and run the Henceforth interpreter:
+Then, you can write your code in a `.hfs` file and run it:
 ```v
 $ cat helloworld.hfs
 fn main: () -> () {
@@ -109,7 +109,7 @@ Options:
           - interpret: Walks the IR directly without compiling to native code
           - cranelift: Compiles to native code using the Cranelift backend
           
-          [default: interpret]
+          [default: cranelift]
 
       --print-ir-pre-opt
           Print the IR before optimizations are applied

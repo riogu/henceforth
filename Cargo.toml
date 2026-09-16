@@ -37,6 +37,11 @@ name = "compile_tests"
 path = "tests/compile_tests.rs"
 harness = false
 
+[[test]]
+name = "backend_parity_tests"
+path = "tests/backend_parity_tests.rs"
+harness = false
+
 [features]
 default = ["cranelift"]
 cranelift = [

@@ -1,0 +1,5 @@
+fn main: () -> () {
+    let n: i32; @(5) &= n;
+    let arr: [n]i32;
+    @(n) &= arr; //? ERROR "expected [n]i32"
+}

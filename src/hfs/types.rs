@@ -135,7 +135,8 @@ impl Type for ElaboratedType {
                             Some(ArrayLength::Resolved(id)) => match arena.get_expr(*id) {
                                 Expression::Literal(Literal::Integer(n)) => n.to_string(),
                                 Expression::Literal(_) => panic!("[internal error] typechecking array before its length"),
-                                _ if *arena.get_expr_provenance(*id) == ExprProvenance::CompiletimeValue => "unknown".to_string(),
+                                Expression::Identifier(Identifier::Variable(var_id) | Identifier::GlobalVar(var_id)) =>
+                                    arena.get_var(*var_id).name.clone(),
                                 _ => "unknown".to_string(),
                             },
                             Some(ArrayLength::Unresolved(_)) => format!("UNRESOLVED_LENGTH"),
@@ -231,7 +232,7 @@ impl Type for IrType {
                                 Instruction::Literal { literal: Literal::Integer(n), .. } => n.to_string(),
                                 Instruction::Literal { .. } =>
                                     panic!("[internal error] found literal in length expression of array at codegen"),
-                                _ => unimplemented!(),
+                                _ => "n".to_string(),
                             },
                             None => String::new(),
                         },

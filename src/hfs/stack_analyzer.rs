@@ -135,7 +135,7 @@ impl AstArena {
                 }
                 // Recursively validate each element
                 for (&actual_elem_id, &expected_elem_id) in actual_types.iter().zip(expected_types.iter()) {
-                    self.compare_types(actual_elem_id, expected_elem_id, vec![*self.get_type_span(actual_elem_id)])?;
+                    self.compare_types(actual_elem_id, expected_elem_id, vec![span.clone()])?;
                 }
                 Ok(())
             },
@@ -225,7 +225,7 @@ impl AstArena {
                     None => {},
                 }
 
-                self.compare_types(*actual_elem_type_id, *expected_elem_type_id, vec![*self.get_type_span(*actual_elem_type_id)])
+                self.compare_types(*actual_elem_type_id, *expected_elem_type_id, vec![span.clone()])
             },
             (actual, expected) if actual == expected => Ok(()),
             (actual, expected) => stack_analyzer_error!(
@@ -912,6 +912,24 @@ impl StackAnalyzer {
                     }
                 }
                 Ok(self.arena.alloc_and_push_to_hfs_stack(Expression::Tuple { expressions: expr_ids }, tuple_provenance, span))
+            },
+            UnresolvedExpression::ArrayLiteral { elements } => {
+                let mut expr_ids = Vec::<ExprId>::new();
+                let mut provenance = ExprProvenance::CompiletimeValue;
+                for expr_id in elements {
+                    let expr_id = self.resolve_expr(expr_id)?;
+                    expr_ids.push(expr_id);
+                    self.arena.pop_or_error(self.arena.get_expr_span(expr_id).clone())?;
+                    if matches!(self.arena.get_expr_provenance(expr_id), ExprProvenance::RuntimeValue) {
+                        provenance = ExprProvenance::RuntimeValue
+                    }
+                }
+                let first_type = self.arena.get_type_id_of_expr(expr_ids[0])?;
+                for &elem in &expr_ids[1..] {
+                    let elem_type = self.arena.get_type_id_of_expr(elem)?;
+                    self.arena.compare_types(elem_type, first_type, vec![*self.arena.get_expr_span(elem)])?;
+                }
+                Ok(self.arena.alloc_and_push_to_hfs_stack(Expression::ArrayLiteral { elements: expr_ids }, provenance, span))
             },
             UnresolvedExpression::StackKeyword(name) => {
                 self.perform_stack_keyword(&name, span)?;

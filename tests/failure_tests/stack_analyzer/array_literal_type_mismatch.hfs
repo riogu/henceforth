@@ -1,0 +1,4 @@
+fn main: () -> () {
+	let arr: [3]f32;
+	@([1 2 3]) &= arr; //? ERROR "expected f32 found i32"
+}

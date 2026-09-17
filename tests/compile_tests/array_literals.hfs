@@ -1,0 +1,23 @@
+//? COMPILE
+fn sum: ([]i32 i32) -> (i32) {
+    let n: i32; &= n;
+    let arr: [n]i32; &= arr;
+    let i: i32; @(0) &= i;
+    let total: i32; @(0) &= total;
+    while @(i n !=) {
+        @(total arr i [] +) &= total;
+        @(i 1 +) &= i;
+    }
+    @(total);
+}
+
+fn main: () -> () {
+    let arr: [5]i32;
+    @([1 2 3 4 5]) &= arr;
+    @(arr 0 []) &> print;
+    @(arr 4 []) &> print;
+
+    @([10 20 30] 3) &> sum &> print;
+
+    @([100]) &> print;
+}

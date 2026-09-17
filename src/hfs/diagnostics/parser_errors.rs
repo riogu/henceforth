@@ -205,6 +205,16 @@ impl Dumpable for UnresolvedExpression {
                     "]".custom_color(CustomColor::new(129, 137, 150))
                 ))
             },
+            UnresolvedExpression::ArrayLiteral { elements } => {
+                let items: Vec<ColoredString> = elements.iter().map(|expr| arena.get_unresolved_expr(*expr).dump(arena)).collect();
+                ColoredString::from(format!(
+                    "{}\n\t{}\n{}\n\t{}",
+                    "ArrayLiteral:".red(),
+                    "[".custom_color(CustomColor::new(129, 137, 150)),
+                    indent_list(&items),
+                    "]".custom_color(CustomColor::new(129, 137, 150))
+                ))
+            },
             UnresolvedExpression::StackKeyword(name) =>
                 ColoredString::from(format!("{} {}", "Stack Keyword".red().bold(), format!("({name})").green())),
         }

@@ -400,6 +400,16 @@ impl Dumpable for Expression {
                     "]".custom_color(CustomColor::new(129, 137, 150))
                 ))
             },
+            Expression::ArrayLiteral { elements } => {
+                let items: Vec<ColoredString> = elements.iter().map(|expr| arena.get_expr(*expr).dump(arena)).collect();
+                ColoredString::from(format!(
+                    "{}\n\t{}\n{}\n\t{}",
+                    "ArrayLiteral:".red(),
+                    "[".custom_color(CustomColor::new(129, 137, 150)),
+                    indent_list(&items),
+                    "]".custom_color(CustomColor::new(129, 137, 150))
+                ))
+            },
             Expression::Parameter { index, type_id } => ColoredString::from(format!(
                 "{}\n\t{} {}\n\t{} {}",
                 "Parameter:".red().bold(),

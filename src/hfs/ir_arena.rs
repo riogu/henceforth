@@ -456,10 +456,7 @@ impl IrArena {
             Instruction::ReturnValue { span: _, type_id } => Ok(type_id),
             Instruction::Load { span: _, address: _, type_id } => Ok(type_id),
             Instruction::Store { span: _, address: _, value } => self.get_type_id_of_inst_from(value, visiting),
-            Instruction::Alloca { span: _, type_id: _, array_len: _ } => {
-                // implement this later
-                panic!("[internal error] asked for the type of an alloca instruction but i don't see why this would happen")
-            },
+            Instruction::Alloca { span: _, type_id, array_len: _ } => Ok(type_id),
             Instruction::GlobalAlloca(_) => todo!(),
             // GEP returns an address, but we record the pointee's type on the instruction itself
             // (mirroring Load/Alloca), so there's no need to chase anything here.

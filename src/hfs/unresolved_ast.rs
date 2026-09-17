@@ -49,6 +49,7 @@ pub enum UnresolvedExpression {
     Identifier(String),
     Literal(Literal),
     Tuple { expressions: Vec<UnresolvedExprId> },
+    ArrayLiteral { elements: Vec<UnresolvedExprId> },
     StackKeyword(String),
 }
 

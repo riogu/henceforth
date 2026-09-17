@@ -531,15 +531,28 @@ impl Parser {
                             .arena
                             .alloc_unresolved_expr(UnresolvedExpression::Operation(UnresolvedOperation::ArrayAccess), token.span))
                     },
-                    Some(t) => {
-                        parser_error!(
-                            ParserErrorKind::ExpectedButFound(
-                                vec![Expectable::Token(TokenKind::RightBracket),],
-                                Some(t.kind.clone())
-                            ),
-                            &self.arena,
-                            t.span
-                        )
+                    Some(_) => {
+                        let mut elements = Vec::new();
+                        loop {
+                            match self.tokens.peek() {
+                                Some(t) if t.kind == TokenKind::RightBracket => {
+                                    self.expect(TokenKind::RightBracket)?;
+                                    break;
+                                },
+                                Some(_) => elements.push(self.stack_expression()?),
+                                None => return parser_error!(
+                                    ParserErrorKind::ExpectedButFound(
+                                        vec![Expectable::StackExpression, Expectable::Token(TokenKind::RightBracket)],
+                                        None
+                                    ),
+                                    &self.arena,
+                                    self.arena.diagnostic_info.eof_pos
+                                ),
+                            }
+                        }
+                        Ok(self
+                            .arena
+                            .alloc_unresolved_expr(UnresolvedExpression::ArrayLiteral { elements }, token.span.merge(self.last_span())))
                     },
                     None => parser_error!(
                         ParserErrorKind::ExpectedButFound(vec![Expectable::Token(TokenKind::RightBracket),], None),

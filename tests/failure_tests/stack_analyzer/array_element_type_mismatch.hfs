@@ -1,0 +1,6 @@
+fn main: () -> () {
+	let a: [3]i32;
+	@(0 0) [&]= a;
+	let b: [3]f32;
+	@(a) &= b; //? ERROR "expected f32 found i32"
+}

@@ -860,6 +860,34 @@ impl IrLowerer {
                 }
                 self.arena.alloc_inst_for(Instruction::Tuple { span, instructions }, self.ir_context.curr_insert_block)
             },
+            Expression::ArrayLiteral { elements } => {
+                let type_id = self.ast_arena.get_type_id_of_expr(id)?;
+                let entry_block = self.arena.get_func(self.ir_context.curr_func).entry_block;
+                let Some(array_len) = self.maybe_materialize_array_length(type_id)? else {
+                    panic!("[internal error] an array literal's type always has a resolved length")
+                };
+                let temp = self.arena.alloc_inst_for(Instruction::Alloca { span: span.clone(), type_id, array_len }, entry_block);
+                let element_type_id = match self.arena.get_type(type_id) {
+                    IrType::Array { hfs_type, .. } => *hfs_type,
+                    other => panic!("[internal error] an array literal's type is always an Array, found {:?}", other),
+                };
+                for (i, elem_expr) in elements.into_iter().enumerate() {
+                    let value = self.lower_expr(elem_expr)?;
+                    let idx = self.arena.alloc_inst_for(
+                        Instruction::Literal { span: span.clone(), literal: Literal::Integer(i as i32) },
+                        self.ir_context.curr_insert_block,
+                    );
+                    let gep = self.arena.alloc_inst_for(
+                        Instruction::GetElementPtr { span: span.clone(), address: temp, indexes: vec![idx], type_id: element_type_id },
+                        self.ir_context.curr_insert_block,
+                    );
+                    self.arena.alloc_inst_for(
+                        Instruction::Store { span: span.clone(), address: gep, value },
+                        self.ir_context.curr_insert_block,
+                    );
+                }
+                temp
+            },
             Expression::Parameter { index, type_id } =>
             // NOTE: Expression::Parameter are weird because this instruction isnt really used or
             // will even really be lowered to any assembly in reality. it probably doesnt need to

@@ -67,6 +67,9 @@ pub enum Expression {
     Tuple {
         expressions: Vec<ExprId>,
     },
+    ArrayLiteral {
+        elements: Vec<ExprId>,
+    },
     Parameter {
         index: usize,    // Which parameter (0, 1, 2...)
         type_id: TypeId, // Parameter type
@@ -325,7 +328,8 @@ impl AstArena {
                     ElaboratedType::Array { hfs_type: t, length: Some(ArrayLength::Resolved(other_expr)), ptr_count: p }
                         if *t == elem_type && *p == ptr_count =>
                         match self.get_expr(*other_expr) {
-                            Expression::Literal(Literal::Integer(other_len)) if other_len == len => Some(TypeId(idx)),
+                            Expression::Literal(Literal::Integer(other_len)) =>
+                                if other_len == len { Some(TypeId(idx)) } else { None },
                             Expression::Literal(_) => panic!("[internal error] tried to alloc array before typechecking"),
                             _ => None,
                         },
@@ -480,6 +484,18 @@ impl AstArena {
 
                 let tuple_type = ElaboratedType::Tuple { type_ids: element_types, ptr_count: 0 };
                 Ok(self.alloc_type(tuple_type, token))
+            },
+            Expression::ArrayLiteral { elements } => {
+                let token = self.get_expr_span(expr_id).clone();
+                let elem_type = self.get_type_id_of_expr(elements[0])?;
+                let count = self.alloc_and_push_to_hfs_stack(
+                    Expression::Literal(Literal::Integer(elements.len() as i32)),
+                    ExprProvenance::CompiletimeValue,
+                    token.clone(),
+                );
+                self.hfs_stack.pop();
+                let array_type = ElaboratedType::Array { hfs_type: elem_type, length: Some(ArrayLength::Resolved(count)), ptr_count: 0 };
+                Ok(self.alloc_type(array_type, token))
             },
             Expression::Parameter { index: _, type_id } => Ok(type_id),
             Expression::ReturnValue(type_id) => Ok(type_id),

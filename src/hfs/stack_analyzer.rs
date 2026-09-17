@@ -170,14 +170,7 @@ impl AstArena {
                                 Expression::Literal(_) => {
                                     panic!("[internal error] somehow got a non integer array length past the type checker")
                                 },
-                                _ => return stack_analyzer_error!(
-                                        StackAnalyzerErrorKind::TypeMismatch(
-                                            expected_type.get_repr(&self),
-                                            actual_type.get_repr(&self)
-                                        ),
-                                        self,
-                                        span
-                                    ),
+                                _ => {},
                             },
                             Some(ArrayLength::Unresolved(_)) => {
                                 panic!("[internal error] somehow got an unresolved array length past the type checker")
@@ -193,14 +186,7 @@ impl AstArena {
                                 panic!("[internal error] somehow got an unresolved array length past the type checker")
                             },
                             Some(ArrayLength::Resolved(actual_expr_id)) => match self.get_expr(*actual_expr_id) {
-                                Expression::Literal(Literal::Integer(_)) => return stack_analyzer_error!(
-                                        StackAnalyzerErrorKind::TypeMismatch(
-                                            expected_type.get_repr(&self),
-                                            actual_type.get_repr(&self)
-                                        ),
-                                        self,
-                                        span
-                                    ),
+                                Expression::Literal(Literal::Integer(_)) => {},
                                 Expression::Literal(_) => {
                                     panic!("[internal error] somehow got a non integer array length past the type checker")
                                 },

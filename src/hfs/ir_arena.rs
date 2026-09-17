@@ -353,7 +353,7 @@ impl IrArena {
                                 Instruction::Literal { .. } => {
                                     panic!("[internal error] somehow got a non integer array length past the type checker")
                                 },
-                                _ => unimplemented!("non literal array lengths are currently unimplemented"),
+                                _ => {},
                             },
                             // only happens if passing an already decayed array to another function
                             None => {},
@@ -361,7 +361,7 @@ impl IrArena {
                         Instruction::Literal { .. } => {
                             panic!("[internal error] somehow got a non integer array length past the type checker")
                         },
-                        _ => unimplemented!("non literal array lengths are currently unimplemented"),
+                        _ => {},
                     },
                     None => {},
                 }

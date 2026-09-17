@@ -271,6 +271,9 @@ impl Parser {
                 TokenKind::Let => top_level.push(UnresolvedTopLevelId::VariableDecl(parser.variable_declaration()?)),
                 TokenKind::Fn | TokenKind::Extern =>
                     top_level.push(UnresolvedTopLevelId::FunctionDecl(parser.function_declaration()?)),
+                TokenKind::Semicolon => {
+                    parser.next_token().expect("[internal error] peeked token but couldn't next it");
+                },
                 _ =>
                     return parser_error!(
                         ParserErrorKind::ExpectedButFound(

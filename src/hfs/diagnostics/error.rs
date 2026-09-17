@@ -54,16 +54,14 @@ pub trait CompileError: Display + Debug {
             error_pointer.red().bold()
         );
 
-        error_msg.push_str(
-            &lines[1..]
-                .iter()
-                .enumerate()
-                .map(|(i, line)| {
-                    format!("{} {} {}", (self.get_span().start.line + 1 + i).to_string().blue().bold(), "|".blue().bold(), line)
-                })
-                .collect::<Vec<_>>()
-                .join("\n"),
-        );
+        for (i, line) in lines[1..].iter().enumerate() {
+            error_msg.push_str(&format!(
+                "\n{} {} {}",
+                (self.get_span().start.line + 1 + i).to_string().blue().bold(),
+                "|".blue().bold(),
+                line
+            ));
+        }
 
         error_msg.push_str(&format!("\n{} {}", " ".repeat(number_length(self.get_span().end.line)), "|".blue().bold()));
 

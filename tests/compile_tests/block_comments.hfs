@@ -1,0 +1,11 @@
+//? COMPILE
+/* block comments can span multiple lines,
+   nest a // line comment inside them harmlessly,
+   and even hold a stray "quote" or unmatched ' without breaking the lexer */
+fn add /* comment between tokens */ : (i32 i32) -> (i32) {
+    @(/**/ +);
+}
+
+fn main: () -> () {
+    @(1 2) &> add &> print;
+}

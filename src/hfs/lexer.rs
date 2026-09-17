@@ -28,10 +28,21 @@ impl Lexer {
     #[must_use]
     pub fn tokenize<'a>(file: &'a File) -> Result<Vec<Token>, Box<dyn CompileError>> {
         let mut tokens = Vec::<Token>::new();
+        let mut in_block_comment = false;
+        let mut block_comment_start = Span::default();
         for (line_number, line_string) in file.contents.iter().enumerate() {
             let mut line_offset = 1;
             let mut chars_iter = line_string.chars().peekable();
             while let Some(char) = chars_iter.next() {
+                if in_block_comment {
+                    if char == '*' && chars_iter.next_if_eq(&'/').is_some() {
+                        in_block_comment = false;
+                        line_offset += 2;
+                    } else {
+                        line_offset += 1;
+                    }
+                    continue;
+                }
                 let kind = match char {
                     ' ' | '\r' => {
                         line_offset += 1;
@@ -141,6 +152,10 @@ impl Lexer {
                     '/' =>
                         if let Some(_) = chars_iter.next_if_eq(&'/') {
                             while let Some(_) = chars_iter.next_if(|char| *char != '\n') {}
+                            continue;
+                        } else if let Some(_) = chars_iter.next_if_eq(&'*') {
+                            in_block_comment = true;
+                            block_comment_start = Span::new(line_number + 1, line_offset, 2);
                             continue;
                         } else {
                             TokenKind::Slash
@@ -303,6 +318,9 @@ impl Lexer {
                 tokens.push(Token::new(kind.clone(), Span::new(line_number + 1, line_offset, width)));
                 line_offset += width;
             }
+        }
+        if in_block_comment {
+            return lexer_error!(LexerErrorKind::UnexpectedEof, file.path.clone(), block_comment_start, tokens);
         }
         Ok(tokens)
     }

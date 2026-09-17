@@ -1,0 +1,23 @@
+//? COMPILE
+fn draw_arena: (/* arena */ [][4]i32 /* width */ i32 /* height */ i32) -> () {
+    let i: i32; @(0) &= i;
+    while @(@dup i !=) {
+        @("|") &> print;
+        let j: i32; @(0) &= j;
+        while @(@swap @dup j !=) {
+            if @(@rot @dup i [] j [] 1 ==) { @("#") } else { @(" ") } &> print;
+            @(j 1 +) &= j;
+        }
+        @("|") &> print;
+        @(i 1 +) &= i;
+    }
+    @pop_all
+}
+
+fn main: () -> () {
+    let height: i32; @(3) &= height;
+    let width: i32; @(4) &= width;
+    let arena: [3][4]i32;
+    @([[0 0 0 0] [0 0 1 0] [0 0 0 0]]) &= arena;
+    @(arena width height) &> draw_arena;
+}

@@ -361,6 +361,10 @@ impl IrLowerer {
                 let (cond, block_before_if, if_body_block) =
                     self.lower_if_condition(cond_stack_block.clone(), body, &curr_block_context)?;
 
+                if self.arena.hfs_stack.len() == stack_before_branches.len() {
+                    self.arena.hfs_stack = stack_before_branches.clone();
+                }
+
                 let (if_end_block, stack_after_if_body) =
                     self.lower_if_body(body, &curr_block_context, matches!(if_stmt, Statement::If { .. }))?;
                 stack_snapshots.push((self.ir_context.curr_insert_block, stack_after_if_body.clone()));
@@ -498,7 +502,7 @@ impl IrLowerer {
                     loop_stack.push(load);
                     loop_temps.push((alloca, load));
                 }
-                self.arena.hfs_stack = loop_stack;
+                self.arena.hfs_stack = loop_stack.clone();
 
                 for stmt in &cond {
                     self.lower_stmt(*stmt, curr_block_context.clone())?;
@@ -510,6 +514,11 @@ impl IrLowerer {
                 let cond_type = self.arena.get_type_id_of_inst(cond_inst)?;
                 self.arena
                     .compare_types(cond_type, IrType::new_bool(0).type_id(), vec![self.arena.get_inst(cond_inst).get_span()])?;
+
+                if self.arena.hfs_stack.len() == loop_stack.len() {
+                    self.arena.hfs_stack = loop_stack.clone();
+                }
+
                 self.arena.alloc_terminator_for(
                     TerminatorInst::Branch {
                         span: span.clone(),
@@ -970,7 +979,7 @@ impl IrLowerer {
                 let span = *self.ast_arena.get_expr_span(expr_id);
                 self.lower_array_access(inner_lhs, inner_idx, span)
             },
-            _ => panic!("[internal error] array access is only supported on plain array variables or nested array indexing"),
+            _ => self.lower_expr(expr_id),
         }
     }
 

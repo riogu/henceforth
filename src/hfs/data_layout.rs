@@ -14,8 +14,13 @@ pub fn size_of(type_id: TypeId, arena: &IrArena) -> u32 {
         IrType::String { .. } => 16,
         IrType::Tuple { .. } => panic!("[internal error] tuples are never laid out in memory, size_of doesn't apply"),
         IrType::Array { hfs_type, length, .. } => {
-            let len = const_array_len(*length, arena)
-                .expect("[internal error] size_of called on an array whose length isn't a compile-time constant");
+            let len = const_array_len(*length, arena).unwrap_or_else(|| {
+                panic!(
+                    "cranelift needs this array's element count to be known at compile time to compute its size, but it's \
+                     fully decayed (declared with empty brackets in every dimension, e.g. `[][]i32`). Give at least the \
+                     inner dimension a concrete size instead, e.g. `[][10]i32`."
+                )
+            });
             size_of(*hfs_type, arena) * len
         },
     }

@@ -1371,6 +1371,14 @@ impl StackAnalyzer {
                     Ok(hfs_type)
                 }
             },
+            ElaboratedType::Array { hfs_type: elem_type_id, length: None, ptr_count } => {
+                let resolved_elem = self.resolve_type(elem_type_id, span.clone(), error_fn)?;
+                if resolved_elem == elem_type_id {
+                    Ok(hfs_type)
+                } else {
+                    Ok(self.arena.alloc_type(ElaboratedType::Array { hfs_type: resolved_elem, length: None, ptr_count }, span))
+                }
+            },
             _ => Ok(hfs_type),
         }
     }

@@ -9,7 +9,7 @@ use cranelift_module::{FuncId as ClifFuncId, Linkage, Module};
 
 use crate::hfs::{
     BlockId, InstId, Instruction, IrArena, IrFuncId, IrFunction, IrOperation, IrType, Literal, TerminatorInst, Type, TypeId,
-    cranelift_builtins::{BuiltinsContext, call_free, call_malloc, call_memcpy, data_ptr, declare_cstring, translate_builtin_call},
+    cranelift_builtins::{BuiltinsContext, data_ptr, declare_cstring, translate_builtin_call},
     data_layout, find_builtin,
 };
 
@@ -226,25 +226,6 @@ fn translate_operation(op: IrOperation, arena: &IrArena, builder: &mut FunctionB
     }
 }
 
-fn array_byte_size(
-    type_id: TypeId,
-    array_len: InstId,
-    arena: &IrArena,
-    builder: &mut FunctionBuilder,
-    values: &HashMap<InstId, ir::Value>,
-) -> ir::Value {
-    if data_layout::try_const_len(array_len, arena).is_some() {
-        return builder.ins().iconst(ir::types::I64, data_layout::size_of(type_id, arena) as i64);
-    }
-    let IrType::Array { hfs_type: elem_type, .. } = arena.get_type(type_id) else {
-        panic!("[internal error] array_byte_size called on a non-array type")
-    };
-    let elem_size = data_layout::size_of(*elem_type, arena) as i64;
-    let len64 = builder.ins().uextend(ir::types::I64, values[&array_len]);
-    let size_const = builder.ins().iconst(ir::types::I64, elem_size);
-    builder.ins().imul(len64, size_const)
-}
-
 fn translate_instruction(
     inst_id: InstId,
     arena: &IrArena,
@@ -277,13 +258,19 @@ fn translate_instruction(
             values.insert(inst_id, val);
         },
         Instruction::Alloca { type_id, array_len, .. } => {
-            if data_layout::is_heap_allocated(type_id, array_len, arena) {
-                let byte_size = array_byte_size(type_id, array_len, arena, builder, values);
-                let ptr = call_malloc(builder, module, builtins_ctx, byte_size);
-                values.insert(inst_id, ptr);
-                return;
-            }
-            let size = data_layout::size_of(type_id, arena);
+            let size = match arena.get_type(type_id) {
+                IrType::Array { hfs_type: elem_type, .. } => {
+                    let Some(len) = data_layout::try_const_len(array_len, arena) else {
+                        panic!(
+                            "[cranelift backend] array has a non-constant length and was never bound with &= - only \
+                             &= (aliasing, no allocation) supports a runtime-sized array; using one directly, or \
+                             binding it with :=, needs a real, compile-time-sized array"
+                        )
+                    };
+                    data_layout::size_of(*elem_type, arena) * len
+                },
+                _ => data_layout::size_of(type_id, arena),
+            };
             let align_shift = data_layout::align_of(type_id, arena).trailing_zeros() as u8;
             let slot = builder.create_sized_stack_slot(StackSlotData::new(StackSlotKind::ExplicitSlot, size, align_shift));
             let addr = builder.ins().stack_addr(module.target_config().pointer_type(), slot, 0);
@@ -299,19 +286,6 @@ fn translate_instruction(
             values.insert(inst_id, val);
         },
         Instruction::Store { address, value, .. } => {
-            if let Some(value_type) = arena.get_type_id_of_inst_no_alloc(value) {
-                if let IrType::Array { .. } = arena.get_type(value_type) {
-                    let Instruction::Alloca { type_id: dest_type, array_len: dest_len, .. } = arena.get_inst(address) else {
-                        panic!("[internal error] whole-array store target must be a plain alloca")
-                    };
-                    let size = array_byte_size(*dest_type, *dest_len, arena, builder, values);
-                    call_memcpy(builder, module, builtins_ctx, values[&address], values[&value], size);
-                    if matches!(arena.get_inst(value), Instruction::ReturnValue { .. }) {
-                        call_free(builder, module, builtins_ctx, values[&value]);
-                    }
-                    return;
-                }
-            }
             builder.ins().store(MemFlags::trusted(), values[&value], values[&address], 0);
         },
         Instruction::FunctionCall { args, func_id, return_values, .. } => {
@@ -361,17 +335,6 @@ fn translate_instruction(
     }
 }
 
-fn resolve_array_alloca(mut inst_id: InstId, arena: &IrArena) -> Option<InstId> {
-    loop {
-        match arena.get_inst(inst_id) {
-            Instruction::Alloca { .. } => return Some(inst_id),
-            Instruction::Load { address, type_id, .. } if matches!(arena.get_type(*type_id), IrType::Array { .. }) =>
-                inst_id = *address,
-            _ => return None,
-        }
-    }
-}
-
 fn block_args_for(
     target: BlockId,
     from: BlockId,
@@ -397,15 +360,12 @@ fn translate_terminator(
     block_id: BlockId,
     arena: &IrArena,
     builder: &mut FunctionBuilder,
-    module: &mut dyn Module,
-    builtins_ctx: &BuiltinsContext,
     clif_blocks: &HashMap<BlockId, ir::Block>,
     phi_order: &HashMap<BlockId, Vec<InstId>>,
     values: &HashMap<InstId, ir::Value>,
     return_types: &[TypeId],
     sret_ptr: Option<ir::Value>,
     translating_main: bool,
-    heap_array_allocas: &[InstId],
 ) {
     match arena.get_term(term_id) {
         TerminatorInst::Jump { target, .. } => {
@@ -421,17 +381,6 @@ fn translate_terminator(
             let Instruction::Tuple { instructions, .. } = arena.get_inst(*return_tuple) else {
                 panic!("[internal error] a Return's return_tuple is always an Instruction::Tuple")
             };
-            let mut returned_allocas = Vec::new();
-            for &inst in instructions {
-                if let Some(alloca_id) = resolve_array_alloca(inst, arena) {
-                    returned_allocas.push(alloca_id);
-                }
-            }
-            for &alloca_id in heap_array_allocas {
-                if !returned_allocas.contains(&alloca_id) {
-                    call_free(builder, module, builtins_ctx, values[&alloca_id]);
-                }
-            }
             if translating_main {
                 let exit_value = match (instructions.as_slice(), return_types) {
                     ([single], [return_type]) if ir_type_to_clif(*return_type, arena) == ir::types::I32 => values[single],
@@ -496,17 +445,6 @@ pub fn translate_function(
         phi_order.insert(block_id, phis);
     }
 
-    let mut heap_array_allocas = Vec::new();
-    for &block_id in &block_ids {
-        for &inst_id in &arena.get_block(block_id).instructions {
-            if let Instruction::Alloca { type_id, array_len, .. } = arena.get_inst(inst_id) {
-                if data_layout::is_heap_allocated(*type_id, *array_len, arena) {
-                    heap_array_allocas.push(inst_id);
-                }
-            }
-        }
-    }
-
     let return_types = return_type_ids(func, arena);
     let entry_clif_block = clif_blocks[&func.entry_block];
     builder.append_block_params_for_function_params(entry_clif_block);
@@ -532,15 +470,12 @@ pub fn translate_function(
             block_id,
             arena,
             &mut builder,
-            module,
-            builtins_ctx,
             &clif_blocks,
             &phi_order,
             &values,
             &return_types,
             sret_ptr,
             translating_main,
-            &heap_array_allocas,
         );
     }
 

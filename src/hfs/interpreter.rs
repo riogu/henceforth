@@ -359,11 +359,16 @@ impl Interpreter {
                 // well we should never need it either
             },
 
-            Instruction::Load { address, .. } => {
-                let RuntimeValue::Address(target, path) = self.curr_call_frame().inst_values[&address].clone() else {
-                    panic!("[internal error] load from non-address")
-                };
-                navigate(&self.memory[&target], &path).clone()
+            Instruction::Load { address, type_id, .. } => {
+                let addr_value = self.curr_call_frame().inst_values[address].clone();
+                if matches!(self.arena.get_type(*type_id), IrType::Array { .. }) {
+                    addr_value
+                } else {
+                    let RuntimeValue::Address(target, path) = addr_value else {
+                        panic!("[internal error] load from non-address")
+                    };
+                    navigate(&self.memory[&target], &path).clone()
+                }
             },
             Instruction::GetElementPtr { address, indexes, .. } => {
                 let address = *address;

@@ -666,10 +666,10 @@ impl IrLowerer {
                             ),
                     }
                 };
-                let (mut address, type_id) = match identifier {
+                let (target_var, mut address, type_id) = match identifier {
                     Identifier::GlobalVar(var_id) | Identifier::Variable(var_id) =>
                         match self.var_id_to_alloca_map.get(&var_id) {
-                            Some(alloca_inst) => (*alloca_inst, self.ast_arena.get_var(var_id).hfs_type),
+                            Some(alloca_inst) => (var_id, *alloca_inst, self.ast_arena.get_var(var_id).hfs_type),
                             None => panic!("[internal error] forgot to alloca a variable before using it"),
                         },
                     Identifier::Function(_) => unreachable!("can't happen"),
@@ -679,6 +679,11 @@ impl IrLowerer {
                     identifier.get_span(&self.ast_arena),
                     self.arena.get_inst(inst_value).get_span(),
                 ])?;
+
+                if deref_count == 0 && matches!(self.arena.get_type(type_id), IrType::Array { .. }) {
+                    self.var_id_to_alloca_map.insert(target_var, inst_value);
+                    return Ok(());
+                }
 
                 // Chase the pointer chain: ptr^ is 1 deref, ptr^^ is 2, etc.
                 if deref_count > 0 {

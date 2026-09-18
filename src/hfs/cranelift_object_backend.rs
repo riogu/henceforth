@@ -1,22 +1,23 @@
-use std::{fs, path::Path, process::Command};
+use std::{collections::HashMap, fs, path::Path, process::Command};
 
 use cranelift_codegen::Context;
 use cranelift_module::Module;
 use cranelift_object::{ObjectBuilder, ObjectModule};
 
 use crate::hfs::{
-    IrArena,
+    InstId, IrArena, IrFuncId,
     cranelift_builtins::declare_builtins,
     cranelift_translate::{declare_all_functions, translate_function},
     find_builtin, ir_aggregate_lowering,
 };
 
 pub fn compile_and_link(arena: &mut IrArena, output: &Path) -> Result<i32, String> {
+    let mut array_stores: HashMap<IrFuncId, HashMap<InstId, u32>> = HashMap::new();
     for func_id in arena.functions.clone().keys() {
         if find_builtin(&arena.get_func(func_id).name).is_some() {
             continue;
         }
-        ir_aggregate_lowering::legalize_arrays(arena, func_id);
+        array_stores.insert(func_id, ir_aggregate_lowering::legalize_arrays(arena, func_id));
     }
 
     let isa_builder = cranelift_native::builder().map_err(|s| format!("unsupported host target: {s}"))?;
@@ -34,7 +35,7 @@ pub fn compile_and_link(arena: &mut IrArena, output: &Path) -> Result<i32, Strin
         if find_builtin(&func.name).is_some() {
             continue;
         }
-        let clif_func = translate_function(func_id, arena, &mut module, &func_ids, &builtins_ctx);
+        let clif_func = translate_function(func_id, arena, &mut module, &func_ids, &builtins_ctx, &array_stores[&func_id]);
         let mut ctx = Context::for_function(clif_func);
         module.define_function(func_ids[&func_id], &mut ctx).map_err(|e| format!("failed to compile a function: {e:?}"))?;
     }

@@ -1,11 +1,32 @@
-use crate::hfs::{BlockId, InstId, Instruction, IrArena, IrFuncId, IrOperation, Literal, data_layout};
+use std::collections::HashMap;
 
-pub fn legalize_arrays(arena: &mut IrArena, func_id: IrFuncId) {
+use crate::hfs::{BlockId, InstId, Instruction, IrArena, IrFuncId, IrOperation, IrType, Literal, data_layout};
+
+pub fn legalize_arrays(arena: &mut IrArena, func_id: IrFuncId) -> HashMap<InstId, u32> {
+    let array_stores = collect_array_stores(arena, func_id);
     for block_id in arena.get_blocks_in(func_id) {
         for inst_id in arena.get_block(block_id).instructions.clone() {
             legalize_gep(arena, block_id, inst_id);
         }
     }
+    array_stores
+}
+
+fn collect_array_stores(arena: &IrArena, func_id: IrFuncId) -> HashMap<InstId, u32> {
+    let mut sizes = HashMap::new();
+    for block_id in arena.get_blocks_in(func_id) {
+        for &inst_id in &arena.get_block(block_id).instructions {
+            let Instruction::Store { address, .. } = arena.get_inst(inst_id) else { continue };
+            let dest_type = match arena.get_inst(*address) {
+                Instruction::GetElementPtr { type_id, .. } | Instruction::Alloca { type_id, .. } => *type_id,
+                _ => continue,
+            };
+            if matches!(arena.get_type(dest_type), IrType::Array { .. }) {
+                sizes.insert(inst_id, data_layout::size_of(dest_type, arena));
+            }
+        }
+    }
+    sizes
 }
 
 fn legalize_gep(arena: &mut IrArena, block_id: BlockId, inst_id: InstId) {

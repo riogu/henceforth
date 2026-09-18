@@ -14,6 +14,7 @@ pub struct BuiltinsContext {
     scanf: ClifFuncId,
     getline: ClifFuncId,
     memcmp: ClifFuncId,
+    memcpy: ClifFuncId,
     stdin: DataId,
     fmt_d: DataId,
     fmt_f: DataId,
@@ -35,6 +36,7 @@ pub fn declare_builtins(module: &mut dyn Module) -> BuiltinsContext {
         scanf: declare_libc_fn(module, "scanf", &[ptr_ty], &[ir::types::I32]),
         getline: declare_libc_fn(module, "getline", &[ptr_ty, ptr_ty, ptr_ty], &[ir::types::I64]),
         memcmp: declare_libc_fn(module, "memcmp", &[ptr_ty, ptr_ty, ir::types::I64], &[ir::types::I32]),
+        memcpy: declare_libc_fn(module, "memcpy", &[ptr_ty, ptr_ty, ir::types::I64], &[ptr_ty]),
         stdin: module
             .declare_data("stdin", Linkage::Import, false, false)
             .unwrap_or_else(|e| panic!("failed to declare 'stdin': {e}")),
@@ -112,6 +114,11 @@ pub fn string_eq(builder: &mut FunctionBuilder, module: &mut dyn Module, ctx: &B
     let cmp_result = builder.inst_results(call_inst)[0];
     let same_bytes = builder.ins().icmp_imm(IntCC::Equal, cmp_result, 0);
     builder.ins().band(same_len, same_bytes)
+}
+
+pub fn call_memcpy(builder: &mut FunctionBuilder, module: &mut dyn Module, ctx: &BuiltinsContext, dest: ir::Value, src: ir::Value, size: ir::Value) {
+    let func_ref = module.declare_func_in_func(ctx.memcpy, builder.func);
+    builder.ins().call(func_ref, &[dest, src, size]);
 }
 
 pub fn translate_builtin_call(

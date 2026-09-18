@@ -1,0 +1,28 @@
+//? COMPILE
+fn set_row: ([]i32 i32 [2][3]i32) -> () {
+    let m: [2][3]i32; &= m;
+    let idx: i32; &= idx;
+    @(idx) [&]= m;
+}
+
+fn main: () -> () {
+    let m: [2][3]i32;
+    @([1 2 3] 0) [&]= m;
+    @([4 5 6] 1) [&]= m;
+
+    @(m 0 [] 0 []) &> print;
+    @(m 0 [] 1 []) &> print;
+    @(m 0 [] 2 []) &> print;
+    @(m 1 [] 0 []) &> print;
+    @(m 1 [] 1 []) &> print;
+    @(m 1 [] 2 []) &> print;
+
+    let src: [3]i32;
+    @(9 0) [&]= src;
+    @(8 1) [&]= src;
+    @(7 2) [&]= src;
+    @(src 0 m) &> set_row;
+    @(m 0 [] 0 []) &> print;
+    @(m 0 [] 1 []) &> print;
+    @(m 0 [] 2 []) &> print;
+}

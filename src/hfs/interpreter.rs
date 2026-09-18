@@ -218,7 +218,7 @@ impl Interpreter {
         RuntimeValue::Array(vec![RuntimeValue::default(&elem_type, &self.arena); len as usize])
     }
 
-    fn deref_for_builtin(&self, val: RuntimeValue) -> RuntimeValue {
+    fn deref_array(&self, val: RuntimeValue) -> RuntimeValue {
         match val {
             RuntimeValue::Address(target, path) => navigate(&self.memory[&target], &path).clone(),
             other => other,
@@ -228,7 +228,7 @@ impl Interpreter {
     fn call_declared_function(&mut self, func_id: IrFuncId, args: Vec<RuntimeValue>) -> Vec<RuntimeValue> {
         let func = self.arena.get_func(func_id);
         if let Some(builtin) = find_builtin(&func.name).map(|spec| spec.builtin) {
-            let args = args.into_iter().map(|arg| self.deref_for_builtin(arg)).collect();
+            let args = args.into_iter().map(|arg| self.deref_array(arg)).collect();
             return call_builtin(builtin, args);
         }
 
@@ -359,6 +359,11 @@ impl Interpreter {
                     panic!("[internal error] store to non-address")
                 };
                 let val = self.curr_call_frame().inst_values[&value].clone();
+                let is_array_dest = matches!(
+                    self.arena.get_inst(*address),
+                    Instruction::GetElementPtr { type_id, .. } if matches!(self.arena.get_type(*type_id), IrType::Array { .. })
+                );
+                let val = if is_array_dest { self.deref_array(val) } else { val };
                 let slot = self.memory.get_mut(&target).expect("[internal error] store to unallocated memory");
                 *navigate_mut(slot, &path) = val.clone();
                 val

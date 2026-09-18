@@ -9,7 +9,7 @@ use cranelift_module::{FuncId as ClifFuncId, Linkage, Module};
 
 use crate::hfs::{
     BlockId, InstId, Instruction, IrArena, IrFuncId, IrFunction, IrOperation, IrType, Literal, TerminatorInst, Type, TypeId,
-    cranelift_builtins::{BuiltinsContext, data_ptr, declare_cstring, string_eq, translate_builtin_call},
+    cranelift_builtins::{BuiltinsContext, call_memcpy, data_ptr, declare_cstring, string_eq, translate_builtin_call},
     data_layout, find_builtin,
 };
 
@@ -276,6 +276,7 @@ fn translate_instruction(
     module: &mut dyn Module,
     func_ids: &HashMap<IrFuncId, ClifFuncId>,
     builtins_ctx: &BuiltinsContext,
+    array_stores: &HashMap<InstId, u32>,
     values: &mut HashMap<InstId, ir::Value>,
 ) {
     match arena.get_inst(inst_id).clone() {
@@ -329,7 +330,15 @@ fn translate_instruction(
             values.insert(inst_id, val);
         },
         Instruction::Store { address, value, .. } => {
-            builder.ins().store(MemFlags::trusted(), values[&value], values[&address], 0);
+            match array_stores.get(&inst_id) {
+                Some(&size) => {
+                    let size_val = builder.ins().iconst(ir::types::I64, size as i64);
+                    call_memcpy(builder, module, builtins_ctx, values[&address], values[&value], size_val);
+                },
+                None => {
+                    builder.ins().store(MemFlags::trusted(), values[&value], values[&address], 0);
+                },
+            }
         },
         Instruction::FunctionCall { args, func_id, return_values, .. } => {
             let callee = arena.get_func(func_id);
@@ -481,6 +490,7 @@ pub fn translate_function(
     module: &mut dyn Module,
     func_ids: &HashMap<IrFuncId, ClifFuncId>,
     builtins_ctx: &BuiltinsContext,
+    array_stores: &HashMap<InstId, u32>,
 ) -> ir::Function {
     let func = arena.get_func(func_id);
     let sig = make_signature(func, arena, module);
@@ -542,7 +552,7 @@ pub fn translate_function(
             }
         }
         for &inst_id in &arena.get_block(block_id).instructions.clone() {
-            translate_instruction(inst_id, arena, &mut builder, module, func_ids, builtins_ctx, &mut values);
+            translate_instruction(inst_id, arena, &mut builder, module, func_ids, builtins_ctx, array_stores, &mut values);
         }
         let term_id = arena.get_block(block_id).terminator.expect("[internal error] block with no terminator");
         translate_terminator(

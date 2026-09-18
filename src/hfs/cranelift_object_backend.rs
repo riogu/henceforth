@@ -14,7 +14,8 @@ use crate::hfs::{
 pub fn compile_and_link(arena: &mut IrArena, output: &Path) -> Result<i32, String> {
     let mut array_stores: HashMap<IrFuncId, HashMap<InstId, u32>> = HashMap::new();
     for func_id in arena.functions.clone().keys() {
-        if find_builtin(&arena.get_func(func_id).name).is_some() {
+        let func = arena.get_func(func_id);
+        if find_builtin(&func.name).is_some() || func.is_extern {
             continue;
         }
         array_stores.insert(func_id, ir_aggregate_lowering::legalize_arrays(arena, func_id));
@@ -32,7 +33,7 @@ pub fn compile_and_link(arena: &mut IrArena, output: &Path) -> Result<i32, Strin
     let func_ids = declare_all_functions(arena, &mut module);
     let builtins_ctx = declare_builtins(&mut module);
     for (func_id, func) in arena.functions.iter() {
-        if find_builtin(&func.name).is_some() {
+        if find_builtin(&func.name).is_some() || func.is_extern {
             continue;
         }
         let clif_func = translate_function(func_id, arena, &mut module, &func_ids, &builtins_ctx, &array_stores[&func_id]);

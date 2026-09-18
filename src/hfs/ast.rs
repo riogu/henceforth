@@ -103,7 +103,7 @@ pub struct FunctionDeclaration {
     pub name: String,
     pub param_type: TypeId,  // either a tuple or a single type
     pub return_type: TypeId, // either a tuple or a single type
-    pub body: StmtId,
+    pub body: Option<StmtId>,
     pub parameter_exprs: Vec<ExprId>,
 }
 

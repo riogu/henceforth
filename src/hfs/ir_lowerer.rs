@@ -167,10 +167,18 @@ impl IrLowerer {
             return_type,
             parameter_insts: vec![],
             entry_block: BlockId::null(),
+            is_extern: body.is_none(),
         }; // needs to be here because we need to set self.arena.curr_function correctly
         // id like it to not require exposing a mutable method but it has to be this way
         let new_id = self.arena.alloc_function(cfg_function);
         self.func_id_map.insert(id, new_id);
+
+        let Some(body) = body else {
+            let entry_block = self.arena.alloc_block("start", new_id);
+            self.arena.get_func_mut(new_id).entry_block = entry_block;
+            self.arena.alloc_terminator_for(TerminatorInst::Unreachable, entry_block);
+            return Ok(new_id);
+        };
         self.ir_context.curr_func = new_id;
 
         // note that this needs to be allocated before we lower the body so we can access the

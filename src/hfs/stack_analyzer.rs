@@ -317,7 +317,7 @@ impl StackAnalyzer {
         }
 
         let func =
-            FunctionDeclaration { name: spec.name.to_string(), param_type, return_type, body: StmtId(0), parameter_exprs };
+            FunctionDeclaration { name: spec.name.to_string(), param_type, return_type, body: Some(StmtId(0)), parameter_exprs };
         let func_id = self.push_function_and_scope_and_alloc(spec.name, func, span.clone());
 
         // body: pop every parameter, then push one placeholder literal per return value. matches
@@ -344,7 +344,7 @@ impl StackAnalyzer {
         let body = self
             .arena
             .alloc_stmt(Statement::StackBlock { expr_ids: return_exprs, consumed_count: spec.params.len() }, span.clone());
-        self.arena.get_func_mut(func_id).body = body;
+        self.arena.get_func_mut(func_id).body = Some(body);
 
         self.arena.validate_return_stack(return_type, span.clone())?;
         self.scope_resolution_stack.pop();
@@ -419,14 +419,19 @@ impl StackAnalyzer {
         };
 
         // needed for recursive functions AND to match the correct token
-        let func = FunctionDeclaration { name: name.clone(), param_type, return_type, body: StmtId(69420), parameter_exprs };
+        let func = FunctionDeclaration { name: name.clone(), param_type, return_type, body: Some(StmtId(69420)), parameter_exprs };
         //------------------------------------------------------------
         // we push scopes so the body can solve identifiers
         let func_id = self.push_function_and_scope_and_alloc(&name, func, span);
-        self.arena.get_func_mut(func_id).body = self.resolve_stmt(unresolved_body)?;
+        match unresolved_body {
+            Some(unresolved_body) => {
+                self.arena.get_func_mut(func_id).body = Some(self.resolve_stmt(unresolved_body)?);
+                self.arena.validate_return_stack(self.scope_resolution_stack.get_curr_func_return_type(), span)?;
+            },
+            None => self.arena.get_func_mut(func_id).body = None,
+        }
         //------------------------------------------------------------
 
-        self.arena.validate_return_stack(self.scope_resolution_stack.get_curr_func_return_type(), span)?;
         self.scope_resolution_stack.pop();
         self.arena.pop_entire_hfs_stack(); // context should be reset after each function!
         Ok(func_id)

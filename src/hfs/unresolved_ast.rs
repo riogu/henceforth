@@ -106,7 +106,7 @@ pub struct UnresolvedFunctionDeclaration {
     pub name: String,
     pub param_type: TypeId,
     pub return_type: TypeId,
-    pub body: UnresolvedStmtId, // Uses unresolved ID
+    pub body: Option<UnresolvedStmtId>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

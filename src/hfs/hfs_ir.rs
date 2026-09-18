@@ -64,6 +64,7 @@ pub struct IrFunction {
     pub parameter_insts: Vec<InstId>,
     // note that you can get all blocks by insertion order from the IrArena
     pub entry_block: BlockId, // CFG of blocks
+    pub is_extern: bool,
 }
 
 #[derive(Debug, Clone)]

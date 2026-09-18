@@ -135,7 +135,10 @@ impl Dumpable for UnresolvedFunctionDeclaration {
             "Return type:".blue(),
             indent(&arena.get_type(self.return_type).dump(arena)).yellow(),
             "Body:".blue(),
-            indent(&arena.get_unresolved_stmt(self.body).dump(arena))
+            match self.body {
+                Some(body) => indent(&arena.get_unresolved_stmt(body).dump(arena)),
+                None => ColoredString::from("extern (no body)"),
+            }
         ))
     }
 }

@@ -158,10 +158,10 @@ impl Dumpable for FunctionDeclaration {
             "Return type:".blue(),
             indent(&arena.get_type(self.return_type).dump_resolved(arena)).yellow(),
             "Body:".blue(),
-            if self.body.0 < arena.stmts.len() {
-                indent(&arena.get_stmt(self.body).dump(arena))
-            } else {
-                indent(&format!("Body Unresolved").yellow())
+            match self.body {
+                Some(body) if body.0 < arena.stmts.len() => indent(&arena.get_stmt(body).dump(arena)),
+                Some(_) => indent(&format!("Body Unresolved").yellow()),
+                None => ColoredString::from("extern (no body)"),
             },
             "Parameter Exprs:".blue(),
             "[".custom_color(CustomColor::new(129, 137, 150)),

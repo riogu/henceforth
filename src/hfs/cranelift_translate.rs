@@ -98,7 +98,13 @@ pub fn declare_all_functions(arena: &IrArena, module: &mut dyn Module) -> HashMa
             continue;
         }
         let sig = make_signature(func, arena, module);
-        let linkage = if func.name == "main" { Linkage::Export } else { Linkage::Local };
+        let linkage = if func.is_extern {
+            Linkage::Import
+        } else if func.name == "main" {
+            Linkage::Export
+        } else {
+            Linkage::Local
+        };
         let clif_id = module
             .declare_function(&func.name, linkage, &sig)
             .unwrap_or_else(|e| panic!("[cranelift backend] failed to declare '{}': {e}", func.name));

@@ -212,14 +212,23 @@ impl Parser {
 // Declarations
 impl Parser {
     // <function_decl> ::= "fn" <identifier> ":" <signature> "{" <block_scope> "}"
+    //                   | "extern" "fn" <identifier> ":" <signature> ";"
     fn function_declaration(&mut self) -> Result<UnresolvedFuncId, Box<dyn CompileError>> {
-        let token = self.expect(TokenKind::Fn)?;
+        let is_extern = matches!(self.tokens.peek(), Some(t) if t.kind == TokenKind::Extern);
+        let extern_token = if is_extern { Some(self.expect(TokenKind::Extern)?) } else { None };
+        let fn_token = self.expect(TokenKind::Fn)?;
+        let start_span = extern_token.map_or(fn_token.span, |t| t.span);
         let (name, _) = self.expect_identifier()?;
         let (param_types, return_types) = self.function_signature()?;
-        let body = self.block_scope(ScopeKind::Function)?;
+        let body = if is_extern {
+            self.expect(TokenKind::Semicolon)?;
+            None
+        } else {
+            Some(self.block_scope(ScopeKind::Function)?)
+        };
         Ok(self.arena.alloc_unresolved_function(
             UnresolvedFunctionDeclaration { name, param_type: param_types, return_type: return_types, body },
-            token.span.merge(self.last_span()),
+            start_span.merge(self.last_span()),
         ))
     }
     // <var_decl> ::= "let" <identifier> ":" <type> ";"
@@ -260,7 +269,8 @@ impl Parser {
         while let Some(token) = parser.tokens.peek() {
             match &token.kind {
                 TokenKind::Let => top_level.push(UnresolvedTopLevelId::VariableDecl(parser.variable_declaration()?)),
-                TokenKind::Fn => top_level.push(UnresolvedTopLevelId::FunctionDecl(parser.function_declaration()?)),
+                TokenKind::Fn | TokenKind::Extern =>
+                    top_level.push(UnresolvedTopLevelId::FunctionDecl(parser.function_declaration()?)),
                 _ =>
                     return parser_error!(
                         ParserErrorKind::ExpectedButFound(
@@ -299,7 +309,8 @@ impl Parser {
             match &token.kind {
                 kind if *kind == TokenKind::RightBrace => break,
                 TokenKind::Let => top_level_ids.push(UnresolvedTopLevelId::VariableDecl(self.variable_declaration()?)),
-                TokenKind::Fn => top_level_ids.push(UnresolvedTopLevelId::FunctionDecl(self.function_declaration()?)),
+                TokenKind::Fn | TokenKind::Extern =>
+                    top_level_ids.push(UnresolvedTopLevelId::FunctionDecl(self.function_declaration()?)),
                 TokenKind::At => top_level_ids.push(UnresolvedTopLevelId::Statement(self.stack_block()?)),
                 _ => top_level_ids.push(UnresolvedTopLevelId::Statement(self.statement()?)),
             };

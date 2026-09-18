@@ -1419,6 +1419,7 @@ fn collect_names(input: &str, arena: &mut IrArena, names: &mut NameMap) {
                 return_type: placeholder_type,
                 parameter_insts: vec![],
                 entry_block: BlockId::default(),
+                is_extern: false,
             });
             names.func_to_name.insert(func_id, name.clone());
             names.name_to_func.insert(name, func_id);

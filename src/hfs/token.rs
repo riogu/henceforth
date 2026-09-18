@@ -53,6 +53,7 @@ pub enum TokenKind {
     StackKeyword(String),
     Let,
     Fn,
+    Extern,
     If,
     Else,
     Elif,
@@ -129,6 +130,7 @@ impl fmt::Display for TokenKind {
             TokenKind::Continue => write!(f, "continue"),
             TokenKind::Return => write!(f, "return"),
             TokenKind::Fn => write!(f, "fn"),
+            TokenKind::Extern => write!(f, "extern"),
             TokenKind::Plus => write!(f, "+"),
             TokenKind::Minus => write!(f, "-"),
             TokenKind::Star => write!(f, "*"),
@@ -219,6 +221,7 @@ impl Token {
         match self.kind {
             TokenKind::Let
             | TokenKind::Fn
+            | TokenKind::Extern
             | TokenKind::If
             | TokenKind::Else
             | TokenKind::Elif
@@ -280,6 +283,7 @@ impl TokenKind {
         match self {
             TokenKind::Let
             | TokenKind::Fn
+            | TokenKind::Extern
             | TokenKind::If
             | TokenKind::Else
             | TokenKind::Elif
@@ -353,7 +357,7 @@ impl TokenKind {
             TokenKind::Bool | TokenKind::Else | TokenKind::Elif => 4,
             TokenKind::While | TokenKind::Break => 5,
             TokenKind::Continue => 8,
-            TokenKind::Return | TokenKind::String => 6,
+            TokenKind::Return | TokenKind::String | TokenKind::Extern => 6,
             TokenKind::Plus
             | TokenKind::Minus
             | TokenKind::Star

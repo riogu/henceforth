@@ -231,6 +231,9 @@ impl Interpreter {
             let args = args.into_iter().map(|arg| self.deref_array(arg)).collect();
             return call_builtin(builtin, args);
         }
+        if func.is_extern {
+            panic!("the interpreter doesn't support extern functions ('{}') - use --backend cranelift", func.name)
+        }
 
         // bind all the parameters before interpreting the function
         let mut inst_values = HashMap::new();

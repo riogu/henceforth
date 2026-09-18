@@ -279,6 +279,7 @@ impl Lexer {
                             "continue" => TokenKind::Continue,
                             "return" => TokenKind::Return,
                             "fn" => TokenKind::Fn,
+                            "extern" => TokenKind::Extern,
 
                             "i32" => TokenKind::Int,
                             "str" => TokenKind::String,

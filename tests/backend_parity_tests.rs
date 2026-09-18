@@ -6,7 +6,7 @@ const FIXTURE_FOLDER: &str = "tests/compile_tests";
 
 const SKIP: &[&str] = &["builtin_input", "print_and_input_str", "tictactoe-user-input", "new_whiles"];
 
-const KNOWN_GAPS: &[&str] = &["bubble_sort", "print_any_type"];
+const KNOWN_GAPS: &[&str] = &["bubble_sort"];
 
 fn henceforth_bin() -> &'static str { env!("CARGO_BIN_EXE_henceforth") }
 

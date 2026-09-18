@@ -4,7 +4,10 @@ use cranelift_codegen::ir::{self, InstBuilder, MemFlags, StackSlotData, StackSlo
 use cranelift_frontend::FunctionBuilder;
 use cranelift_module::{DataDescription, DataId, FuncId as ClifFuncId, Linkage, Module};
 
-use crate::hfs::{Builtin, InstId, IrArena, cranelift_translate::infer_clif_type};
+use crate::hfs::{
+    Builtin, InstId, IrArena, IrType, TypeId, data_layout,
+    cranelift_translate::{infer_clif_type, ir_type_to_clif, resolve_array_shape},
+};
 
 pub struct BuiltinsContext {
     printf: ClifFuncId,
@@ -20,6 +23,9 @@ pub struct BuiltinsContext {
     str_true: DataId,
     str_false: DataId,
     empty: DataId,
+    arr_open: DataId,
+    arr_sep: DataId,
+    arr_close: DataId,
 }
 
 pub fn declare_builtins(module: &mut dyn Module) -> BuiltinsContext {
@@ -40,6 +46,9 @@ pub fn declare_builtins(module: &mut dyn Module) -> BuiltinsContext {
         str_true: declare_cstring(module, "__hfs_str_true", "true"),
         str_false: declare_cstring(module, "__hfs_str_false", "false"),
         empty: declare_cstring(module, "__hfs_empty_str", ""),
+        arr_open: declare_cstring(module, "__hfs_arr_open", "["),
+        arr_sep: declare_cstring(module, "__hfs_arr_sep", ", "),
+        arr_close: declare_cstring(module, "__hfs_arr_close", "]"),
     }
 }
 
@@ -134,7 +143,21 @@ fn translate_print(
     ptr_ty: ir::Type,
 ) {
     let val = values[&arg];
-    match infer_clif_type(arg, arena) {
+    let clif_ty = infer_clif_type(arg, arena);
+    if clif_ty != ir::types::I64 {
+        return print_scalar(val, clif_ty, builder, module, ctx, ptr_ty);
+    }
+    let Some((elem_type, array_len)) = resolve_array_shape(arg, arena) else {
+        panic!(
+            "[cranelift backend] can't print an array of unknown length - bind it to a local \
+             with &= or := first, or pass its length in explicitly"
+        )
+    };
+    print_array(val, elem_type, values[&array_len], arena, builder, module, ctx, ptr_ty);
+}
+
+fn print_scalar(val: ir::Value, clif_ty: ir::Type, builder: &mut FunctionBuilder, module: &mut dyn Module, ctx: &BuiltinsContext, ptr_ty: ir::Type) {
+    match clif_ty {
         ir::types::I32 => {
             let fmt = data_ptr(builder, module, ctx.fmt_d, ptr_ty);
             call_variadic(builder, module, ctx.printf, &[ptr_ty, ir::types::I32], &[fmt, val]);
@@ -157,9 +180,63 @@ fn translate_print(
             let fmt = data_ptr(builder, module, ctx.fmt_str, ptr_ty);
             call_variadic(builder, module, ctx.printf, &[ptr_ty, ir::types::I32, ptr_ty], &[fmt, len32, str_ptr]);
         },
-        ir::types::I64 => panic!("[cranelift backend] print doesn't support arrays yet"),
+        ir::types::I64 => panic!("[cranelift backend] print doesn't support nested arrays yet"),
         other => panic!("[cranelift backend] print doesn't support values of Cranelift type {other}"),
     }
+}
+
+fn print_array(
+    addr: ir::Value,
+    elem_type: TypeId,
+    len_val: ir::Value,
+    arena: &IrArena,
+    builder: &mut FunctionBuilder,
+    module: &mut dyn Module,
+    ctx: &BuiltinsContext,
+    ptr_ty: ir::Type,
+) {
+    let open = data_ptr(builder, module, ctx.arr_open, ptr_ty);
+    call_variadic(builder, module, ctx.printf, &[ptr_ty], &[open]);
+
+    let header = builder.create_block();
+    let body = builder.create_block();
+    let exit = builder.create_block();
+    let zero = builder.ins().iconst(ir::types::I32, 0);
+    builder.ins().jump(header, &[ir::BlockArg::from(zero)]);
+
+    builder.switch_to_block(header);
+    let idx = builder.append_block_param(header, ir::types::I32);
+    let more_left = builder.ins().icmp(IntCC::SignedLessThan, idx, len_val);
+    builder.ins().brif(more_left, body, &[], exit, &[]);
+
+    builder.switch_to_block(body);
+    let not_first = builder.ins().icmp_imm(IntCC::NotEqual, idx, 0);
+    let sep = data_ptr(builder, module, ctx.arr_sep, ptr_ty);
+    let no_sep = data_ptr(builder, module, ctx.empty, ptr_ty);
+    let chosen_sep = builder.ins().select(not_first, sep, no_sep);
+    call_variadic(builder, module, ctx.printf, &[ptr_ty], &[chosen_sep]);
+
+    if matches!(arena.get_type(elem_type), IrType::Array { .. }) {
+        panic!("[cranelift backend] print doesn't support nested arrays yet")
+    }
+    let elem_clif_ty = ir_type_to_clif(elem_type, arena);
+    let elem_size = data_layout::size_of(elem_type, arena) as i64;
+    let idx64 = builder.ins().uextend(ir::types::I64, idx);
+    let byte_offset = builder.ins().imul_imm(idx64, elem_size);
+    let elem_addr = builder.ins().iadd(addr, byte_offset);
+    let elem_val = builder.ins().load(elem_clif_ty, MemFlags::trusted(), elem_addr, 0);
+    print_scalar(elem_val, elem_clif_ty, builder, module, ctx, ptr_ty);
+
+    let one = builder.ins().iconst(ir::types::I32, 1);
+    let next_idx = builder.ins().iadd(idx, one);
+    builder.ins().jump(header, &[ir::BlockArg::from(next_idx)]);
+    builder.seal_block(header);
+    builder.seal_block(body);
+
+    builder.switch_to_block(exit);
+    builder.seal_block(exit);
+    let close = data_ptr(builder, module, ctx.arr_close, ptr_ty);
+    call_variadic(builder, module, ctx.printf, &[ptr_ty], &[close]);
 }
 
 fn translate_input_int(

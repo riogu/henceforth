@@ -218,9 +218,17 @@ impl Interpreter {
         RuntimeValue::Array(vec![RuntimeValue::default(&elem_type, &self.arena); len as usize])
     }
 
+    fn deref_for_builtin(&self, val: RuntimeValue) -> RuntimeValue {
+        match val {
+            RuntimeValue::Address(target, path) => navigate(&self.memory[&target], &path).clone(),
+            other => other,
+        }
+    }
+
     fn call_declared_function(&mut self, func_id: IrFuncId, args: Vec<RuntimeValue>) -> Vec<RuntimeValue> {
         let func = self.arena.get_func(func_id);
         if let Some(builtin) = find_builtin(&func.name).map(|spec| spec.builtin) {
+            let args = args.into_iter().map(|arg| self.deref_for_builtin(arg)).collect();
             return call_builtin(builtin, args);
         }
 

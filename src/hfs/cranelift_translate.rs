@@ -33,6 +33,22 @@ fn is_plain_string(type_id: TypeId, arena: &IrArena) -> bool {
     ty.get_ptr_count() == 0 && matches!(ty, IrType::String { .. })
 }
 
+pub fn resolve_array_shape(mut inst_id: InstId, arena: &IrArena) -> Option<(TypeId, InstId)> {
+    loop {
+        match arena.get_inst(inst_id) {
+            Instruction::Alloca { type_id, array_len, .. } => {
+                let IrType::Array { hfs_type: elem_type, .. } = arena.get_type(*type_id) else {
+                    panic!("[internal error] resolve_array_shape reached a non-array Alloca")
+                };
+                return Some((*elem_type, *array_len));
+            },
+            Instruction::Load { address, type_id, .. } if matches!(arena.get_type(*type_id), IrType::Array { .. }) =>
+                inst_id = *address,
+            _ => return None,
+        }
+    }
+}
+
 fn return_type_ids(func: &IrFunction, arena: &IrArena) -> Vec<TypeId> {
     let IrType::Tuple { type_ids, .. } = arena.get_type(func.return_type) else {
         panic!("[internal error] a function's return_type is always a Tuple, even for 0 or 1 values")

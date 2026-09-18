@@ -1,0 +1,11 @@
+//? COMPILE
+fn mixed: () -> (i32 bool i32 bool) {
+    @(10 true 20 false)
+}
+
+fn main: () -> (i32) {
+    @() &> mixed;
+    @pop
+    @pop
+    @pop
+}

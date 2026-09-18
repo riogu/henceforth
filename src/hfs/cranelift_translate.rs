@@ -27,19 +27,31 @@ pub fn ir_type_to_clif(type_id: TypeId, arena: &IrArena) -> ir::Type {
     }
 }
 
+fn return_type_ids(func: &IrFunction, arena: &IrArena) -> Vec<TypeId> {
+    let IrType::Tuple { type_ids, .. } = arena.get_type(func.return_type) else {
+        panic!("[internal error] a function's return_type is always a Tuple, even for 0 or 1 values")
+    };
+    type_ids.clone()
+}
+
+fn uses_struct_return(return_types: &[TypeId]) -> bool { return_types.len() > 1 }
+
 fn make_signature(func: &IrFunction, arena: &IrArena, module: &dyn Module) -> ir::Signature {
     let mut sig = module.make_signature();
+    let return_types = return_type_ids(func, arena);
+    if uses_struct_return(&return_types) {
+        sig.params.push(ir::AbiParam::special(module.target_config().pointer_type(), ir::ArgumentPurpose::StructReturn));
+    }
     let IrType::Tuple { type_ids: param_types, .. } = arena.get_type(func.param_type) else {
         panic!("[internal error] a function's param_type is always a Tuple, even for 0 or 1 values")
     };
     for type_id in param_types {
         sig.params.push(ir::AbiParam::new(ir_type_to_clif(*type_id, arena)));
     }
-    let IrType::Tuple { type_ids: return_types, .. } = arena.get_type(func.return_type) else {
-        panic!("[internal error] a function's return_type is always a Tuple, even for 0 or 1 values")
-    };
-    for type_id in return_types {
-        sig.returns.push(ir::AbiParam::new(ir_type_to_clif(*type_id, arena)));
+    if !uses_struct_return(&return_types) {
+        for type_id in &return_types {
+            sig.returns.push(ir::AbiParam::new(ir_type_to_clif(*type_id, arena)));
+        }
     }
     sig
 }
@@ -240,14 +252,38 @@ fn translate_instruction(
                 panic!("[cranelift backend] builtin '{}' isn't supported yet (see Phase 3)", builtin.name);
             }
             let func_ref = module.declare_func_in_func(func_ids[&func_id], builder.func);
+            let callee_returns = return_type_ids(callee, arena);
+
             let mut arg_vals = Vec::new();
+            let sret_addr = if uses_struct_return(&callee_returns) {
+                let (_, size, align) = data_layout::sequential_layout(&callee_returns, arena);
+                let slot = builder.create_sized_stack_slot(StackSlotData::new(StackSlotKind::ExplicitSlot, size, align.trailing_zeros() as u8));
+                let addr = builder.ins().stack_addr(module.target_config().pointer_type(), slot, 0);
+                arg_vals.push(addr);
+                Some(addr)
+            } else {
+                None
+            };
             for a in &args {
                 arg_vals.push(values[a]);
             }
             let call_inst = builder.ins().call(func_ref, &arg_vals);
-            let results = builder.inst_results(call_inst).to_vec();
-            for (retval_inst, result) in return_values.iter().zip(results) {
-                values.insert(*retval_inst, result);
+
+            match sret_addr {
+                Some(addr) => {
+                    let (offsets, ..) = data_layout::sequential_layout(&callee_returns, arena);
+                    for (i, &retval_inst) in return_values.iter().enumerate() {
+                        let ty = ir_type_to_clif(callee_returns[i], arena);
+                        let val = builder.ins().load(ty, MemFlags::trusted(), addr, offsets[i] as i32);
+                        values.insert(retval_inst, val);
+                    }
+                },
+                None => {
+                    let results = builder.inst_results(call_inst).to_vec();
+                    for (retval_inst, result) in return_values.iter().zip(results) {
+                        values.insert(*retval_inst, result);
+                    }
+                },
             }
         },
         Instruction::GlobalAlloca(_) => panic!("[cranelift backend] global variables aren't supported yet"),
@@ -284,6 +320,8 @@ fn translate_terminator(
     clif_blocks: &HashMap<BlockId, ir::Block>,
     phi_order: &HashMap<BlockId, Vec<InstId>>,
     values: &HashMap<InstId, ir::Value>,
+    return_types: &[TypeId],
+    sret_ptr: Option<ir::Value>,
 ) {
     match arena.get_term(term_id) {
         TerminatorInst::Jump { target, .. } => {
@@ -299,11 +337,22 @@ fn translate_terminator(
             let Instruction::Tuple { instructions, .. } = arena.get_inst(*return_tuple) else {
                 panic!("[internal error] a Return's return_tuple is always an Instruction::Tuple")
             };
-            let mut vals = Vec::new();
-            for i in instructions {
-                vals.push(values[i]);
+            match sret_ptr {
+                Some(ptr) => {
+                    let (offsets, ..) = data_layout::sequential_layout(return_types, arena);
+                    for (i, inst) in instructions.iter().enumerate() {
+                        builder.ins().store(MemFlags::trusted(), values[inst], ptr, offsets[i] as i32);
+                    }
+                    builder.ins().return_(&[]);
+                },
+                None => {
+                    let mut vals = Vec::new();
+                    for i in instructions {
+                        vals.push(values[i]);
+                    }
+                    builder.ins().return_(&vals);
+                },
             }
-            builder.ins().return_(&vals);
         },
         TerminatorInst::Unreachable => panic!("[internal error] reached an Unreachable terminator during translation"),
     }
@@ -338,10 +387,15 @@ pub fn translate_function(func_id: IrFuncId, arena: &IrArena, module: &mut dyn M
         phi_order.insert(block_id, phis);
     }
 
+    let return_types = return_type_ids(func, arena);
     let entry_clif_block = clif_blocks[&func.entry_block];
     builder.append_block_params_for_function_params(entry_clif_block);
+    // when using StructReturn, make_signature put that pointer first, ahead of the function's
+    // own parameters - so parameter_insts (which never include it) bind starting one slot in.
+    let sret_ptr = if uses_struct_return(&return_types) { Some(builder.block_params(entry_clif_block)[0]) } else { None };
+    let param_offset = if sret_ptr.is_some() { 1 } else { 0 };
     for (i, &param_inst) in func.parameter_insts.iter().enumerate() {
-        values.insert(param_inst, builder.block_params(entry_clif_block)[i]);
+        values.insert(param_inst, builder.block_params(entry_clif_block)[i + param_offset]);
     }
 
     for &block_id in &block_ids {
@@ -350,7 +404,7 @@ pub fn translate_function(func_id: IrFuncId, arena: &IrArena, module: &mut dyn M
             translate_instruction(inst_id, arena, &mut builder, module, func_ids, &mut values);
         }
         let term_id = arena.get_block(block_id).terminator.expect("[internal error] block with no terminator");
-        translate_terminator(term_id, block_id, arena, &mut builder, &clif_blocks, &phi_order, &values);
+        translate_terminator(term_id, block_id, arena, &mut builder, &clif_blocks, &phi_order, &values, &return_types, sret_ptr);
     }
 
     builder.seal_all_blocks();

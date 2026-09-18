@@ -11,7 +11,19 @@ use crate::hfs::{
     find_builtin, ir_aggregate_lowering,
 };
 
-pub fn compile_and_link(arena: &mut IrArena, output: &Path) -> Result<i32, String> {
+#[derive(Debug, Clone, Default)]
+pub struct LinkOptions {
+    pub compile_only: bool,
+    pub keep_obj: bool,
+    pub libs: Vec<String>,
+    pub lib_dirs: Vec<String>,
+    pub linker: Option<String>,
+    pub strip: bool,
+    pub static_link: bool,
+    pub verbose: bool,
+}
+
+pub fn compile_and_link(arena: &mut IrArena, output: &Path, opts: &LinkOptions) -> Result<i32, String> {
     let mut array_stores: HashMap<IrFuncId, HashMap<InstId, u32>> = HashMap::new();
     for func_id in arena.functions.clone().keys() {
         let func = arena.get_func(func_id);
@@ -42,28 +54,54 @@ pub fn compile_and_link(arena: &mut IrArena, output: &Path) -> Result<i32, Strin
     }
 
     let obj_bytes = module.finish().emit().map_err(|e| format!("failed to emit the object file: {e}"))?;
-    let obj_path = output.with_extension("o");
+    let obj_path = if opts.compile_only { output.to_path_buf() } else { output.with_extension("o") };
     fs::write(&obj_path, obj_bytes).map_err(|e| format!("failed to write {}: {e}", obj_path.display()))?;
 
-    let result = link(&obj_path, output);
-    let _ = fs::remove_file(&obj_path);
+    if opts.compile_only {
+        return Ok(0);
+    }
+
+    let result = link(&obj_path, output, opts);
+    if !opts.keep_obj {
+        let _ = fs::remove_file(&obj_path);
+    }
     result?;
     Ok(0)
 }
 
-fn link(obj_path: &Path, output: &Path) -> Result<(), String> {
-    let linker = find_linker()?;
-    let status = Command::new(&linker)
-        .args([obj_path.as_os_str(), "-o".as_ref(), output.as_os_str(), "-no-pie".as_ref()])
-        .status()
-        .map_err(|e| format!("failed to run '{linker}': {e}"))?;
+fn link(obj_path: &Path, output: &Path, opts: &LinkOptions) -> Result<(), String> {
+    let linker = find_linker(opts)?;
+
+    let mut args: Vec<std::ffi::OsString> =
+        vec![obj_path.as_os_str().into(), "-o".into(), output.as_os_str().into(), "-no-pie".into()];
+    for dir in &opts.lib_dirs {
+        args.push(format!("-L{dir}").into());
+    }
+    for lib in &opts.libs {
+        args.push(format!("-l{lib}").into());
+    }
+    if opts.strip {
+        args.push("-s".into());
+    }
+    if opts.static_link {
+        args.push("-static".into());
+    }
+
+    if opts.verbose {
+        eprintln!("{linker} {}", args.iter().map(|a| a.to_string_lossy()).collect::<Vec<_>>().join(" "));
+    }
+
+    let status = Command::new(&linker).args(&args).status().map_err(|e| format!("failed to run '{linker}': {e}"))?;
     if !status.success() {
         return Err(format!("'{linker}' failed to link {}", output.display()));
     }
     Ok(())
 }
 
-fn find_linker() -> Result<String, String> {
+fn find_linker(opts: &LinkOptions) -> Result<String, String> {
+    if let Some(linker) = &opts.linker {
+        return Ok(linker.clone());
+    }
     for candidate in ["cc", "clang", "gcc"] {
         if Command::new(candidate).arg("--version").output().is_ok() {
             return Ok(candidate.to_string());

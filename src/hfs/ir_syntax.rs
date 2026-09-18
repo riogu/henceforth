@@ -1682,7 +1682,7 @@ pub fn print(func_ids: &[IrFuncId], arena: &IrArena) -> Option<String> {
             },
             IrType::Array { hfs_type, length, .. } => {
                 let elem_name = names.type_to_name.get(hfs_type).cloned().unwrap_or_else(|| format!("{}", hfs_type.0));
-                let len_repr = match length.map(|id| arena.get_inst(id)) {
+                let len_repr = match length.and_then(|id| arena.try_get_inst(id)) {
                     Some(Instruction::Literal { literal: Literal::Integer(n), .. }) => n.to_string(),
                     _ => "n".to_string(),
                 };

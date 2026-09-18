@@ -131,6 +131,16 @@ impl IrArena {
         id
     }
 
+    pub fn alloc_inst_before(&mut self, inst: Instruction, block_id: BlockId, before: InstId) -> InstId {
+        let id = self.instructions.insert(inst);
+        let block = self.get_block_mut(block_id);
+        let pos = block.instructions.iter().position(|&i| i == before).expect(
+            "[internal error] alloc_inst_before's `before` instruction isn't in the given block",
+        );
+        block.instructions.insert(pos, id);
+        id
+    }
+
     pub fn alloc_global_var(&mut self, var: GlobalIrVarDeclaration) -> (GlobalIrVarId, InstId) {
         let global_var_id = self.global_vars.insert(var);
         let inst_id = self.instructions.insert(Instruction::GlobalAlloca(global_var_id));

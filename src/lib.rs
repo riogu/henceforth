@@ -16,6 +16,7 @@ pub mod hfs {
     pub mod diagnostics;
     pub mod hfs_ir;
     pub mod interpreter;
+    pub mod ir_aggregate_lowering;
     pub mod ir_analysis;
     pub mod ir_arena;
     pub mod ir_lowerer;
@@ -40,6 +41,7 @@ pub mod hfs {
     pub use diagnostics::*;
     pub use hfs_ir::*;
     pub use interpreter::*;
+    pub use ir_aggregate_lowering::*;
     pub use ir_analysis::*;
     pub use ir_arena::*;
     pub use ir_lowerer::*;

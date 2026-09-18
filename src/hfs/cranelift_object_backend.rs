@@ -8,10 +8,17 @@ use crate::hfs::{
     IrArena,
     cranelift_builtins::declare_builtins,
     cranelift_translate::{declare_all_functions, translate_function},
-    find_builtin,
+    find_builtin, ir_aggregate_lowering,
 };
 
-pub fn compile_and_link(arena: &IrArena, output: &Path) -> Result<i32, String> {
+pub fn compile_and_link(arena: &mut IrArena, output: &Path) -> Result<i32, String> {
+    for func_id in arena.functions.clone().keys() {
+        if find_builtin(&arena.get_func(func_id).name).is_some() {
+            continue;
+        }
+        ir_aggregate_lowering::legalize_arrays(arena, func_id);
+    }
+
     let isa_builder = cranelift_native::builder().map_err(|s| format!("unsupported host target: {s}"))?;
     let flags = cranelift_codegen::settings::Flags::new(cranelift_codegen::settings::builder());
     let isa = isa_builder.finish(flags).map_err(|e| format!("failed to configure cranelift target: {e}"))?;

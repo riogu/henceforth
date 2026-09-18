@@ -28,9 +28,11 @@ pub fn align_of(type_id: TypeId, arena: &IrArena) -> u32 {
     }
 }
 
-pub fn const_array_len(length: Option<InstId>, arena: &IrArena) -> Option<u32> {
-    match length.map(|inst| arena.get_inst(inst)) {
-        Some(Instruction::Literal { literal: Literal::Integer(n), .. }) => Some(*n as u32),
+pub fn const_array_len(length: Option<InstId>, arena: &IrArena) -> Option<u32> { length.and_then(|inst| try_const_len(inst, arena)) }
+
+pub fn try_const_len(inst: InstId, arena: &IrArena) -> Option<u32> {
+    match arena.get_inst(inst) {
+        Instruction::Literal { literal: Literal::Integer(n), .. } => Some(*n as u32),
         _ => None,
     }
 }

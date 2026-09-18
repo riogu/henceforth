@@ -10,6 +10,9 @@ pub struct BuiltinsContext {
     printf: ClifFuncId,
     scanf: ClifFuncId,
     getline: ClifFuncId,
+    malloc: ClifFuncId,
+    memcpy: ClifFuncId,
+    free: ClifFuncId,
     stdin: DataId,
     fmt_d: DataId,
     fmt_f: DataId,
@@ -27,6 +30,9 @@ pub fn declare_builtins(module: &mut dyn Module) -> BuiltinsContext {
         printf: declare_libc_fn(module, "printf", &[ptr_ty], &[ir::types::I32]),
         scanf: declare_libc_fn(module, "scanf", &[ptr_ty], &[ir::types::I32]),
         getline: declare_libc_fn(module, "getline", &[ptr_ty, ptr_ty, ptr_ty], &[ir::types::I64]),
+        malloc: declare_libc_fn(module, "malloc", &[ir::types::I64], &[ptr_ty]),
+        memcpy: declare_libc_fn(module, "memcpy", &[ptr_ty, ptr_ty, ir::types::I64], &[ptr_ty]),
+        free: declare_libc_fn(module, "free", &[ptr_ty], &[]),
         stdin: module
             .declare_data("stdin", Linkage::Import, false, false)
             .unwrap_or_else(|e| panic!("failed to declare 'stdin': {e}")),
@@ -90,6 +96,22 @@ fn call_variadic(
     builder.ins().call_indirect(sig_ref, addr, args);
 }
 
+pub fn call_malloc(builder: &mut FunctionBuilder, module: &mut dyn Module, ctx: &BuiltinsContext, size: ir::Value) -> ir::Value {
+    let func_ref = module.declare_func_in_func(ctx.malloc, builder.func);
+    let call_inst = builder.ins().call(func_ref, &[size]);
+    builder.inst_results(call_inst)[0]
+}
+
+pub fn call_memcpy(builder: &mut FunctionBuilder, module: &mut dyn Module, ctx: &BuiltinsContext, dest: ir::Value, src: ir::Value, size: ir::Value) {
+    let func_ref = module.declare_func_in_func(ctx.memcpy, builder.func);
+    builder.ins().call(func_ref, &[dest, src, size]);
+}
+
+pub fn call_free(builder: &mut FunctionBuilder, module: &mut dyn Module, ctx: &BuiltinsContext, ptr: ir::Value) {
+    let func_ref = module.declare_func_in_func(ctx.free, builder.func);
+    builder.ins().call(func_ref, &[ptr]);
+}
+
 pub fn translate_builtin_call(
     builtin: Builtin,
     args: &[InstId],
@@ -142,6 +164,7 @@ fn translate_print(
             let fmt = data_ptr(builder, module, ctx.fmt_str, ptr_ty);
             call_variadic(builder, module, ctx.printf, &[ptr_ty, ir::types::I32, ptr_ty], &[fmt, len32, str_ptr]);
         },
+        ir::types::I64 => panic!("[cranelift backend] print doesn't support arrays yet"),
         other => panic!("[cranelift backend] print doesn't support values of Cranelift type {other}"),
     }
 }

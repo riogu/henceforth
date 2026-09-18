@@ -10,6 +10,7 @@ pub struct BuiltinsContext {
     printf: ClifFuncId,
     scanf: ClifFuncId,
     getline: ClifFuncId,
+    memcmp: ClifFuncId,
     stdin: DataId,
     fmt_d: DataId,
     fmt_f: DataId,
@@ -27,6 +28,7 @@ pub fn declare_builtins(module: &mut dyn Module) -> BuiltinsContext {
         printf: declare_libc_fn(module, "printf", &[ptr_ty], &[ir::types::I32]),
         scanf: declare_libc_fn(module, "scanf", &[ptr_ty], &[ir::types::I32]),
         getline: declare_libc_fn(module, "getline", &[ptr_ty, ptr_ty, ptr_ty], &[ir::types::I64]),
+        memcmp: declare_libc_fn(module, "memcmp", &[ptr_ty, ptr_ty, ir::types::I64], &[ir::types::I32]),
         stdin: module
             .declare_data("stdin", Linkage::Import, false, false)
             .unwrap_or_else(|e| panic!("failed to declare 'stdin': {e}")),
@@ -88,6 +90,19 @@ fn call_variadic(
     let ptr_ty = module.target_config().pointer_type();
     let addr = builder.ins().func_addr(ptr_ty, func_ref);
     builder.ins().call_indirect(sig_ref, addr, args);
+}
+
+pub fn string_eq(builder: &mut FunctionBuilder, module: &mut dyn Module, ctx: &BuiltinsContext, a: ir::Value, b: ir::Value) -> ir::Value {
+    let (ptr_a, len_a) = builder.ins().isplit(a);
+    let (ptr_b, len_b) = builder.ins().isplit(b);
+    let same_len = builder.ins().icmp(IntCC::Equal, len_a, len_b);
+    let a_shorter = builder.ins().icmp(IntCC::UnsignedLessThan, len_a, len_b);
+    let compare_len = builder.ins().select(a_shorter, len_a, len_b);
+    let func_ref = module.declare_func_in_func(ctx.memcmp, builder.func);
+    let call_inst = builder.ins().call(func_ref, &[ptr_a, ptr_b, compare_len]);
+    let cmp_result = builder.inst_results(call_inst)[0];
+    let same_bytes = builder.ins().icmp_imm(IntCC::Equal, cmp_result, 0);
+    builder.ins().band(same_len, same_bytes)
 }
 
 pub fn translate_builtin_call(

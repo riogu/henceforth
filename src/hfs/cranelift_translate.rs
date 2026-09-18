@@ -9,7 +9,7 @@ use cranelift_module::{FuncId as ClifFuncId, Linkage, Module};
 
 use crate::hfs::{
     BlockId, InstId, Instruction, IrArena, IrFuncId, IrFunction, IrOperation, IrType, Literal, TerminatorInst, Type, TypeId,
-    cranelift_builtins::{BuiltinsContext, data_ptr, declare_cstring, translate_builtin_call},
+    cranelift_builtins::{BuiltinsContext, data_ptr, declare_cstring, string_eq, translate_builtin_call},
     data_layout, find_builtin,
 };
 
@@ -28,6 +28,11 @@ pub fn ir_type_to_clif(type_id: TypeId, arena: &IrArena) -> ir::Type {
     }
 }
 
+fn is_plain_string(type_id: TypeId, arena: &IrArena) -> bool {
+    let ty = arena.get_type(type_id);
+    ty.get_ptr_count() == 0 && matches!(ty, IrType::String { .. })
+}
+
 fn return_type_ids(func: &IrFunction, arena: &IrArena) -> Vec<TypeId> {
     let IrType::Tuple { type_ids, .. } = arena.get_type(func.return_type) else {
         panic!("[internal error] a function's return_type is always a Tuple, even for 0 or 1 values")
@@ -39,6 +44,15 @@ fn uses_struct_return(return_types: &[TypeId]) -> bool { return_types.len() > 1 
 
 fn is_main(func: &IrFunction) -> bool { func.name == "main" }
 
+fn push_abi_param(params: &mut Vec<ir::AbiParam>, type_id: TypeId, arena: &IrArena) {
+    if is_plain_string(type_id, arena) {
+        params.push(ir::AbiParam::new(ir::types::I64));
+        params.push(ir::AbiParam::new(ir::types::I64));
+    } else {
+        params.push(ir::AbiParam::new(ir_type_to_clif(type_id, arena)));
+    }
+}
+
 fn make_signature(func: &IrFunction, arena: &IrArena, module: &dyn Module) -> ir::Signature {
     let mut sig = module.make_signature();
     let return_types = return_type_ids(func, arena);
@@ -49,13 +63,13 @@ fn make_signature(func: &IrFunction, arena: &IrArena, module: &dyn Module) -> ir
         panic!("[internal error] a function's param_type is always a Tuple, even for 0 or 1 values")
     };
     for type_id in param_types {
-        sig.params.push(ir::AbiParam::new(ir_type_to_clif(*type_id, arena)));
+        push_abi_param(&mut sig.params, *type_id, arena);
     }
     if is_main(func) {
         sig.returns.push(ir::AbiParam::new(ir::types::I32));
     } else if !uses_struct_return(&return_types) {
         for type_id in &return_types {
-            sig.returns.push(ir::AbiParam::new(ir_type_to_clif(*type_id, arena)));
+            push_abi_param(&mut sig.returns, *type_id, arena);
         }
     }
     sig
@@ -135,6 +149,7 @@ fn try_infer_clif_type(inst_id: InstId, arena: &IrArena, visiting: &mut Vec<Inst
 }
 
 fn is_float(inst_id: InstId, arena: &IrArena) -> bool { infer_clif_type(inst_id, arena) == ir::types::F32 }
+fn is_string(inst_id: InstId, arena: &IrArena) -> bool { infer_clif_type(inst_id, arena) == ir::types::I128 }
 
 fn match_int_widths(builder: &mut FunctionBuilder, a: ir::Value, b: ir::Value) -> (ir::Value, ir::Value) {
     let ty_a = builder.func.dfg.value_type(a);
@@ -148,7 +163,14 @@ fn match_int_widths(builder: &mut FunctionBuilder, a: ir::Value, b: ir::Value) -
     }
 }
 
-fn translate_operation(op: IrOperation, arena: &IrArena, builder: &mut FunctionBuilder, values: &HashMap<InstId, ir::Value>) -> ir::Value {
+fn translate_operation(
+    op: IrOperation,
+    arena: &IrArena,
+    builder: &mut FunctionBuilder,
+    module: &mut dyn Module,
+    builtins_ctx: &BuiltinsContext,
+    values: &HashMap<InstId, ir::Value>,
+) -> ir::Value {
     let get = |id: InstId| values[&id];
     match op {
         IrOperation::Add(l, r) =>
@@ -187,12 +209,17 @@ fn translate_operation(op: IrOperation, arena: &IrArena, builder: &mut FunctionB
         IrOperation::Equal(l, r) =>
             if is_float(l, arena) {
                 builder.ins().fcmp(FloatCC::Equal, get(l), get(r))
+            } else if is_string(l, arena) {
+                string_eq(builder, module, builtins_ctx, get(l), get(r))
             } else {
                 builder.ins().icmp(IntCC::Equal, get(l), get(r))
             },
         IrOperation::NotEqual(l, r) =>
             if is_float(l, arena) {
                 builder.ins().fcmp(FloatCC::NotEqual, get(l), get(r))
+            } else if is_string(l, arena) {
+                let eq = string_eq(builder, module, builtins_ctx, get(l), get(r));
+                builder.ins().bxor_imm(eq, 1)
             } else {
                 builder.ins().icmp(IntCC::NotEqual, get(l), get(r))
             },
@@ -254,7 +281,7 @@ fn translate_instruction(
             values.insert(inst_id, val);
         },
         Instruction::Operation { op, .. } => {
-            let val = translate_operation(op, arena, builder, values);
+            let val = translate_operation(op, arena, builder, module, builtins_ctx, values);
             values.insert(inst_id, val);
         },
         Instruction::Alloca { type_id, array_len, .. } => {
@@ -296,6 +323,9 @@ fn translate_instruction(
             }
             let func_ref = module.declare_func_in_func(func_ids[&func_id], builder.func);
             let callee_returns = return_type_ids(callee, arena);
+            let IrType::Tuple { type_ids: callee_params, .. } = arena.get_type(callee.param_type) else {
+                panic!("[internal error] a function's param_type is always a Tuple, even for 0 or 1 values")
+            };
 
             let mut arg_vals = Vec::new();
             let sret_addr = if uses_struct_return(&callee_returns) {
@@ -307,8 +337,14 @@ fn translate_instruction(
             } else {
                 None
             };
-            for a in &args {
-                arg_vals.push(values[a]);
+            for (&a, &param_type) in args.iter().zip(callee_params) {
+                if is_plain_string(param_type, arena) {
+                    let (lo, hi) = builder.ins().isplit(values[&a]);
+                    arg_vals.push(lo);
+                    arg_vals.push(hi);
+                } else {
+                    arg_vals.push(values[&a]);
+                }
             }
             let call_inst = builder.ins().call(func_ref, &arg_vals);
 
@@ -323,8 +359,15 @@ fn translate_instruction(
                 },
                 None => {
                     let results = builder.inst_results(call_inst).to_vec();
-                    for (retval_inst, result) in return_values.iter().zip(results) {
-                        values.insert(*retval_inst, result);
+                    let mut cursor = 0;
+                    for (i, &retval_inst) in return_values.iter().enumerate() {
+                        if is_plain_string(callee_returns[i], arena) {
+                            values.insert(retval_inst, builder.ins().iconcat(results[cursor], results[cursor + 1]));
+                            cursor += 2;
+                        } else {
+                            values.insert(retval_inst, results[cursor]);
+                            cursor += 1;
+                        }
                     }
                 },
             }
@@ -399,8 +442,14 @@ fn translate_terminator(
                 },
                 None => {
                     let mut vals = Vec::new();
-                    for i in instructions {
-                        vals.push(values[i]);
+                    for (i, inst) in instructions.iter().enumerate() {
+                        if is_plain_string(return_types[i], arena) {
+                            let (lo, hi) = builder.ins().isplit(values[inst]);
+                            vals.push(lo);
+                            vals.push(hi);
+                        } else {
+                            vals.push(values[inst]);
+                        }
                     }
                     builder.ins().return_(&vals);
                 },
@@ -454,13 +503,28 @@ pub fn translate_function(
     } else {
         None
     };
-    let param_offset = if sret_ptr.is_some() { 1 } else { 0 };
-    for (i, &param_inst) in func.parameter_insts.iter().enumerate() {
-        values.insert(param_inst, builder.block_params(entry_clif_block)[i + param_offset]);
+    let IrType::Tuple { type_ids: param_types, .. } = arena.get_type(func.param_type) else {
+        panic!("[internal error] a function's param_type is always a Tuple, even for 0 or 1 values")
+    };
+    let mut string_params = Vec::new();
+    let mut cursor = if sret_ptr.is_some() { 1 } else { 0 };
+    for (&param_inst, &param_type) in func.parameter_insts.iter().zip(param_types) {
+        if is_plain_string(param_type, arena) {
+            string_params.push((param_inst, builder.block_params(entry_clif_block)[cursor], builder.block_params(entry_clif_block)[cursor + 1]));
+            cursor += 2;
+        } else {
+            values.insert(param_inst, builder.block_params(entry_clif_block)[cursor]);
+            cursor += 1;
+        }
     }
 
     for &block_id in &block_ids {
         builder.switch_to_block(clif_blocks[&block_id]);
+        if block_id == func.entry_block {
+            for (param_inst, lo, hi) in string_params.drain(..) {
+                values.insert(param_inst, builder.ins().iconcat(lo, hi));
+            }
+        }
         for &inst_id in &arena.get_block(block_id).instructions.clone() {
             translate_instruction(inst_id, arena, &mut builder, module, func_ids, builtins_ctx, &mut values);
         }

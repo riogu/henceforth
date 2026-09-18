@@ -37,6 +37,53 @@ fn cranelift_calls_a_declared_extern_function() {
 }
 
 #[test]
+fn extern_fn_passes_a_string_as_a_bare_pointer() {
+    let source = r#"
+extern fn system: (str) -> (i32);
+
+fn main: () -> () {
+    @("echo hfs_extern_str_ok") &> system; @pop
+}
+"#;
+    let fixture = write_fixture("extern_str", source);
+    let binary = std::env::temp_dir().join(format!("hfs_externtest_extern_str_{}_bin", std::process::id()));
+    let compile_out = Command::new(henceforth_bin())
+        .args([fixture.to_str().unwrap(), "--backend", "cranelift", "-o", binary.to_str().unwrap()])
+        .output()
+        .expect("failed to run the cranelift backend");
+    assert!(compile_out.status.success(), "cranelift compile failed: {compile_out:?}");
+
+    let run_out = Command::new(&binary).output().expect("failed to run compiled binary");
+    let _ = std::fs::remove_file(&fixture);
+    let _ = std::fs::remove_file(&binary);
+
+    assert_eq!(String::from_utf8_lossy(&run_out.stdout), "hfs_extern_str_ok\n");
+}
+
+#[test]
+fn extern_fn_returning_str_is_a_clear_compile_error() {
+    let source = r#"
+extern fn getenv: (str) -> (str);
+
+fn main: () -> () {
+    @("HOME") &> getenv &> print;
+}
+"#;
+    let fixture = write_fixture("extern_str_return", source);
+    let binary = std::env::temp_dir().join(format!("hfs_externtest_extern_str_return_{}_bin", std::process::id()));
+    let compile_out = Command::new(henceforth_bin())
+        .args([fixture.to_str().unwrap(), "--backend", "cranelift", "-o", binary.to_str().unwrap()])
+        .output()
+        .expect("failed to run the cranelift backend");
+    let _ = std::fs::remove_file(&fixture);
+    let _ = std::fs::remove_file(&binary);
+
+    assert!(!compile_out.status.success(), "expected extern fn returning str to be rejected");
+    let stderr = String::from_utf8_lossy(&compile_out.stderr);
+    assert!(stderr.contains("extern fn returning str"), "expected the extern-str-return panic, got: {stderr}");
+}
+
+#[test]
 fn interpreter_refuses_to_call_an_extern_function() {
     let fixture = write_fixture("interpret_refuses", SOURCE);
     let run_out = Command::new(henceforth_bin())

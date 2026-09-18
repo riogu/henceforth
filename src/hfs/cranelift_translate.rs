@@ -61,10 +61,12 @@ fn uses_struct_return(return_types: &[TypeId]) -> bool { return_types.len() > 1 
 
 fn is_main(func: &IrFunction) -> bool { func.name == "main" }
 
-fn push_abi_param(params: &mut Vec<ir::AbiParam>, type_id: TypeId, arena: &IrArena) {
+fn push_abi_param(params: &mut Vec<ir::AbiParam>, type_id: TypeId, arena: &IrArena, is_extern: bool) {
     if is_plain_string(type_id, arena) {
         params.push(ir::AbiParam::new(ir::types::I64));
-        params.push(ir::AbiParam::new(ir::types::I64));
+        if !is_extern {
+            params.push(ir::AbiParam::new(ir::types::I64));
+        }
     } else {
         params.push(ir::AbiParam::new(ir_type_to_clif(type_id, arena)));
     }
@@ -80,13 +82,19 @@ fn make_signature(func: &IrFunction, arena: &IrArena, module: &dyn Module) -> ir
         panic!("[internal error] a function's param_type is always a Tuple, even for 0 or 1 values")
     };
     for type_id in param_types {
-        push_abi_param(&mut sig.params, *type_id, arena);
+        push_abi_param(&mut sig.params, *type_id, arena, func.is_extern);
     }
     if is_main(func) {
         sig.returns.push(ir::AbiParam::new(ir::types::I32));
     } else if !uses_struct_return(&return_types) {
         for type_id in &return_types {
-            push_abi_param(&mut sig.returns, *type_id, arena);
+            if func.is_extern && is_plain_string(*type_id, arena) {
+                panic!(
+                    "[cranelift backend] an extern fn returning str isn't supported yet - a real C function has no \
+                     length to pair with its pointer, and Henceforth's str needs one. Left for a later phase."
+                )
+            }
+            push_abi_param(&mut sig.returns, *type_id, arena, func.is_extern);
         }
     }
     sig
@@ -411,7 +419,9 @@ fn translate_instruction(
                 if is_plain_string(param_type, arena) {
                     let (lo, hi) = builder.ins().isplit(values[&a]);
                     arg_vals.push(lo);
-                    arg_vals.push(hi);
+                    if !callee.is_extern {
+                        arg_vals.push(hi);
+                    }
                 } else {
                     arg_vals.push(values[&a]);
                 }

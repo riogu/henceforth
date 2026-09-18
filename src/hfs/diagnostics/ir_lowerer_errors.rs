@@ -28,6 +28,7 @@ pub struct IrLowererError {
     pub path: PathBuf,
     pub span: Span,
     pub debug_info: DebugInfo,
+    pub current_function: Option<String>,
 }
 
 #[macro_export]
@@ -43,6 +44,7 @@ macro_rules! ir_lowerer_error {
                 compiler_column: column!(),
                 internal_dump: $crate::hfs::diagnostics::ir_lowerer_errors::IrLowererError::dump_ast_and_ir($ast, $arena),
             },
+            current_function: $arena.diagnostic_info.current_function.borrow().clone(),
         }))
     };
 }
@@ -98,6 +100,7 @@ impl CompileError for IrLowererError {
     fn get_path(&self) -> PathBuf { self.path.clone() }
     fn get_debug_info(&self) -> DebugInfo { self.debug_info.clone() }
     fn get_span(&self) -> Span { self.span }
+    fn current_function(&self) -> Option<String> { self.current_function.clone() }
 }
 
 impl Display for IrLowererError {

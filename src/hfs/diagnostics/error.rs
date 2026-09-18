@@ -1,4 +1,5 @@
 use std::{
+    cell::RefCell,
     fmt::{Debug, Display},
     fs,
     path::PathBuf,
@@ -12,7 +13,13 @@ pub trait CompileError: Display + Debug {
     fn get_span(&self) -> Span;
     fn get_path(&self) -> PathBuf;
     fn message(&self) -> (String, String);
-    fn header(&self) -> ColoredString { format!("{} {}", "error:".red().bold(), self.message().0.bold()).into() }
+    fn current_function(&self) -> Option<String> { None }
+    fn header(&self) -> ColoredString {
+        match self.current_function() {
+            Some(func) => format!("{} {} {} {}", "error:".red().bold(), self.message().0.bold(), "in".blue(), func).into(),
+            None => format!("{} {}", "error:".red().bold(), self.message().0.bold()).into(),
+        }
+    }
     fn location(&self) -> ColoredString {
         format!(
             "{}{} {}:{}:{}",
@@ -90,10 +97,11 @@ pub trait CompileError: Display + Debug {
 pub struct DiagnosticInfo {
     pub path: PathBuf,
     pub eof_pos: Span,
+    pub current_function: RefCell<Option<String>>,
 }
 
 impl DiagnosticInfo {
-    pub fn new(path: PathBuf, eof_pos: Span) -> Self { Self { path, eof_pos } }
+    pub fn new(path: PathBuf, eof_pos: Span) -> Self { Self { path, eof_pos, current_function: RefCell::new(None) } }
 }
 
 pub fn number_length(n: usize) -> usize { n.to_string().len() }

@@ -409,13 +409,26 @@ impl StackAnalyzer {
         //------------------------------------------------------------
         // we push scopes so the body can solve identifiers
         let func_id = self.push_function_and_scope_and_alloc(&name, func, span);
-        match unresolved_body {
-            Some(unresolved_body) => {
-                self.arena.get_func_mut(func_id).body = Some(self.resolve_stmt(unresolved_body)?);
-                self.arena.validate_return_stack(self.scope_resolution_stack.get_curr_func_return_type(), span)?;
+
+        let signature =
+            format!("{}: {} -> {}", name, self.arena.get_type(param_type).get_repr(&self.arena), self.arena.get_type(return_type).get_repr(&self.arena));
+        let prev_current_function = self.arena.diagnostic_info.current_function.replace(Some(signature));
+
+        let result = match unresolved_body {
+            Some(unresolved_body) => match self.resolve_stmt(unresolved_body) {
+                Ok(body) => {
+                    self.arena.get_func_mut(func_id).body = Some(body);
+                    self.arena.validate_return_stack(self.scope_resolution_stack.get_curr_func_return_type(), span)
+                },
+                Err(e) => Err(e),
             },
-            None => self.arena.get_func_mut(func_id).body = None,
-        }
+            None => {
+                self.arena.get_func_mut(func_id).body = None;
+                Ok(())
+            },
+        };
+        *self.arena.diagnostic_info.current_function.borrow_mut() = prev_current_function;
+        result?;
         //------------------------------------------------------------
 
         self.scope_resolution_stack.pop();

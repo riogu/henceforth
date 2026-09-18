@@ -55,6 +55,7 @@ pub struct StackAnalyzerError {
     pub path: PathBuf,
     pub span: Span,
     pub debug_info: DebugInfo,
+    pub current_function: Option<String>,
 }
 
 #[macro_export]
@@ -70,6 +71,7 @@ macro_rules! stack_analyzer_error {
                 compiler_column: column!(),
                 internal_dump: StackAnalyzerError::dump_ast($arena),
             },
+            current_function: $arena.diagnostic_info.current_function.borrow().clone(),
         }))
     };
 }
@@ -129,6 +131,7 @@ impl CompileError for StackAnalyzerError {
     fn get_path(&self) -> PathBuf { self.path.clone() }
     fn get_debug_info(&self) -> DebugInfo { self.debug_info.clone() }
     fn get_span(&self) -> Span { self.span }
+    fn current_function(&self) -> Option<String> { self.current_function.clone() }
 }
 
 impl Display for StackAnalyzerError {

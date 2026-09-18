@@ -181,6 +181,26 @@ impl IrLowerer {
         };
         self.ir_context.curr_func = new_id;
 
+        let signature = format!(
+            "{}: {} -> {}",
+            self.arena.get_func(new_id).name,
+            self.arena.get_type(param_type).get_repr(&self.arena),
+            self.arena.get_type(return_type).get_repr(&self.arena)
+        );
+        let prev_current_function = self.arena.diagnostic_info.current_function.replace(Some(signature));
+        let result = self.lower_function_body(new_id, parameter_exprs, body, &span);
+        *self.arena.diagnostic_info.current_function.borrow_mut() = prev_current_function;
+        result?;
+        Ok(new_id)
+    }
+
+    fn lower_function_body(
+        &mut self,
+        new_id: IrFuncId,
+        parameter_exprs: Vec<ExprId>,
+        body: StmtId,
+        span: &Span,
+    ) -> Result<(), Box<dyn CompileError>> {
         // note that this needs to be allocated before we lower the body so we can access the
         // current function definition (ex: to put allocas at the start)
         let entry_block = self.arena.alloc_block("start", self.ir_context.curr_func); // create before analyzing the parameters
@@ -218,7 +238,7 @@ impl IrLowerer {
             );
         }
         self.arena.pop_entire_hfs_stack(); // context should be reset after each function!
-        Ok(new_id)
+        Ok(())
     }
     // TODO: dont forget about issues with dead code elimination. if we have code after
     // a return; or something, we gotta be careful to eliminate it at some point

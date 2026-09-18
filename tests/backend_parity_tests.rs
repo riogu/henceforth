@@ -4,7 +4,7 @@ use libtest_mimic::{Arguments, Failed, Trial};
 
 const FIXTURE_FOLDER: &str = "tests/compile_tests";
 
-const SKIP: &[&str] = &["builtin_input", "print_and_input_str", "tictactoe-user-input", "new_whiles"];
+const SKIP: &[&str] = &["builtin_input", "print_and_input_str", "tictactoe-user-input", "new_whiles", "tetris"];
 
 const KNOWN_GAPS: &[&str] = &["bubble_sort"];
 

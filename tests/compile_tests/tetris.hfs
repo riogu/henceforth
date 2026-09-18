@@ -1,0 +1,92 @@
+let all_pieces: [7][4][16]i32;
+
+fn new_tetromino: () -> () {}
+// Add tetromino to arena
+fn add_to_arena: () -> () {}
+// Check if lines can be cleared
+fn maybe_clear_lines: (/* arena */ [20][10]i32) -> () { @pop_all }
+
+fn is_valid_position: (/*tetromino */ i32 /* X pos */ i32 /* Y pos */) -> (bool) {
+    let piece_width: i32; @(4) &= piece_width;
+    @(0)
+    while @(piece_width !=) {
+    }
+}
+
+// process a move and apply it to the board
+fn process_inputs: () -> () {}
+
+// Draw arena
+fn draw_arena: ([20][10]i32) -> () {
+    // the arena is always on the stack without making a local
+    // this function naturally always operates on the arena
+    let i: i32; @(0) &= i; @(10 20);
+    // we also use the height implicitly on the stack
+    while @(@dup i !=) {
+        @("\t|") &> print;
+        let j: i32; @(0) &= j;
+        // note that @swap just satisfies the compiler, it doesn't actually generate any code.
+        // creating locals would actually generate more IR (without specific optimizations).
+        // so @swap and other operations like it have no runtime cost.
+        while @(@swap @dup j !=) {
+            // this accesses the [][]i32 argument still on the stack
+            // we have to @rot because the current state is:
+            //    @([20][10]i32 i32 i32)
+            // and we want the array. @rot will swap elements like this:
+            //    @(i32 i32 [20][10]i32)
+            if @(@rot @dup i [] j [] 1 ==) { @("#") } else { @(" ") } &> print;
+            @(j 1 +) &= j;
+        }
+        @("|\n") &> print;
+        @(i 1 +) &= i;
+    }
+    @pop_all
+}
+
+fn main: () -> () {
+    @([ /* --- I Piece --- */ [
+        [0 0 0 0  1 1 1 1  0 0 0 0  0 0 0 0]  /* 0   deg  */
+        [0 0 1 0  0 0 1 0  0 0 1 0  0 0 1 0]  /* 90  deg  */
+        [0 0 0 0  0 0 0 0  1 1 1 1  0 0 0 0]  /* 180 deg  */
+        [0 1 0 0  0 1 0 0  0 1 0 0  0 1 0 0]  /* 270 deg  */
+       ] /* --- O Piece --- */ [
+        [0 0 0 0  0 1 1 0  0 1 1 0  0 0 0 0]
+        [0 0 0 0  0 1 1 0  0 1 1 0  0 0 0 0]
+        [0 0 0 0  0 1 1 0  0 1 1 0  0 0 0 0]
+        [0 0 0 0  0 1 1 0  0 1 1 0  0 0 0 0]
+       ] /* --- S Piece --- */ [
+        [0 0 0 0  0 0 1 1  0 1 1 0  0 0 0 0]
+        [0 0 1 0  0 0 1 1  0 0 0 1  0 0 0 0]
+        [0 0 0 0  0 1 1 0  1 1 0 0  0 0 0 0]
+        [0 1 0 0  0 1 1 0  0 0 1 0  0 0 0 0]
+       ] /* --- Z Piece --- */ [
+        [0 0 0 0  1 1 0 0  0 1 1 0  0 0 0 0]
+        [0 0 0 1  0 0 1 1  0 0 1 0  0 0 0 0]
+        [0 0 0 0  0 1 1 0  1 1 0 0  0 0 0 0]
+        [0 1 0 0  0 1 1 0  0 0 1 0  0 0 0 0]
+       ] /* --- T Piece --- */ [
+        [0 0 0 0  0 1 0 0  1 1 1 0  0 0 0 0]
+        [0 0 1 0  0 1 1 0  0 0 1 0  0 0 0 0]
+        [0 0 0 0  1 1 1 0  0 1 0 0  0 0 0 0]
+        [0 0 1 0  0 1 1 0  0 0 1 0  0 0 0 0]
+       ] /* --- L Piece --- */ [
+        [0 0 0 0  1 0 0 0  1 1 1 0  0 0 0 0]
+        [0 0 1 1  0 0 1 0  0 0 1 0  0 0 0 0]
+        [0 0 0 0  1 1 1 0  0 0 1 0  0 0 0 0]
+        [0 0 1 0  0 0 1 0  0 1 1 0  0 0 0 0]
+       ] /* --- J Piece --- */ [
+        [0 0 0 0  0 0 0 1  1 1 1 0  0 0 0 0]
+        [0 0 1 0  0 0 1 0  0 1 1 0  0 0 0 0]
+        [0 0 0 0  1 1 1 0  1 0 0 0  0 0 0 0]
+        [0 1 1 0  0 0 1 0  0 0 1 0  0 0 0 0]
+       ] ]) &= all_pieces;
+    let arena: [20][10]i32;
+    @([[0 0 0 0 0 0 0 0 0 0] [0 0 0 0 0 0 0 0 0 0] [0 0 0 0 0 0 0 0 0 0] [0 0 0 0 0 0 0 0 0 0]
+       [0 0 0 0 0 0 0 0 0 0] [0 0 0 0 0 0 0 0 0 0] [0 0 0 0 0 0 0 0 0 0] [0 0 0 0 0 0 0 0 0 0]
+       [0 0 0 0 0 0 0 0 0 0] [0 0 0 0 0 0 0 0 0 0] [0 0 0 0 0 0 0 0 0 0] [0 0 0 0 0 0 0 0 0 0]
+       [0 0 0 0 0 0 0 0 0 0] [0 0 0 0 0 0 0 0 0 0] [0 0 0 0 0 0 0 0 0 0] [0 0 0 0 0 0 0 0 0 0]
+       [0 0 0 0 0 0 0 0 0 0] [0 0 0 0 0 0 0 0 0 0] [0 0 0 0 0 0 0 0 0 0] [0 0 0 0 0 0 0 0 0 0]]) &= arena;
+
+   @(arena) &> draw_arena;
+
+}

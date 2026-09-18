@@ -600,12 +600,14 @@ impl StackAnalyzer {
                                 TopLevelId::Statement(stmt_id) => while_body_spans.push(*self.arena.get_stmt_span(*stmt_id)),
                             }
                         }
+                        let error_span =
+                            if while_body_spans.is_empty() { span } else { merge_spans(while_body_spans) };
                         return stack_analyzer_error!(
                             StackAnalyzerErrorKind::ExpectedNetZeroStackEffectWhileLoop(
                                 stack_depth_after as i64 - stack_depth_before as i64
                             ),
                             &self.arena,
-                            merge_spans(while_body_spans)
+                            error_span
                         );
                     } else {
                         panic!("[internal error] while body is not a block scope (should be resolved in parser)")

@@ -1,0 +1,6 @@
+fn main: () -> () {
+    let n: i32; @(4) &= n;
+    @(0)
+    while @(n !=) { //? ERROR "expected while loop to maintain a net-zero stack effect"
+    }
+}

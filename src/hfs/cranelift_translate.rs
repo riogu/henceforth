@@ -277,9 +277,7 @@ fn translate_instruction(
             values.insert(inst_id, val);
         },
         Instruction::Alloca { type_id, array_len, .. } => {
-            let is_dynamic_array =
-                matches!(arena.get_type(type_id), IrType::Array { .. }) && data_layout::try_const_len(array_len, arena).is_none();
-            if is_dynamic_array {
+            if data_layout::is_heap_allocated(type_id, array_len, arena) {
                 let byte_size = array_byte_size(type_id, array_len, arena, builder, values);
                 let ptr = call_malloc(builder, module, builtins_ctx, byte_size);
                 values.insert(inst_id, ptr);
@@ -502,9 +500,7 @@ pub fn translate_function(
     for &block_id in &block_ids {
         for &inst_id in &arena.get_block(block_id).instructions {
             if let Instruction::Alloca { type_id, array_len, .. } = arena.get_inst(inst_id) {
-                let is_dynamic_array =
-                    matches!(arena.get_type(*type_id), IrType::Array { .. }) && data_layout::try_const_len(*array_len, arena).is_none();
-                if is_dynamic_array {
+                if data_layout::is_heap_allocated(*type_id, *array_len, arena) {
                     heap_array_allocas.push(inst_id);
                 }
             }

@@ -37,6 +37,10 @@ pub fn try_const_len(inst: InstId, arena: &IrArena) -> Option<u32> {
     }
 }
 
+pub fn is_heap_allocated(type_id: TypeId, array_len: InstId, arena: &IrArena) -> bool {
+    matches!(arena.get_type(type_id), IrType::Array { .. }) && try_const_len(array_len, arena).is_none()
+}
+
 pub fn sequential_layout(type_ids: &[TypeId], arena: &IrArena) -> (Vec<u32>, u32, u32) {
     let mut offsets = Vec::with_capacity(type_ids.len());
     let mut cursor: u32 = 0;

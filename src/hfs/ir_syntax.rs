@@ -38,7 +38,7 @@ use std::{
 
 use crate::hfs::{
     BOOL_TYPE_ID, BlockId, FLOAT_TYPE_ID, INT_TYPE_ID, InstId, Instruction, IrArena, IrFuncId, IrFunction, IrType, Literal,
-    STRING_TYPE_ID, Span, TerminatorInst, TypeId,
+    STRING_TYPE_ID, Span, TerminatorInst, TypeId, data_layout,
 };
 
 #[derive(Default)]
@@ -1714,6 +1714,7 @@ pub fn print(func_ids: &[IrFuncId], arena: &IrArena) -> Option<String> {
     }
 
     let mut raw_functions = Vec::new();
+    let mut heap_allocas = Vec::new();
     for func_id in func_ids {
         let (func_name, param_type, return_type) = {
             let func = arena.get_func(*func_id);
@@ -1736,7 +1737,12 @@ pub fn print(func_ids: &[IrFuncId], arena: &IrArena) -> Option<String> {
                 let inst = arena.get_inst(*inst_id).clone();
                 let raw = match &inst {
                     Instruction::Store { .. } => RawInst::Unnamed(inst),
-                    Instruction::Alloca { type_id, .. } => RawInst::Named(*inst_id, *type_id, inst),
+                    Instruction::Alloca { type_id, array_len, .. } => {
+                        if data_layout::is_heap_allocated(*type_id, *array_len, arena) {
+                            heap_allocas.push(*inst_id);
+                        }
+                        RawInst::Named(*inst_id, *type_id, inst)
+                    },
                     _ => {
                         let type_id = arena.get_type_id_of_inst_no_alloc(*inst_id).unwrap_or_default();
                         RawInst::Named(*inst_id, type_id, inst)
@@ -1754,5 +1760,26 @@ pub fn print(func_ids: &[IrFuncId], arena: &IrArena) -> Option<String> {
     let printer = Printer;
     let syntax = syntax_top_level(&printer, &names);
 
-    (syntax.0)(raw_functions)
+    (syntax.0)(raw_functions).map(|text| annotate_heap_allocas(&text, &heap_allocas, &names))
+}
+
+fn annotate_heap_allocas(text: &str, heap_allocas: &[InstId], names: &NameMap) -> String {
+    let mut markers = Vec::new();
+    for &inst_id in heap_allocas {
+        if let Some(&n) = names.inst_to_name.get(&inst_id) {
+            markers.push(format!("%{n} = "));
+        }
+    }
+    let mut lines = Vec::new();
+    for line in text.lines() {
+        let mut line = line.to_string();
+        for marker in &markers {
+            if line.trim_start().starts_with(marker.as_str()) && line.trim_end().ends_with("alloca") {
+                line.push_str(" // calls malloc");
+                break;
+            }
+        }
+        lines.push(line);
+    }
+    lines.join("\n")
 }

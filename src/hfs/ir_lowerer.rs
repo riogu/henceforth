@@ -137,9 +137,19 @@ impl IrLowerer {
             None => self.arena.alloc_inst_for(Instruction::Literal { span: span.clone(), literal: Literal::Integer(1) }, entry_block),
         };
 
-        let inst_id = self.arena.alloc_inst_for(Instruction::Alloca { span, type_id: var.hfs_type, array_len }, entry_block);
-        self.var_id_to_alloca_map.insert(id, inst_id);
-        Ok(inst_id)
+        let inst_id = self.arena.alloc_inst_for(Instruction::Alloca { span: span.clone(), type_id: var.hfs_type, array_len }, entry_block);
+
+        if !matches!(self.arena.get_type(var.hfs_type), IrType::Array { ptr_count: 0, .. }) {
+            self.var_id_to_alloca_map.insert(id, inst_id);
+            return Ok(inst_id);
+        }
+
+        let ptr_type = self.arena.alloc_type(IrType::Int { ptr_count: 1 }, span.clone());
+        let one = self.arena.alloc_inst_for(Instruction::Literal { span: span.clone(), literal: Literal::Integer(1) }, entry_block);
+        let ref_cell = self.arena.alloc_inst_for(Instruction::Alloca { span: span.clone(), type_id: ptr_type, array_len: one }, entry_block);
+        self.arena.alloc_inst_for(Instruction::Store { span, address: ref_cell, value: inst_id }, entry_block);
+        self.var_id_to_alloca_map.insert(id, ref_cell);
+        Ok(ref_cell)
     }
 
     // a local variable's array type always has a resolved, compile-time length (only a parameter's
@@ -722,10 +732,10 @@ impl IrLowerer {
                             ),
                     }
                 };
-                let (target_var, mut address, type_id) = match identifier {
+                let (mut address, type_id) = match identifier {
                     Identifier::GlobalVar(var_id) | Identifier::Variable(var_id) =>
                         match self.var_id_to_alloca_map.get(&var_id) {
-                            Some(alloca_inst) => (var_id, *alloca_inst, self.ast_arena.get_var(var_id).hfs_type),
+                            Some(alloca_inst) => (*alloca_inst, self.ast_arena.get_var(var_id).hfs_type),
                             None => panic!("[internal error] forgot to alloca a variable before using it"),
                         },
                     Identifier::Function(_) => unreachable!("can't happen"),
@@ -735,11 +745,6 @@ impl IrLowerer {
                     identifier.get_span(&self.ast_arena),
                     self.arena.get_inst(inst_value).get_span(),
                 ])?;
-
-                if deref_count == 0 && matches!(self.arena.get_type(type_id), IrType::Array { .. }) {
-                    self.var_id_to_alloca_map.insert(target_var, inst_value);
-                    return Ok(());
-                }
 
                 // Chase the pointer chain: ptr^ is 1 deref, ptr^^ is 2, etc.
                 if deref_count > 0 {
@@ -833,6 +838,13 @@ impl IrLowerer {
                         },
                     Identifier::Function(_) => unreachable!("can't happen"),
                 };
+
+                if matches!(self.arena.get_type(type_id), IrType::Array { ptr_count: 0, .. }) {
+                    address = self.arena.alloc_inst_for(
+                        Instruction::Load { span: stmt_span.clone(), address, type_id },
+                        self.ir_context.curr_insert_block,
+                    );
+                }
 
                 // Chase the pointer chain, same as Statement::Assignment
                 if deref_count > 0 {
@@ -1011,10 +1023,6 @@ impl IrLowerer {
     // aggregate value - either a plain variable's alloca, or a chained `matrix i [] j []` access
     fn lower_array_base_address(&mut self, expr_id: ExprId) -> Result<InstId, Box<dyn CompileError>> {
         match self.ast_arena.get_expr(expr_id).clone() {
-            Expression::Identifier(Identifier::Variable(var_id) | Identifier::GlobalVar(var_id)) => Ok(*self
-                .var_id_to_alloca_map
-                .get(&var_id)
-                .expect("[internal error] tried to index into a variable that hasn't been alloca'd yet")),
             Expression::Operation(Operation::ArrayAccess(inner_lhs, inner_idx)) => {
                 let span = *self.ast_arena.get_expr_span(expr_id);
                 self.lower_array_access(inner_lhs, inner_idx, span)

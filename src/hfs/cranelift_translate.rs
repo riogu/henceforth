@@ -37,14 +37,16 @@ fn is_plain_string(type_id: TypeId, arena: &IrArena) -> bool {
 pub fn resolve_array_shape(mut inst_id: InstId, arena: &IrArena) -> Option<(TypeId, InstId)> {
     loop {
         match arena.get_inst(inst_id) {
-            Instruction::Alloca { type_id, array_len, .. } => {
-                let IrType::Array { hfs_type: elem_type, .. } = arena.get_type(*type_id) else {
-                    panic!("[internal error] resolve_array_shape reached a non-array Alloca")
-                };
-                return Some((*elem_type, *array_len));
+            Instruction::Alloca { type_id, array_len, .. } => match arena.get_type(*type_id) {
+                IrType::Array { hfs_type: elem_type, .. } => return Some((*elem_type, *array_len)),
+                _ => return None,
             },
             Instruction::Load { address, type_id, .. } if matches!(arena.get_type(*type_id), IrType::Array { .. }) =>
                 inst_id = *address,
+            Instruction::Phi { incoming, .. } => match incoming.values().next() {
+                Some(&first) => inst_id = first,
+                None => return None,
+            },
             _ => return None,
         }
     }
@@ -374,10 +376,6 @@ fn translate_instruction(
         },
         Instruction::Load { address, type_id, .. } => {
             let addr = resolve_address(address, arena, builder, module, global_data_ids, values);
-            if matches!(arena.get_type(type_id), IrType::Array { .. }) {
-                values.insert(inst_id, addr);
-                return;
-            }
             let val = builder.ins().load(ir_type_to_clif(type_id, arena), MemFlags::trusted(), addr, 0);
             values.insert(inst_id, val);
         },

@@ -371,18 +371,13 @@ impl Interpreter {
                 // well we should never need it either
             },
 
-            Instruction::Load { address, type_id, .. } => {
+            Instruction::Load { address, .. } => {
                 let address = *address;
-                let type_id = *type_id;
                 let addr_value = self.resolve_address(address);
-                if matches!(self.arena.get_type(type_id), IrType::Array { .. }) {
-                    addr_value
-                } else {
-                    let RuntimeValue::Address(target, path) = addr_value else {
-                        panic!("[internal error] load from non-address")
-                    };
-                    navigate(&self.memory[&target], &path).clone()
-                }
+                let RuntimeValue::Address(target, path) = addr_value else {
+                    panic!("[internal error] load from non-address")
+                };
+                navigate(&self.memory[&target], &path).clone()
             },
             Instruction::GetElementPtr { address, indexes, .. } => {
                 let address = *address;

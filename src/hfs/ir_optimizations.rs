@@ -5,6 +5,7 @@ use slotmap::Key;
 
 use crate::hfs::{
     BlockId, DefUseInfo, DominatorTree, InstId, InstOrTermId, Instruction, IrArena, IrFuncId, IrType, Literal, TerminatorInst,
+    Type,
 };
 
 // these are the basic traits and APIs our passes/pipelines must meet
@@ -364,7 +365,7 @@ impl Mem2Reg {
         let Instruction::Alloca { span, type_id, .. } = arena.get_inst(alloca).clone() else {
             panic!("[internal error] expected an alloca")
         };
-        if let IrType::Array { .. } = arena.get_type(type_id) {
+        if arena.get_type(type_id).get_ptr_count() > 0 || matches!(arena.get_type(type_id), IrType::Array { .. }) {
             let one = insert(arena, Instruction::Literal { span: span.clone(), literal: Literal::Integer(1) });
             return insert(arena, Instruction::Alloca { span, type_id, array_len: one });
         }

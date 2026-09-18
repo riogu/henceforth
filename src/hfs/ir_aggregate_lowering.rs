@@ -43,5 +43,5 @@ fn legalize_gep(arena: &mut IrArena, block_id: BlockId, inst_id: InstId) {
         arena.alloc_inst_before(Instruction::Literal { span: span.clone(), literal: Literal::Integer(elem_size) }, block_id, inst_id);
     let offset =
         arena.alloc_inst_before(Instruction::Operation { span: span.clone(), op: IrOperation::Mul(idx, size_lit) }, block_id, inst_id);
-    *arena.get_inst_mut(inst_id) = Instruction::Operation { span, op: IrOperation::Add(offset, address) };
+    *arena.get_inst_mut(inst_id) = Instruction::Operation { span, op: IrOperation::Add(address, offset) };
 }

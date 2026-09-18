@@ -5,6 +5,7 @@
 extern fn system: (/* command */ str) -> (/* exit status */ i32);
 extern fn usleep: (/* microseconds */ i32) -> (/* unused */ i32);
 extern fn rand: () -> (/* random value */ i32);
+extern fn time: (i32) -> (i32);
 extern fn srand: (/* seed */ i32) -> ();
 extern fn read: (/* fd */ i32 /* buf */ []i32 /* count */ i32) -> (/* bytes read, 0 if none waiting */ i32);
 fn enable_raw_input: () -> () { @("stty -icanon -echo min 0 time 0") &> system; @pop }
@@ -13,34 +14,49 @@ fn restore_input: () -> () { @("stty icanon echo") &> system; @pop }
 let M: i32; // 20
 let N: i32; // 10
 
-fn new_tetromino: () -> (i32) {@(0)}
+fn new_tetromino: () -> (i32) {
+    &> rand @(7 %)
+}
 // Add tetromino to arena
-fn add_to_arena: () -> () {}
+fn add_to_arena: (/* arena */ [20][10]i32 /* tetromino */ [16]i32 /* X pos */ i32 /* Y pos */ i32) -> () {
+    let y_pos: i32; &= y_pos;
+    let x_pos: i32; &= x_pos;
+    let tetromino: [16]i32; &= tetromino;
+    let arena: [20][10]i32; &= arena;
+
+    let i: i32; @(0) &= i;
+    while @(i 16 !=) {
+        if @(tetromino i [] 1 ==) {
+            let x_pos_in_board: i32; @(x_pos i 4 % +) &= x_pos_in_board;
+            let y_pos_in_board: i32; @(y_pos i 4 / +) &= y_pos_in_board;
+            let curr_row: [10]i32; @(arena y_pos_in_board []) &= curr_row;
+            // write the piece onto the board
+            @(1 x_pos_in_board) [&]= curr_row;
+        }
+    }
+}
 // Check if lines can be cleared
 fn maybe_clear_lines: (/* arena */ [20][10]i32) -> () { @pop_all }
 
-fn is_valid_position: (/* X pos */ i32 /* Y pos */ i32 /*tetromino */ [16]i32) -> (bool) {
+fn is_valid_position: (/* X pos */ i32 /* Y pos */ i32 /* tetromino */ [16]i32) -> (bool) {
     let curr_tetromino: [16]i32; &= curr_tetromino;
+    let y_pos: i32; &= y_pos; let x_pos: i32; &= x_pos;
 
-    let y_pos: i32; &= y_pos;
-    let x_pos: i32; &= x_pos;
-    let tetromino_len: i32; @(4) &= tetromino_len;
+    let i: i32; @(0) &= i;
     let is_valid: bool; @(true) &= is_valid;
 
-    @(0) while @(@dup tetromino_len !=) {
-        if @(is_valid) { break; }
+    while @(i 16 != is_valid &&) {
+        if @(curr_tetromino i [] 1 ==) {
+            let x_pos_in_board: i32; @(x_pos i 4 % +) &= x_pos_in_board;
+            let y_pos_in_board: i32; @(y_pos i 4 / +) &= y_pos_in_board;
 
-        @(0) while @(@dup tetromino_len !=) {
-            if @(x_pos 0 < x_pos N <=
-                 y_pos 0 < y_pos M <= || || ||) {
-                 @(false) &= is_valid;
-                 break;
+            if @(x_pos_in_board 0 < x_pos_in_board N >=
+                 y_pos_in_board 0 < y_pos_in_board M >= || || ||) {
+                @(false) &= is_valid;
             }
-            @(1 +)
-        } @pop
-
-        @(1 +)
-    } @pop
+        }
+        @(i 1 +) &= i;
+    }
 
     @(is_valid)
 }
@@ -49,7 +65,6 @@ fn is_valid_position: (/* X pos */ i32 /* Y pos */ i32 /*tetromino */ [16]i32) -
 fn process_inputs: () -> (i32) {
     let buf: [1]i32; @(0 0) [&]= buf; // zero it first - read() only writes the low byte
     let n: i32;      @(0 buf 1) &> read &= n;
-
     if @(n 1 ==) { @(buf 0 []) } else { @(1 0 -) }
 }
 
@@ -65,7 +80,7 @@ fn draw_arena: ([20][10]i32) -> () {
         // creating locals would actually generate more IR (without specific optimizations).
         // so @swap and other operations like it have no runtime cost.
         while @(@swap @dup j !=) {
-            // this accesses the [][]i32 argument still on the stack
+            // this accesses the [20][10]i32 argument still on the stack
             // we have to @rot because the current state is:
             //    @([M][N]i32 i32 i32)
             // and we want the array. @rot will swap elements like this:
@@ -129,6 +144,7 @@ fn main: () -> () {
     let x_pos: i32; @(0) &= x_pos;
     let y_pos: i32; @(0) &= y_pos;
 
+    @(0) &> time &> srand;
 
     let curr_rotation: i32; @(0) &= curr_rotation; // 0 to 3 (modulus 4)
     let curr_tetromino_idx: i32; :> new_tetromino &= curr_tetromino_idx;
@@ -147,14 +163,15 @@ fn main: () -> () {
         let new_x_pos: i32; @(x_pos) &= new_x_pos;
         let new_y_pos: i32; @(y_pos) &= new_y_pos;
 
+        @("\x1b[H") &> print;
         :> draw_arena;
         :> process_inputs &= key;
 
         if @(key 113 == /* 'q' quit game    */) { @(false) &= running }
-        if @(key 97  == /* 'a' move left    */) { @(x_pos 1 -) &= new_x_pos }
+        if @(key 97  == /* 'a' move left    */) { @(x_pos 1 -) &= new_x_pos } 
         if @(key 100 == /* 'd' move right   */) { @(x_pos 1 +) &= new_x_pos }
         if @(key 119 == /* 'w' rotate piece */) { @(curr_rotation 1 + 4 %) &= curr_rotation }
-        if @(key 32  == /* 'spacebar' drop  */) {
+        if @(key 32  == /* 'spacebar' drop  */) { 
             // TODO: add missing logic here for drops
         }
         // gravity tick
@@ -168,14 +185,16 @@ fn main: () -> () {
         @(all_pieces curr_tetromino_idx [] curr_rotation []) &= curr_tetromino;
 
         if @(new_x_pos new_y_pos curr_tetromino) &> is_valid_position {
-            @(new_x_pos) &= x_pos; @(new_y_pos) &= y_pos;
+            @(new_x_pos) &= x_pos;
+            @(new_y_pos) &= y_pos;
+            @(arena curr_tetromino new_x_pos new_y_pos) &> add_to_arena;
         }
 
         :> maybe_clear_lines;
-        @(16666) &> usleep; @pop // around 60fps tick
+        @(16666) &> usleep @pop // around 60fps tick
     }
 
     :> restore_input;
-
+    
     @pop
 }

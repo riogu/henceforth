@@ -1,0 +1,8 @@
+//? COMPILE
+fn main: () -> () {
+    let n: i32; @(2) &= n;
+    let arr: [n][3]i32;
+    @([[1 2 3] [4 5 6]]) &= arr;
+    @(arr 0 [] 1 []) &> print;
+    @(arr 1 [] 2 []) &> print;
+}

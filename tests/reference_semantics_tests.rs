@@ -121,3 +121,36 @@ fn main: () -> () {
     assert_eq!(interpret_stdout, "5");
     assert_eq!(cranelift_stdout, "5");
 }
+
+#[test]
+fn nested_array_with_variable_sized_dimension_shared_across_functions_is_a_clear_error() {
+    let source = r#"
+let M: i32; let N: i32;
+
+fn touches_row: ([M][N]i32) -> () {
+    @(0 [] 0 []) &> print;
+}
+
+fn main: () -> () {
+    @(2) &= M; @(3) &= N;
+    let arena: [M][N]i32;
+    @([[1 2 3] [4 5 6]]) &= arena;
+    @(arena) &> touches_row;
+}
+"#;
+    let fixture = write_fixture("nested_symbolic_dim_shared", source);
+    let binary = std::env::temp_dir().join(format!("hfs_reftest_nested_symbolic_dim_shared_{}_bin", std::process::id()));
+    let compile_out = Command::new(henceforth_bin())
+        .args([fixture.to_str().unwrap(), "--backend", "cranelift", "-o", binary.to_str().unwrap()])
+        .output()
+        .expect("failed to run the cranelift backend");
+    let _ = std::fs::remove_file(&fixture);
+    let _ = std::fs::remove_file(&binary);
+
+    assert!(!compile_out.status.success(), "expected a variable-sized array dimension shared across functions to be rejected");
+    let stderr = String::from_utf8_lossy(&compile_out.stderr);
+    assert!(
+        stderr.contains("sized by a variable rather than a literal") || stderr.contains("known at compile time"),
+        "expected the array-sizing panic, got: {stderr}"
+    );
+}

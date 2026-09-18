@@ -11,7 +11,11 @@ use henceforth::hfs::{
 };
 
 #[derive(Parser, Debug, Clone)]
-#[command(version, about = "An optimizing compiler for an imperative stack-based language", after_help="Example:\n  henceforth main.hfs -o main.out")]
+#[command(
+    version,
+    about = "An optimizing compiler for an imperative stack-based language",
+    after_help = "Example:\n  henceforth main.hfs -o main.out"
+)]
 struct Args {
     /// Path to the Henceforth source file to compile
     source: PathBuf,

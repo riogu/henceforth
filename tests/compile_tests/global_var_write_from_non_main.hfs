@@ -1,0 +1,11 @@
+//? COMPILE
+let counter: i32;
+
+fn init: () -> () {
+    @(5) &= counter;
+}
+
+fn main: () -> () {
+    @() &> init;
+    @(counter) &> print;
+}

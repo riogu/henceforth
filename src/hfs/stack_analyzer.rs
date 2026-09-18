@@ -236,7 +236,6 @@ pub struct StackAnalyzer {
     // builtins actually called somewhere in the program, see ensure_builtin_registered. kept
     // separately so resolve() can prepend them to the top-level list once resolution is done
     registered_builtins: Vec<FuncId>,
-    in_main: bool,
 }
 
 impl StackAnalyzer {
@@ -247,7 +246,6 @@ impl StackAnalyzer {
             unresolved_arena: unresolved,
             scope_resolution_stack: ScopeStack::new(diagnostic_info),
             registered_builtins: Vec::new(),
-            in_main: false,
         }
     }
 
@@ -415,7 +413,6 @@ impl StackAnalyzer {
         let signature =
             format!("{}: {} -> {}", name, self.arena.get_type(param_type).get_repr(&self.arena), self.arena.get_type(return_type).get_repr(&self.arena));
         let prev_current_function = self.arena.diagnostic_info.current_function.replace(Some(signature));
-        let prev_in_main = std::mem::replace(&mut self.in_main, name == "main");
 
         let result = match unresolved_body {
             Some(unresolved_body) => match self.resolve_stmt(unresolved_body) {
@@ -430,7 +427,6 @@ impl StackAnalyzer {
                 Ok(())
             },
         };
-        self.in_main = prev_in_main;
         *self.arena.diagnostic_info.current_function.borrow_mut() = prev_current_function;
         result?;
         //------------------------------------------------------------
@@ -836,15 +832,6 @@ impl StackAnalyzer {
         match self.unresolved_arena.get_unresolved_expr(id) {
             UnresolvedExpression::Identifier(identifier) => {
                 let identifier = self.scope_resolution_stack.find_identifier(&identifier, span.clone(), &self.arena)?;
-                if let Identifier::GlobalVar(var_id) = identifier
-                    && !self.in_main
-                {
-                    return stack_analyzer_error!(
-                        StackAnalyzerErrorKind::GlobalVarAssignedOutsideMain(self.arena.get_var(var_id).name.clone()),
-                        &self.arena,
-                        assign_span
-                    );
-                }
                 match identifier {
                     Identifier::GlobalVar(var_id) | Identifier::Variable(var_id) => {
                         self.arena.curr_var_provenances[var_id.0] = provenance;

@@ -146,11 +146,12 @@ impl IrLowerer {
     // array type can erase it), but lower_type couldn't turn that length into an instruction since
     // no block existed yet. patch it in now that we have one. returns None for a non-array type.
     fn maybe_materialize_array_length(&mut self, type_id: TypeId) -> Result<Option<InstId>, Box<dyn CompileError>> {
-        let ElaboratedType::Array { length: Some(ArrayLength::Resolved(length_expr)), .. } = self.ast_arena.get_type(type_id)
+        let ElaboratedType::Array { hfs_type: elem_type, length: Some(ArrayLength::Resolved(length_expr)), .. } =
+            self.ast_arena.get_type(type_id)
         else {
             return Ok(None);
         };
-        let length_expr = *length_expr;
+        let (elem_type, length_expr) = (*elem_type, *length_expr);
         let length_inst = match self.ast_arena.get_expr(length_expr).clone() {
             Expression::Literal(literal) => {
                 let span = *self.ast_arena.get_expr_span(length_expr);
@@ -162,6 +163,7 @@ impl IrLowerer {
             IrType::Array { length, .. } => *length = Some(length_inst),
             other => panic!("[internal error] expected an array type, found {:?}", other),
         }
+        self.maybe_materialize_array_length(elem_type)?;
         Ok(Some(length_inst))
     }
 

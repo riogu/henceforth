@@ -17,8 +17,7 @@ pub fn size_of(type_id: TypeId, arena: &IrArena) -> u32 {
             let len = const_array_len(*length, arena).unwrap_or_else(|| {
                 panic!(
                     "cranelift needs this array's element count to be known at compile time to compute its size, but it's \
-                     fully decayed (declared with empty brackets in every dimension, e.g. `[][]i32`). Give at least the \
-                     inner dimension a concrete size instead, e.g. `[][10]i32`."
+                     either fully decayed (e.g. `[][]i32`) or sized by a variable rather than a literal."
                 )
             });
             size_of(*hfs_type, arena) * len
@@ -36,7 +35,7 @@ pub fn align_of(type_id: TypeId, arena: &IrArena) -> u32 {
 pub fn const_array_len(length: Option<InstId>, arena: &IrArena) -> Option<u32> { length.and_then(|inst| try_const_len(inst, arena)) }
 
 pub fn try_const_len(inst: InstId, arena: &IrArena) -> Option<u32> {
-    match arena.get_inst(inst) {
+    match arena.try_get_inst(inst)? {
         Instruction::Literal { literal: Literal::Integer(n), .. } => {
             if *n < 0 {
                 panic!("array length is negative ({n})");

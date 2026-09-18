@@ -47,7 +47,6 @@ pub enum StackAnalyzerErrorKind {
     ArrayLengthMustBeCompileTimeOnParameter,
     ArrayLengthMustBeCompileTimeOnReturnType,
     ArrayLengthMustExistOnVarDeclaration(String),
-    GlobalVarAssignedOutsideMain(String),
 }
 
 #[derive(Debug)]
@@ -126,10 +125,6 @@ impl CompileError for StackAnalyzerError {
             StackAnalyzerErrorKind::ArrayLengthMustBeCompileTimeOnReturnType =>
                 (format!("found runtime value on length expression for return type"), String::new()),
             StackAnalyzerErrorKind::ArrayLengthMustExistOnVarDeclaration(actual) => (format!("array variable must have a known length, found {}", actual), String::new()),
-            StackAnalyzerErrorKind::GlobalVarAssignedOutsideMain(name) => (
-                format!("global variable '{}' can only be assigned to from main - initialize it there instead", name),
-                String::new(),
-            ),
         }
     }
 

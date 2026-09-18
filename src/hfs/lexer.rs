@@ -231,6 +231,17 @@ impl Lexer {
                                                 Some('t') => lit.push('\t'),
                                                 Some('\\') => lit.push('\\'),
                                                 Some('"') => lit.push('"'),
+                                                Some('x') => match (chars_iter.next(), chars_iter.next()) {
+                                                    (Some(hi), Some(lo)) if hi.is_ascii_hexdigit() && lo.is_ascii_hexdigit() => lit
+                                                        .push((hi.to_digit(16).unwrap() * 16 + lo.to_digit(16).unwrap()) as u8 as char),
+                                                    _ =>
+                                                        return lexer_error!(
+                                                            LexerErrorKind::UnexpectedChar,
+                                                            file.path.clone(),
+                                                            Span::new(line_number + 1, line_offset + 1, 1),
+                                                            tokens
+                                                        ),
+                                                },
                                                 Some(c) => {
                                                     lit.push('\\');
                                                     lit.push(c);

@@ -87,44 +87,35 @@ Contributing guidelines and details about the development and testing process ca
 
 Henceforth has a few different flags and arguments:
 ```
-$ henceforth --help
+❯ henceforth -h
 An optimizing compiler for an imperative stack-based language
 
 Usage: henceforth [OPTIONS] <SOURCE>
 
 Arguments:
-  <SOURCE>
-          Path to the Henceforth source file to compile
+  <SOURCE>  Path to the Henceforth source file to compile
 
 Options:
-  -o, --output <OUTPUT>
-          Path to write the compiled output to. Ignored if backend is set to 'interpret'
-          
-          [default: ./a.out]
-
-      --backend <BACKEND>
-          Which backend to use for execution
-
-          Possible values:
-          - interpret: Walks the IR directly without compiling to native code
-          - cranelift: Compiles to native code using the Cranelift backend
-          
-          [default: cranelift]
-
-      --print-ir-pre-opt
-          Print the IR before optimizations are applied
-
-      --print-ir-post-opt
-          Print the IR after optimizations are applied
-
-  -h, --help
-          Print help (see a summary with '-h')
-
-  -V, --version
-          Print version
+  -o, --output <OUTPUT>    Path to write the compiled output to. Ignored if backend is set to 'interpret' [default: ./a.out]
+      --backend <BACKEND>  Which backend to use for execution [default: cranelift] [possible values: interpret, cranelift]
+      --print-ir-O0        Print the IR before optimizations are applied
+      --print-ir           Print the IR after optimizations are applied
+      --emit-ir-O0         Write the IR before optimizations to a .O0.hfsir file
+      --emit-ir            Write the IR after optimizations to a .hfsir file
+      --print-file         Print the input source file to the terminal
+  -c                       Compile only, do not link (produces a .o file at the output path)
+      --emit-obj           Keep the intermediate .o object file alongside the linked binary
+  -L <directory>           Add directory to library search path (passed to the linker as -L<dir>)
+  -l <library>             Link with library (passed to the linker as -l<library>)
+      --linker <linker>    Specify which linker to use (default: auto-detect cc/clang/gcc)
+  -s                       Strip symbol table from the executable (passed to the linker as -s)
+      --static             Create a statically linked executable (passed to the linker as -static)
+  -v                       Show the linker command that was executed
+  -h, --help               Print help (see more with '--help')
+  -V, --version            Print version
 
 Example:
-  henceforth main.hfs --backend cranelift -o main.out
+  henceforth main.hfs -o main.out
 ```
 
 ## Reporting a Bug

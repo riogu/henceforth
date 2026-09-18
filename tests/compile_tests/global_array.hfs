@@ -1,0 +1,15 @@
+//? COMPILE
+fn helper: () -> () {
+    let dummy: [2][3]i32;
+    @([[9 9 9] [9 9 9]]) &= dummy;
+    @pop_all
+}
+
+let board: [2][3]i32;
+
+fn main: () -> () {
+    @() &> helper;
+    @([[1 2 3] [4 5 6]]) &= board;
+    @(board 0 [] 0 []) &> print;
+    @(board 1 [] 2 []) &> print;
+}

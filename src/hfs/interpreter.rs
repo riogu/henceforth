@@ -35,7 +35,12 @@ impl RuntimeValue {
                 // placeholder is fine here
                 let len = match length {
                     Some(length_inst) => match arena.get_inst(*length_inst) {
-                        Instruction::Literal { literal: Literal::Integer(n), .. } => *n as usize,
+                        Instruction::Literal { literal: Literal::Integer(n), .. } => {
+                            if *n < 0 {
+                                panic!("array length is negative ({})", n);
+                            }
+                            *n as usize
+                        },
                         _ => panic!("[internal error] array length must be a compile-time integer literal"),
                     },
                     None => 0,

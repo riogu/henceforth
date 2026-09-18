@@ -96,9 +96,8 @@ impl IrLowerer {
     }
 
     pub fn lower_global_variable_declaration(&mut self, id: VarId) -> GlobalIrVarId {
-        // we don't do anything here at all right now
-        // maybe if we add assignments to declarations we might want to in the future but for now this doesn't do anything
-        let var = self.ast_arena.get_var(id);
+        let var = self.ast_arena.get_var(id).clone();
+        self.materialize_global_array_length(var.hfs_type);
         let (global_var_id, inst_id) = self.arena.alloc_global_var(GlobalIrVarDeclaration {
             span: *self.ast_arena.get_var_span(id),
             name: var.name.clone(),
@@ -106,6 +105,25 @@ impl IrLowerer {
         });
         self.var_id_to_alloca_map.insert(id, inst_id);
         global_var_id
+    }
+
+    fn materialize_global_array_length(&mut self, type_id: TypeId) {
+        let ElaboratedType::Array { hfs_type: elem_type, length: Some(ArrayLength::Resolved(length_expr)), .. } =
+            self.ast_arena.get_type(type_id)
+        else {
+            return;
+        };
+        let (elem_type, length_expr) = (*elem_type, *length_expr);
+        let Expression::Literal(literal) = self.ast_arena.get_expr(length_expr).clone() else {
+            panic!("[internal error] a global array's length must be a compile-time literal")
+        };
+        let span = *self.ast_arena.get_expr_span(length_expr);
+        let length_inst = self.arena.instructions.insert(Instruction::Literal { span, literal });
+        match &mut self.arena.types[type_id.0] {
+            IrType::Array { length, .. } => *length = Some(length_inst),
+            other => panic!("[internal error] expected an array type, found {:?}", other),
+        }
+        self.materialize_global_array_length(elem_type);
     }
     pub fn lower_local_variable_declaration(&mut self, id: VarId) -> Result<InstId, Box<dyn CompileError>> {
         // Note that all variables are allocated at the function entry point to make mem2reg simpler

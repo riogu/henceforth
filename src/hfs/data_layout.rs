@@ -37,7 +37,12 @@ pub fn const_array_len(length: Option<InstId>, arena: &IrArena) -> Option<u32> {
 
 pub fn try_const_len(inst: InstId, arena: &IrArena) -> Option<u32> {
     match arena.get_inst(inst) {
-        Instruction::Literal { literal: Literal::Integer(n), .. } => Some(*n as u32),
+        Instruction::Literal { literal: Literal::Integer(n), .. } => {
+            if *n < 0 {
+                panic!("array length is negative ({n})");
+            }
+            Some(*n as u32)
+        },
         _ => None,
     }
 }

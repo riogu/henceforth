@@ -1,0 +1,9 @@
+//? COMPILE
+fn main: () -> () {
+    let running: bool; @(true) &= running;
+    while @(running) {
+        if @(true) {
+        }
+        @(false) &= running;
+    }
+}

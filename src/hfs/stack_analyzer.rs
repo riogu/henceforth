@@ -564,6 +564,7 @@ impl StackAnalyzer {
                 // here, not just to what the condition leaves once its own bool is popped. this is
                 // what lets a copy-mode condition call hand a value through to the body
                 let stack_depth_before = self.arena.hfs_stack.len();
+                let stack_before = self.arena.hfs_stack.clone();
 
                 let mut condition_statements = Vec::new();
                 for stmt in cond {
@@ -608,6 +609,16 @@ impl StackAnalyzer {
                     } else {
                         panic!("[internal error] while body is not a block scope (should be resolved in parser)")
                     }
+                }
+
+                // the depth matching isn't enough on its own - a value left on the stack across
+                // iterations has to keep the same type too, or the second iteration onward would
+                // be handing the loop's own merge point a different type than the first ever did
+                // (e.g. an array reference on entry, replaced by a plain i32 after one iteration).
+                for (&before_expr, &after_expr) in stack_before.iter().zip(self.arena.hfs_stack.clone().iter()) {
+                    let before_type = self.arena.get_type_id_of_expr(before_expr)?;
+                    let after_type = self.arena.get_type_id_of_expr(after_expr)?;
+                    self.arena.compare_types(after_type, before_type, vec![span.clone()])?;
                 }
 
                 Ok(self.arena.alloc_stmt(Statement::While { cond: condition_statements, body }, span))

@@ -160,7 +160,16 @@ fn translate_print(
              with &= or := first, or pass its length in explicitly"
         )
     };
-    print_array(val, elem_type, values[&array_len], arena, builder, module, ctx, ptr_ty);
+    let len_val = match data_layout::try_const_len(array_len, arena) {
+        Some(len) => builder.ins().iconst(ir::types::I32, len as i64),
+        None => *values.get(&array_len).unwrap_or_else(|| {
+            panic!(
+                "[cranelift backend] can't print an array of unknown length - bind it to a local \
+                 with &= or := first, or pass its length in explicitly"
+            )
+        }),
+    };
+    print_array(val, elem_type, len_val, arena, builder, module, ctx, ptr_ty);
 }
 
 fn print_scalar(val: ir::Value, clif_ty: ir::Type, builder: &mut FunctionBuilder, module: &mut dyn Module, ctx: &BuiltinsContext, ptr_ty: ir::Type) {

@@ -429,6 +429,7 @@ impl CleanCFG {
                         let mut insts = std::mem::take(&mut arena.get_block_mut(target).instructions);
                         arena.get_block_mut(block_id).instructions.append(&mut insts);
                         arena.replace_terminator_for(target_term, block_id);
+                        CleanCFG::rekey_phis(arena, &target_term, target, block_id);
                         arena.invalidate_block(target);
                         any_changed = true;
                     }
@@ -456,6 +457,13 @@ impl CleanCFG {
             // delete that block. at best, stuff is hoisted into it, but its inconvenient to remove
             // the entry block specifically.
             return false;
+        }
+        let target_has_phi = arena.get_block(target).instructions.iter().any(|&i| matches!(arena.get_inst(i), Instruction::Phi { .. }));
+        if target_has_phi {
+            let target_preds = &arena.get_block(target).predecessors;
+            if preds.iter().any(|pred| target_preds.contains(pred)) {
+                return false;
+            }
         }
         for &pred in &preds {
             let &term = if let Some(pred_block) = arena.try_get_block(pred) {
@@ -495,5 +503,22 @@ impl CleanCFG {
         }
         arena.invalidate_block(block_id);
         true
+    }
+
+    fn rekey_phis(arena: &mut IrArena, term: &TerminatorInst, old: BlockId, new: BlockId) {
+        let dests: &[BlockId] = match term {
+            TerminatorInst::Branch { true_block, false_block, .. } => &[*true_block, *false_block],
+            TerminatorInst::Jump { target, .. } => &[*target],
+            TerminatorInst::Return { .. } | TerminatorInst::Unreachable => &[],
+        };
+        for &dest in dests {
+            for inst_id in arena.get_block(dest).instructions.clone() {
+                if let Instruction::Phi { incoming, .. } = arena.get_inst_mut(inst_id)
+                    && let Some(value) = incoming.shift_remove(&old)
+                {
+                    incoming.insert(new, value);
+                }
+            }
+        }
     }
 }

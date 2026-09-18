@@ -25,6 +25,12 @@ struct Args {
     /// Which backend to use for execution
     #[arg(long, value_enum, default_value = "cranelift")]
     backend: hfs::BackendKind,
+    /// Disable optimizations (skip Mem2Reg/DeadCodeElimination/CleanCFG entirely)
+    #[arg(long = "O0", conflicts_with = "opt_o1")]
+    opt_o0: bool,
+    /// Run optimizations (default)
+    #[arg(long = "O1", conflicts_with = "opt_o0")]
+    opt_o1: bool,
     /// Print the IR before optimizations are applied
     #[arg(long = "print-ir-O0")]
     print_ir_o0: bool,
@@ -95,7 +101,9 @@ fn run() -> Result<i32, Box<dyn CompileError>> {
             .unwrap_or_else(|e| panic!("failed to write {}: {e}", path.display()));
     }
 
-    hfs::OptPipeline::run_iteratively(&mut hfs::O0::new(), &mut ir_arena);
+    if !args.opt_o0 {
+        hfs::OptPipeline::run_iteratively(&mut hfs::O0::new(), &mut ir_arena);
+    }
 
     if args.print_ir {
         println!("IR after optimizations:{}", IrLowererError::dump_ast_and_ir(None, &ir_arena));

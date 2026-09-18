@@ -1,27 +1,63 @@
-let all_pieces: [7][4][16]i32;
+// -----------------------------------------------------
+// Example program for henceforth: Tetris implementation
+// -----------------------------------------------------
 
-fn new_tetromino: () -> () {}
+extern fn system: (/* command */ str) -> (/* exit status */ i32);
+extern fn usleep: (/* microseconds */ i32) -> (/* unused */ i32);
+extern fn rand: () -> (/* random value */ i32);
+extern fn srand: (/* seed */ i32) -> ();
+extern fn read: (/* fd */ i32 /* buf */ []i32 /* count */ i32) -> (/* bytes read, 0 if none waiting */ i32);
+fn enable_raw_input: () -> () { @("stty -icanon -echo min 0 time 0") &> system; @pop }
+fn restore_input: () -> () { @("stty icanon echo") &> system; @pop }
+
+let M: i32; // 20
+let N: i32; // 10
+
+fn new_tetromino: () -> (i32) {@(0)}
 // Add tetromino to arena
 fn add_to_arena: () -> () {}
 // Check if lines can be cleared
 fn maybe_clear_lines: (/* arena */ [20][10]i32) -> () { @pop_all }
 
-fn is_valid_position: (/*tetromino */ i32 /* X pos */ i32 /* Y pos */) -> (bool) {
-    let piece_width: i32; @(4) &= piece_width;
-    @(0)
-    while @(piece_width !=) {
-    }
+fn is_valid_position: (/* X pos */ i32 /* Y pos */ i32 /*tetromino */ [16]i32) -> (bool) {
+    let curr_tetromino: [16]i32; &= curr_tetromino;
+
+    let y_pos: i32; &= y_pos;
+    let x_pos: i32; &= x_pos;
+    let tetromino_len: i32; @(4) &= tetromino_len;
+    let is_valid: bool; @(true) &= is_valid;
+
+    @(0) while @(@dup tetromino_len !=) {
+        if @(is_valid) { break; }
+
+        @(0) while @(@dup tetromino_len !=) {
+            if @(x_pos 0 < x_pos N <=
+                 y_pos 0 < y_pos M <= || || ||) {
+                 @(false) &= is_valid;
+                 break;
+            }
+            @(1 +)
+        } @pop
+
+        @(1 +)
+    } @pop
+
+    @(is_valid)
 }
 
 // process a move and apply it to the board
-fn process_inputs: () -> () {}
+fn process_inputs: () -> (i32) {
+    let buf: [1]i32; @(0 0) [&]= buf; // zero it first - read() only writes the low byte
+    let n: i32;      @(0 buf 1) &> read &= n;
+
+    if @(n 1 ==) { @(buf 0 []) } else { @(1 0 -) }
+}
 
 // Draw arena
 fn draw_arena: ([20][10]i32) -> () {
     // the arena is always on the stack without making a local
     // this function naturally always operates on the arena
-    let i: i32; @(0) &= i; @(10 20);
-    // we also use the height implicitly on the stack
+    let i: i32; @(0) &= i; @(N M); // we also use the height implicitly on the stack
     while @(@dup i !=) {
         @("\t|") &> print;
         let j: i32; @(0) &= j;
@@ -31,9 +67,9 @@ fn draw_arena: ([20][10]i32) -> () {
         while @(@swap @dup j !=) {
             // this accesses the [][]i32 argument still on the stack
             // we have to @rot because the current state is:
-            //    @([20][10]i32 i32 i32)
+            //    @([M][N]i32 i32 i32)
             // and we want the array. @rot will swap elements like this:
-            //    @(i32 i32 [20][10]i32)
+            //    @(i32 i32 [M][N]i32)
             if @(@rot @dup i [] j [] 1 ==) { @("#") } else { @(" ") } &> print;
             @(j 1 +) &= j;
         }
@@ -44,7 +80,10 @@ fn draw_arena: ([20][10]i32) -> () {
 }
 
 fn main: () -> () {
-    @([ /* --- I Piece --- */ [
+    let arena: [20][10]i32;
+    let all_pieces: [7][4][16]i32;
+
+    @([  /* --- I Piece --- */ [
         [0 0 0 0  1 1 1 1  0 0 0 0  0 0 0 0]  /* 0   deg  */
         [0 0 1 0  0 0 1 0  0 0 1 0  0 0 1 0]  /* 90  deg  */
         [0 0 0 0  0 0 0 0  1 1 1 1  0 0 0 0]  /* 180 deg  */
@@ -80,13 +119,63 @@ fn main: () -> () {
         [0 0 0 0  1 1 1 0  1 0 0 0  0 0 0 0]
         [0 1 1 0  0 0 1 0  0 0 1 0  0 0 0 0]
        ] ]) &= all_pieces;
-    let arena: [20][10]i32;
     @([[0 0 0 0 0 0 0 0 0 0] [0 0 0 0 0 0 0 0 0 0] [0 0 0 0 0 0 0 0 0 0] [0 0 0 0 0 0 0 0 0 0]
        [0 0 0 0 0 0 0 0 0 0] [0 0 0 0 0 0 0 0 0 0] [0 0 0 0 0 0 0 0 0 0] [0 0 0 0 0 0 0 0 0 0]
        [0 0 0 0 0 0 0 0 0 0] [0 0 0 0 0 0 0 0 0 0] [0 0 0 0 0 0 0 0 0 0] [0 0 0 0 0 0 0 0 0 0]
        [0 0 0 0 0 0 0 0 0 0] [0 0 0 0 0 0 0 0 0 0] [0 0 0 0 0 0 0 0 0 0] [0 0 0 0 0 0 0 0 0 0]
        [0 0 0 0 0 0 0 0 0 0] [0 0 0 0 0 0 0 0 0 0] [0 0 0 0 0 0 0 0 0 0] [0 0 0 0 0 0 0 0 0 0]]) &= arena;
 
-   @(arena) &> draw_arena;
+    @(20) &= M; @(10) &= N;
+    let x_pos: i32; @(0) &= x_pos;
+    let y_pos: i32; @(0) &= y_pos;
 
+
+    let curr_rotation: i32; @(0) &= curr_rotation; // 0 to 3 (modulus 4)
+    let curr_tetromino_idx: i32; :> new_tetromino &= curr_tetromino_idx;
+    let curr_tetromino: [16]i32;
+    @(all_pieces curr_tetromino_idx [] curr_rotation []) &= curr_tetromino;
+
+    :> enable_raw_input;
+
+    let fall_timer: i32; @(0) &= fall_timer;
+    let fall_interval: i32; @(30) &= fall_interval; // 30 ticks is ~0.5s at 60fps
+
+    let running: bool; @(true) &= running;
+    @(arena) // leave arena on the stack and keep using it implicitly
+    while @(running) {
+        let key: i32;
+        let new_x_pos: i32; @(x_pos) &= new_x_pos;
+        let new_y_pos: i32; @(y_pos) &= new_y_pos;
+
+        :> draw_arena;
+        :> process_inputs &= key;
+
+        if @(key 113 == /* 'q' quit game    */) { @(false) &= running }
+        if @(key 97  == /* 'a' move left    */) { @(x_pos 1 -) &= new_x_pos }
+        if @(key 100 == /* 'd' move right   */) { @(x_pos 1 +) &= new_x_pos }
+        if @(key 119 == /* 'w' rotate piece */) { @(curr_rotation 1 + 4 %) &= curr_rotation }
+        if @(key 32  == /* 'spacebar' drop  */) {
+            // TODO: add missing logic here for drops
+        }
+        // gravity tick
+        @(fall_timer 1 +) &= fall_timer;
+        if @(fall_timer fall_interval >=) {
+            @(0) &= fall_timer; // reset the timer
+            @(y_pos 1 +) &= new_y_pos;
+        }
+
+        // actually access the specific tetromino rotation we have
+        @(all_pieces curr_tetromino_idx [] curr_rotation []) &= curr_tetromino;
+
+        if @(new_x_pos new_y_pos curr_tetromino) &> is_valid_position {
+            @(new_x_pos) &= x_pos; @(new_y_pos) &= y_pos;
+        }
+
+        :> maybe_clear_lines;
+        @(16666) &> usleep; @pop // around 60fps tick
+    }
+
+    :> restore_input;
+
+    @pop
 }

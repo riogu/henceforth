@@ -1,0 +1,15 @@
+fn touch: ([2]i32) -> () { @pop_all }
+
+fn main: () -> () {
+    let arena: [2]i32;
+    @([1 2]) &= arena;
+    let running: bool; @(true) &= running;
+
+    @(arena)
+    while @(running) { //? ERROR "expected [2]i32, found i32"
+        @(false) &= running;
+        &> touch;
+        @(0)
+    }
+    @pop
+}

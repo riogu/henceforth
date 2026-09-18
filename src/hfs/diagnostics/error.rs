@@ -16,7 +16,7 @@ pub trait CompileError: Display + Debug {
     fn current_function(&self) -> Option<String> { None }
     fn header(&self) -> ColoredString {
         match self.current_function() {
-            Some(func) => format!("{} {} {} {}", "error:".red().bold(), self.message().0.bold(), "in".blue(), func).into(),
+            Some(func) => format!("{} {} {}: {}", "error:".red().bold(), "in".blue(), func, self.message().0.bold()).into(),
             None => format!("{} {}", "error:".red().bold(), self.message().0.bold()).into(),
         }
     }

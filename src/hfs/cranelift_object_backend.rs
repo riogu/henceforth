@@ -7,7 +7,7 @@ use cranelift_object::{ObjectBuilder, ObjectModule};
 use crate::hfs::{
     InstId, IrArena, IrFuncId,
     cranelift_builtins::declare_builtins,
-    cranelift_translate::{declare_all_functions, translate_function},
+    cranelift_translate::{declare_all_functions, declare_all_globals, translate_function},
     find_builtin, ir_aggregate_lowering,
 };
 
@@ -43,12 +43,14 @@ pub fn compile_and_link(arena: &mut IrArena, output: &Path, opts: &LinkOptions) 
     let mut module = ObjectModule::new(obj_builder);
 
     let func_ids = declare_all_functions(arena, &mut module);
+    let global_data_ids = declare_all_globals(arena, &mut module);
     let builtins_ctx = declare_builtins(&mut module);
     for (func_id, func) in arena.functions.iter() {
         if find_builtin(&func.name).is_some() || func.is_extern {
             continue;
         }
-        let clif_func = translate_function(func_id, arena, &mut module, &func_ids, &builtins_ctx, &array_stores[&func_id]);
+        let clif_func =
+            translate_function(func_id, arena, &mut module, &func_ids, &builtins_ctx, &array_stores[&func_id], &global_data_ids);
         let mut ctx = Context::for_function(clif_func);
         module.define_function(func_ids[&func_id], &mut ctx).map_err(|e| format!("failed to compile a function: {e:?}"))?;
     }

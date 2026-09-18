@@ -126,7 +126,6 @@ pub struct CallFrame {
 //---------------------------------------------------------------------------
 pub struct Interpreter {
     arena: IrArena,
-    globals: HashMap<GlobalIrVarId, RuntimeValue>,
     call_stack: Vec<CallFrame>,
     disable_cache: bool, // NOTE: not really used yet (but we should probably)
 
@@ -137,30 +136,20 @@ impl Interpreter {
     pub fn curr_call_frame(&self) -> &CallFrame { self.call_stack.last().expect("call stack shouldn't be empty") }
 
     pub fn curr_call_frame_mut(&mut self) -> &mut CallFrame { self.call_stack.last_mut().expect("call stack shouldn't be empty") }
-}
-impl Interpreter {
-    pub fn new(arena: IrArena) -> Self {
-        Self {
-            arena,
-            globals: HashMap::new(),
-            call_stack: Vec::new(),
-            disable_cache: false,
-            memory: HashMap::new(),
+
+    fn resolve_address(&mut self, inst_id: InstId) -> RuntimeValue {
+        if matches!(self.arena.get_inst(inst_id), Instruction::GlobalAlloca(_)) {
+            self.interpret_instruction(inst_id)
+        } else {
+            self.curr_call_frame().inst_values[&inst_id].clone()
         }
     }
+}
+impl Interpreter {
+    pub fn new(arena: IrArena) -> Self { Self { arena, call_stack: Vec::new(), disable_cache: false, memory: HashMap::new() } }
 
-    pub fn interpret(arena: IrArena, top_level_insts: Vec<IrTopLevelId>, scope_stack: ScopeStack) {
+    pub fn interpret(arena: IrArena, _top_level_insts: Vec<IrTopLevelId>, scope_stack: ScopeStack) {
         let mut interpreter = Interpreter::new(arena);
-        for inst_id in top_level_insts {
-            match inst_id {
-                IrTopLevelId::GlobalVarDecl(ir_var_id) => {
-                    let var_type = interpreter.arena.get_type_of_var(ir_var_id).clone();
-                    let default_val = RuntimeValue::default(&var_type, &interpreter.arena);
-                    interpreter.globals.insert(ir_var_id, default_val);
-                },
-                IrTopLevelId::FunctionDecl(_) => { /* do nothing, declarations dont matter for interpreting */ },
-            }
-        }
 
         if let Some(_) = scope_stack.find_function("main") {
             // get the CfgFunction version of main (not the old AST function)
@@ -357,13 +346,15 @@ impl Interpreter {
             },
 
             Instruction::Store { address, value, .. } => {
+                let address = *address;
+                let value = *value;
                 // address is an InstId whose value is an Address(target, path)
-                let RuntimeValue::Address(target, path) = self.curr_call_frame().inst_values[&address].clone() else {
+                let RuntimeValue::Address(target, path) = self.resolve_address(address) else {
                     panic!("[internal error] store to non-address")
                 };
                 let val = self.curr_call_frame().inst_values[&value].clone();
                 let is_array_dest = matches!(
-                    self.arena.get_inst(*address),
+                    self.arena.get_inst(address),
                     Instruction::GetElementPtr { type_id, .. } if matches!(self.arena.get_type(*type_id), IrType::Array { .. })
                 );
                 let val = if is_array_dest { self.deref_array(val) } else { val };
@@ -376,8 +367,10 @@ impl Interpreter {
             },
 
             Instruction::Load { address, type_id, .. } => {
-                let addr_value = self.curr_call_frame().inst_values[address].clone();
-                if matches!(self.arena.get_type(*type_id), IrType::Array { .. }) {
+                let address = *address;
+                let type_id = *type_id;
+                let addr_value = self.resolve_address(address);
+                if matches!(self.arena.get_type(type_id), IrType::Array { .. }) {
                     addr_value
                 } else {
                     let RuntimeValue::Address(target, path) = addr_value else {
@@ -389,7 +382,7 @@ impl Interpreter {
             Instruction::GetElementPtr { address, indexes, .. } => {
                 let address = *address;
                 let indexes = indexes.clone();
-                let RuntimeValue::Address(target, mut path) = self.curr_call_frame().inst_values[&address].clone() else {
+                let RuntimeValue::Address(target, mut path) = self.resolve_address(address) else {
                     panic!("[internal error] gep base is not an address")
                 };
                 for idx_inst in indexes {
@@ -411,9 +404,11 @@ impl Interpreter {
                 RuntimeValue::Address(inst_id, vec![])
             },
             Instruction::GlobalAlloca(global_var_id) => {
-                let ty = self.arena.get_type_of_var(*global_var_id).clone();
-                let default_val = RuntimeValue::default(&ty, &self.arena);
-                self.memory.insert(inst_id, default_val);
+                if !self.memory.contains_key(&inst_id) {
+                    let ty = self.arena.get_type_of_var(*global_var_id).clone();
+                    let default_val = RuntimeValue::default(&ty, &self.arena);
+                    self.memory.insert(inst_id, default_val);
+                }
                 RuntimeValue::Address(inst_id, vec![])
             },
         }

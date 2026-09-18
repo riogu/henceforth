@@ -5,10 +5,11 @@ use cranelift_codegen::ir::{
     condcodes::{FloatCC, IntCC},
 };
 use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext};
-use cranelift_module::{FuncId as ClifFuncId, Linkage, Module};
+use cranelift_module::{DataDescription, DataId, FuncId as ClifFuncId, Linkage, Module};
 
 use crate::hfs::{
-    BlockId, InstId, Instruction, IrArena, IrFuncId, IrFunction, IrOperation, IrType, Literal, TerminatorInst, Type, TypeId,
+    BlockId, GlobalIrVarId, InstId, Instruction, IrArena, IrFuncId, IrFunction, IrOperation, IrType, Literal, TerminatorInst,
+    Type, TypeId,
     cranelift_builtins::{BuiltinsContext, call_memcpy, data_ptr, declare_cstring, string_eq, translate_builtin_call},
     data_layout, find_builtin,
 };
@@ -113,6 +114,21 @@ pub fn declare_all_functions(arena: &IrArena, module: &mut dyn Module) -> HashMa
     func_ids
 }
 
+pub fn declare_all_globals(arena: &IrArena, module: &mut dyn Module) -> HashMap<GlobalIrVarId, DataId> {
+    let mut global_data_ids = HashMap::new();
+    for (var_id, var) in arena.global_vars.iter() {
+        let data_id = module
+            .declare_data(&var.name, Linkage::Local, true, false)
+            .unwrap_or_else(|e| panic!("[cranelift backend] failed to declare global '{}': {e}", var.name));
+        let size = data_layout::size_of(var.hfs_type, arena);
+        let mut desc = DataDescription::new();
+        desc.define_zeroinit(size as usize);
+        module.define_data(data_id, &desc).unwrap_or_else(|e| panic!("[cranelift backend] failed to define global '{}': {e}", var.name));
+        global_data_ids.insert(var_id, data_id);
+    }
+    global_data_ids
+}
+
 pub fn infer_clif_type(inst_id: InstId, arena: &IrArena) -> ir::Type {
     try_infer_clif_type(inst_id, arena, &mut Vec::new()).unwrap_or_else(|| {
         panic!(
@@ -141,6 +157,7 @@ fn try_infer_clif_type(inst_id: InstId, arena: &IrArena, visiting: &mut Vec<Inst
         | Instruction::Parameter { type_id, .. }
         | Instruction::ReturnValue { type_id, .. }
         | Instruction::GetElementPtr { type_id, .. } => Some(ir_type_to_clif(*type_id, arena)),
+        Instruction::GlobalAlloca(var_id) => Some(ir_type_to_clif(arena.get_var(*var_id).hfs_type, arena)),
         Instruction::Phi { incoming, .. } => {
             visiting.push(inst_id);
             let mut result = None;
@@ -275,6 +292,26 @@ fn translate_operation(
     }
 }
 
+fn resolve_address(
+    inst_id: InstId,
+    arena: &IrArena,
+    builder: &mut FunctionBuilder,
+    module: &mut dyn Module,
+    global_data_ids: &HashMap<GlobalIrVarId, DataId>,
+    values: &mut HashMap<InstId, ir::Value>,
+) -> ir::Value {
+    if let Some(&addr) = values.get(&inst_id) {
+        return addr;
+    }
+    let Instruction::GlobalAlloca(var_id) = arena.get_inst(inst_id) else {
+        panic!("[internal error] address operand was never translated and isn't a global")
+    };
+    let ptr_ty = module.target_config().pointer_type();
+    let addr = data_ptr(builder, module, global_data_ids[var_id], ptr_ty);
+    values.insert(inst_id, addr);
+    addr
+}
+
 fn translate_instruction(
     inst_id: InstId,
     arena: &IrArena,
@@ -283,6 +320,7 @@ fn translate_instruction(
     func_ids: &HashMap<IrFuncId, ClifFuncId>,
     builtins_ctx: &BuiltinsContext,
     array_stores: &HashMap<InstId, u32>,
+    global_data_ids: &HashMap<GlobalIrVarId, DataId>,
     values: &mut HashMap<InstId, ir::Value>,
 ) {
     match arena.get_inst(inst_id).clone() {
@@ -327,22 +365,23 @@ fn translate_instruction(
             values.insert(inst_id, addr);
         },
         Instruction::Load { address, type_id, .. } => {
+            let addr = resolve_address(address, arena, builder, module, global_data_ids, values);
             if matches!(arena.get_type(type_id), IrType::Array { .. }) {
-                let addr = values[&address];
                 values.insert(inst_id, addr);
                 return;
             }
-            let val = builder.ins().load(ir_type_to_clif(type_id, arena), MemFlags::trusted(), values[&address], 0);
+            let val = builder.ins().load(ir_type_to_clif(type_id, arena), MemFlags::trusted(), addr, 0);
             values.insert(inst_id, val);
         },
         Instruction::Store { address, value, .. } => {
+            let addr = resolve_address(address, arena, builder, module, global_data_ids, values);
             match array_stores.get(&inst_id) {
                 Some(&size) => {
                     let size_val = builder.ins().iconst(ir::types::I64, size as i64);
-                    call_memcpy(builder, module, builtins_ctx, values[&address], values[&value], size_val);
+                    call_memcpy(builder, module, builtins_ctx, addr, values[&value], size_val);
                 },
                 None => {
-                    builder.ins().store(MemFlags::trusted(), values[&value], values[&address], 0);
+                    builder.ins().store(MemFlags::trusted(), values[&value], addr, 0);
                 },
             }
         },
@@ -403,7 +442,7 @@ fn translate_instruction(
                 },
             }
         },
-        Instruction::GlobalAlloca(_) => panic!("[cranelift backend] global variables aren't supported yet"),
+        Instruction::GlobalAlloca(_) => panic!("[internal error] a GlobalAlloca is never translated directly"),
         Instruction::GetElementPtr { .. } => panic!("[internal error] a GetElementPtr survived array legalization"),
         Instruction::LoadElement { .. } => panic!("[cranelift backend] tuple element access isn't supported"),
     }
@@ -497,6 +536,7 @@ pub fn translate_function(
     func_ids: &HashMap<IrFuncId, ClifFuncId>,
     builtins_ctx: &BuiltinsContext,
     array_stores: &HashMap<InstId, u32>,
+    global_data_ids: &HashMap<GlobalIrVarId, DataId>,
 ) -> ir::Function {
     let func = arena.get_func(func_id);
     let sig = make_signature(func, arena, module);
@@ -558,7 +598,17 @@ pub fn translate_function(
             }
         }
         for &inst_id in &arena.get_block(block_id).instructions.clone() {
-            translate_instruction(inst_id, arena, &mut builder, module, func_ids, builtins_ctx, array_stores, &mut values);
+            translate_instruction(
+                inst_id,
+                arena,
+                &mut builder,
+                module,
+                func_ids,
+                builtins_ctx,
+                array_stores,
+                global_data_ids,
+                &mut values,
+            );
         }
         let term_id = arena.get_block(block_id).terminator.expect("[internal error] block with no terminator");
         translate_terminator(

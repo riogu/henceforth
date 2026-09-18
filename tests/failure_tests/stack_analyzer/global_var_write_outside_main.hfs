@@ -1,0 +1,9 @@
+let counter: i32;
+
+fn bump: () -> () {
+    @(counter 1 +) &= counter; //? ERROR "global variable 'counter' can only be assigned to from main"
+}
+
+fn main: () -> () {
+    @() &> bump;
+}

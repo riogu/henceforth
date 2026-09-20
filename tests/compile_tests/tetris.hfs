@@ -8,37 +8,98 @@ extern fn rand: () -> (/* random value */ i32);
 extern fn time: (i32) -> (i32);
 extern fn srand: (/* seed */ i32) -> ();
 extern fn read: (/* fd */ i32 /* buf */ []i32 /* count */ i32) -> (/* bytes read, 0 if none waiting */ i32);
-fn enable_raw_input: () -> () { @("stty -icanon -echo min 0 time 0") &> system; @pop }
-fn restore_input: () -> () { @("stty icanon echo") &> system; @pop }
+extern fn fflush: (i32) -> (i32);
+fn enable_raw_input: () -> () { @("stty -icanon -echo min 0 time 0") &> system; @pop @("\x1b[?25l") &> print }
+fn restore_input: () -> () { @("stty icanon echo") &> system; @pop @("\x1b[?25h") &> print }
 
 let M: i32; // 20
 let N: i32; // 10
+let BOARD_DRAW_WIDTH: i32; // 24
+let BOARD_DRAW_HEIGHT: i32; // 6
 
-fn new_tetromino: () -> (i32) {
-    &> rand @(7 %)
+fn pick_new_tetromino: () -> (i32) { :> rand @(7 %) }
+
+fn move_cursor: (/* row */ i32 /* col */ i32) -> () {
+    let col: i32; &= col; let row: i32; &= row;
+    @("\x1b[") &> print @(row) &> print @(";") &> print @(col) &> print @("H") &> print
 }
-// Add tetromino to arena
-fn add_to_arena: (/* arena */ [20][10]i32 /* tetromino */ [16]i32 /* X pos */ i32 /* Y pos */ i32) -> () {
+
+fn reset_cursor: () -> () { /* skip the initially printed header */ @(6 1) &> move_cursor }
+
+fn move_cursor_adjusted: (/* row */ i32 /* col */ i32) -> () {
+    let col: i32; @(24 +) &= col;
+    let row: i32; @(6 +) &= row;
+    @("\x1b[") &> print @(row) &> print @(";") &> print @(col) &> print @("H") &> print
+}
+
+fn print_at_board: (/* row */ i32 /* col */ i32 /* thing to print */ str) -> () { @rrot &> move_cursor_adjusted &> print }
+
+// Add tetromino to board
+fn add_to_board: (/* board */ [20][10]i32 /* tetromino */ [16]i32 /* X pos */ i32 /* Y pos */ i32) -> () {
     let y_pos: i32; &= y_pos;
     let x_pos: i32; &= x_pos;
     let tetromino: [16]i32; &= tetromino;
-    let arena: [20][10]i32; &= arena;
+    let board: [20][10]i32; &= board;
 
     let i: i32; @(0) &= i;
     while @(i 16 !=) {
         if @(tetromino i [] 1 ==) {
             let x_pos_in_board: i32; @(x_pos i 4 % +) &= x_pos_in_board;
             let y_pos_in_board: i32; @(y_pos i 4 / +) &= y_pos_in_board;
-            let curr_row: [10]i32; @(arena y_pos_in_board []) &= curr_row;
+            let curr_row: [10]i32; @(board y_pos_in_board []) &= curr_row;
             // write the piece onto the board
             @(1 x_pos_in_board) [&]= curr_row;
         }
+        @(i 1 +) &= i;
+    }
+}
+fn clear_line: (/* line_idx */ i32 /* board */ [20][10]i32) -> () {
+    let board: [20][10]i32; &= board;
+    let line_idx: i32; &= line_idx;
+
+    let i: i32; @(line_idx) &= i;
+    while @(i 0 !=) {
+        // copy each line above the cleared line into the line below it
+        let curr_row: [10]i32; @(board i []) &= curr_row;
+        let prev_i: i32; @(i 1 -) &= prev_i;
+
+        if @(prev_i 0 >=) {
+            let prev_row: [10]i32; @(board prev_i []) &= prev_row;
+
+            let j: i32; @(0) &= j;
+            while @(j N !=) { // copy the row into the row below
+                @(prev_row j [] j) [&]= curr_row;
+                @(j 1 +) &= j;
+            }
+
+        }
+        @(i 1 -) &= i;
     }
 }
 // Check if lines can be cleared
-fn maybe_clear_lines: (/* arena */ [20][10]i32) -> () { @pop_all }
+fn maybe_clear_lines: (/* board */ [20][10]i32) -> (/*cleared_line_count*/i32) { 
+    let board: [20][10]i32; &= board;
+    let i: i32; @(0) &= i;
+    let cleared_line_count: i32; @(0) &= cleared_line_count;
 
-fn is_valid_position: (/* X pos */ i32 /* Y pos */ i32 /* tetromino */ [16]i32) -> (bool) {
+    while @(M i !=) {
+        let j: i32; @(0) &= j;
+        let filled_count: i32; @(0) &= filled_count;
+        while @(N j !=) {
+            if @(board i [] j [] 1 ==) { @(filled_count 1 +) &= filled_count }
+            @(j 1 +) &= j;
+        }
+        if @(filled_count N ==) {
+            @(i board) &> clear_line;
+            @(cleared_line_count 1 +) &= cleared_line_count;
+        }
+        @(i 1 +) &= i;
+    }
+    @(cleared_line_count)
+}
+
+fn is_valid_position: (/* X pos */ i32 /* Y pos */ i32 /* tetromino */ [16]i32 /* board */ [20][10]i32) -> (bool) {
+    let board: [20][10]i32; &= board;
     let curr_tetromino: [16]i32; &= curr_tetromino;
     let y_pos: i32; &= y_pos; let x_pos: i32; &= x_pos;
 
@@ -53,148 +114,270 @@ fn is_valid_position: (/* X pos */ i32 /* Y pos */ i32 /* tetromino */ [16]i32) 
             if @(x_pos_in_board 0 < x_pos_in_board N >=
                  y_pos_in_board 0 < y_pos_in_board M >= || || ||) {
                 @(false) &= is_valid;
+                break;
+            }
+            if @(board y_pos_in_board [] x_pos_in_board [] 1 ==) {
+                @(false) &= is_valid;
+                break;
             }
         }
         @(i 1 +) &= i;
     }
-
     @(is_valid)
+}
+
+fn should_place_piece: (/* board */ [20][10]i32 /* tetromino */ [16]i32 /* X pos */ i32 /* Y pos */ i32) -> (bool) {
+    let y_pos: i32; &= y_pos;
+    let x_pos: i32; &= x_pos;
+    let tetromino: [16]i32; &= tetromino;
+    let board: [20][10]i32; &= board;
+
+    let should_place: bool; @(false) &= should_place;
+
+    let i: i32; @(0) &= i;
+    while @(i 16 !=) {
+        if @(tetromino i [] 1 ==) {
+            let x_pos_in_board: i32; @(x_pos i 4 % +) &= x_pos_in_board;
+            let y_pos_in_board: i32; @(y_pos i 4 / +) &= y_pos_in_board;
+            let y_pos_below: i32; @(y_pos_in_board 1 +) &= y_pos_below;
+            if @(y_pos_below M >= /* this means we touched the bottom of the board */) {
+                @(true) &= should_place;
+                break;
+            }
+            if @(board y_pos_below [] x_pos_in_board [] 1 ==) {
+                // the piece below this one is filled, so the piece is placed
+                @(true) &= should_place;
+                break;
+            }
+
+        }
+        @(i 1 +) &= i;
+    }
+
+    @(should_place)
 }
 
 // process a move and apply it to the board
 fn process_inputs: () -> (i32) {
     let buf: [1]i32; @(0 0) [&]= buf; // zero it first - read() only writes the low byte
-    let n: i32;      @(0 buf 1) &> read &= n;
+    let n: i32; @(0 buf 1) &> read &= n;
     if @(n 1 ==) { @(buf 0 []) } else { @(1 0 -) }
 }
 
-// Draw arena
-fn draw_arena: ([20][10]i32) -> () {
-    // the arena is always on the stack without making a local
-    // this function naturally always operates on the arena
-    let i: i32; @(0) &= i; @(N M); // we also use the height implicitly on the stack
-    while @(@dup i !=) {
-        @("\t|") &> print;
+// Draw board
+fn draw_board: ([20][10]i32) -> () {
+    // the board is always on the stack without making a local
+    // this function naturally always operates on the board
+    let i: i32; @(0) &= i;
+    @(0 1 - 0 1 - "╭──────────╮") &> print_at_board;
+    while @(i M <) {
+        @(i 0 1 - "│") &> print_at_board;
+
         let j: i32; @(0) &= j;
-        // note that @swap just satisfies the compiler, it doesn't actually generate any code.
-        // creating locals would actually generate more IR (without specific optimizations).
-        // so @swap and other operations like it have no runtime cost.
-        while @(@swap @dup j !=) {
-            // this accesses the [20][10]i32 argument still on the stack
-            // we have to @rot because the current state is:
-            //    @([M][N]i32 i32 i32)
-            // and we want the array. @rot will swap elements like this:
-            //    @(i32 i32 [M][N]i32)
-            if @(@rot @dup i [] j [] 1 ==) { @("#") } else { @(" ") } &> print;
+        while @(j N !=) {
+            if @(@dup i [] j [] 1 ==) { @(i j "#") &> print_at_board } else { @(i j " ") &> print_at_board }
             @(j 1 +) &= j;
         }
-        @("|\n") &> print;
+
+        @(i N  "│") &> print_at_board;
         @(i 1 +) &= i;
     }
-    @pop_all
+    @(20 0 1 - "╰──────────╯") &> print_at_board;
+
+    @pop
 }
 
+fn draw_tetromino: (/* X pos */ i32 /* Y pos */ i32 /* tetromino */ [16]i32 /* how to draw it */ str) -> () {
+    let tetromino_char: str; &= tetromino_char;
+    let tetromino: [16]i32; &= tetromino;
+    let y_pos: i32; &= y_pos;
+    let x_pos: i32; &= x_pos;
+
+    let i: i32; @(0) &= i;
+    while @(i 16 !=) {
+        if @(tetromino i [] 1 ==) {
+            let x_pos_in_board: i32; @(x_pos i 4 % +) &= x_pos_in_board;
+            let y_pos_in_board: i32; @(y_pos i 4 / +) &= y_pos_in_board;
+            @(y_pos_in_board x_pos_in_board) &> move_cursor_adjusted @(tetromino_char) &> print;
+        }
+        @(i 1 +) &= i;
+    }
+}
+fn draw_game_info: (/*score*/i32 /*level*/i32 /*total_lines*/i32) -> () {
+    let total_lines: i32; &= total_lines;
+    let level: i32; &= level;
+    let score: i32; &= score;
+    let game_info_width: i32; @(BOARD_DRAW_WIDTH 10 -) &= game_info_width;
+    let game_info_height: i32; @(BOARD_DRAW_HEIGHT) &= game_info_height;
+
+    @(game_info_height game_info_width) &> move_cursor @("Score:") &> print;
+    @(game_info_height 1 +) &= game_info_height;
+    @(game_info_height game_info_width) &> move_cursor @(score) &> print;
+
+    @(game_info_height 2 +) &= game_info_height;
+    @(game_info_height game_info_width) &> move_cursor @("Level:") &> print;
+    @(game_info_height 1 +) &= game_info_height;
+    @(game_info_height game_info_width) &> move_cursor @(level) &> print;
+
+    @(game_info_height 2 +) &= game_info_height;
+    @(game_info_height game_info_width) &> move_cursor @("Lines:") &> print;
+    @(game_info_height 1 +) &= game_info_height;
+    @(game_info_height game_info_width) &> move_cursor @(total_lines) &> print;
+
+}
+
+fn update_tetromino: (/*all_pieces*/[7][4][16]i32 /*board*/[20][10]i32 /*curr_tetromino_idx*/i32 /*key*/i32
+                      /*x_pos*/i32 /*y_pos*/i32 /*curr_rotation*/i32)
+                  -> (/*x_pos*/i32 /*y_pos*/i32 /*curr_rotation*/i32 /*curr_tetromino*/[16]i32) {
+    let curr_rotation: i32; &= curr_rotation;
+    let y_pos: i32; &= y_pos;
+    let x_pos: i32; &= x_pos;
+    let key: i32; &= key;
+    let curr_tetromino_idx: i32; &= curr_tetromino_idx;
+    let board: [20][10]i32; &= board;
+    let all_pieces: [7][4][16]i32; &= all_pieces;
+    let curr_tetromino: [16]i32; @(all_pieces curr_tetromino_idx [] curr_rotation []) &= curr_tetromino;
+
+    let new_x_pos: i32; @(x_pos) &= new_x_pos;
+    let new_y_pos: i32; @(y_pos) &= new_y_pos;
+    let new_rotation: i32; @(curr_rotation) &= new_rotation;
+
+    if @(key 97  == /* 'a' move left    */) { @(new_x_pos 1 -) &= new_x_pos } 
+    if @(key 100 == /* 'd' move right   */) { @(new_x_pos 1 +) &= new_x_pos }
+    if @(key 119 == /* 'w' rotate piece */) { @(curr_rotation 1 + 4 %) &= new_rotation }
+
+    // actually access the specific tetromino rotation we have
+    let new_tetromino: [16]i32;
+    @(all_pieces curr_tetromino_idx [] new_rotation []) &= new_tetromino;
+
+    if @(new_x_pos new_y_pos new_tetromino board) &> is_valid_position {
+        @(new_x_pos) &= x_pos;
+        @(new_y_pos) &= y_pos;
+        @(new_tetromino) &= curr_tetromino;
+        @(new_rotation) &= curr_rotation;
+    }
+    @(x_pos y_pos curr_rotation curr_tetromino)
+}
+
+
+
 fn main: () -> () {
-    let arena: [20][10]i32;
+    let board: [20][10]i32;
     let all_pieces: [7][4][16]i32;
-
     @([  /* --- I Piece --- */ [
-        [0 0 0 0  1 1 1 1  0 0 0 0  0 0 0 0]  /* 0   deg  */
-        [0 0 1 0  0 0 1 0  0 0 1 0  0 0 1 0]  /* 90  deg  */
-        [0 0 0 0  0 0 0 0  1 1 1 1  0 0 0 0]  /* 180 deg  */
-        [0 1 0 0  0 1 0 0  0 1 0 0  0 1 0 0]  /* 270 deg  */
+        [0 0 0 0  1 1 1 1  0 0 0 0  0 0 0 0]  /* 0   deg  */ [0 0 1 0  0 0 1 0  0 0 1 0  0 0 1 0]  /* 90  deg  */
+        [0 0 0 0  0 0 0 0  1 1 1 1  0 0 0 0]  /* 180 deg  */ [0 1 0 0  0 1 0 0  0 1 0 0  0 1 0 0]  /* 270 deg  */
        ] /* --- O Piece --- */ [
-        [0 0 0 0  0 1 1 0  0 1 1 0  0 0 0 0]
-        [0 0 0 0  0 1 1 0  0 1 1 0  0 0 0 0]
-        [0 0 0 0  0 1 1 0  0 1 1 0  0 0 0 0]
-        [0 0 0 0  0 1 1 0  0 1 1 0  0 0 0 0]
+        [0 0 0 0  0 1 1 0  0 1 1 0  0 0 0 0] [0 0 0 0  0 1 1 0  0 1 1 0  0 0 0 0]
+        [0 0 0 0  0 1 1 0  0 1 1 0  0 0 0 0] [0 0 0 0  0 1 1 0  0 1 1 0  0 0 0 0]
        ] /* --- S Piece --- */ [
-        [0 0 0 0  0 0 1 1  0 1 1 0  0 0 0 0]
-        [0 0 1 0  0 0 1 1  0 0 0 1  0 0 0 0]
-        [0 0 0 0  0 1 1 0  1 1 0 0  0 0 0 0]
-        [0 1 0 0  0 1 1 0  0 0 1 0  0 0 0 0]
+        [0 0 0 0  0 0 1 1  0 1 1 0  0 0 0 0] [0 0 1 0  0 0 1 1  0 0 0 1  0 0 0 0]
+        [0 0 0 0  0 1 1 0  1 1 0 0  0 0 0 0] [0 1 0 0  0 1 1 0  0 0 1 0  0 0 0 0]
        ] /* --- Z Piece --- */ [
-        [0 0 0 0  1 1 0 0  0 1 1 0  0 0 0 0]
-        [0 0 0 1  0 0 1 1  0 0 1 0  0 0 0 0]
-        [0 0 0 0  0 1 1 0  1 1 0 0  0 0 0 0]
-        [0 1 0 0  0 1 1 0  0 0 1 0  0 0 0 0]
+        [0 0 0 0  1 1 0 0  0 1 1 0  0 0 0 0] [0 0 0 1  0 0 1 1  0 0 1 0  0 0 0 0]
+        [0 0 0 0  1 1 0 0  0 1 1 0  0 0 0 0] [0 0 1 0  0 1 1 0  0 1 0 0  0 0 0 0]
        ] /* --- T Piece --- */ [
-        [0 0 0 0  0 1 0 0  1 1 1 0  0 0 0 0]
-        [0 0 1 0  0 1 1 0  0 0 1 0  0 0 0 0]
-        [0 0 0 0  1 1 1 0  0 1 0 0  0 0 0 0]
-        [0 0 1 0  0 1 1 0  0 0 1 0  0 0 0 0]
-       ] /* --- L Piece --- */ [
-        [0 0 0 0  1 0 0 0  1 1 1 0  0 0 0 0]
-        [0 0 1 1  0 0 1 0  0 0 1 0  0 0 0 0]
-        [0 0 0 0  1 1 1 0  0 0 1 0  0 0 0 0]
-        [0 0 1 0  0 0 1 0  0 1 1 0  0 0 0 0]
+        [0 1 0 0  1 1 1 0  0 0 0 0  0 0 0 0] [0 1 0 0  0 1 1 0  0 1 0 0  0 0 0 0]
+        [0 0 0 0  1 1 1 0  0 1 0 0  0 0 0 0] [0 1 0 0  1 1 0 0  0 1 0 0  0 0 0 0]
        ] /* --- J Piece --- */ [
-        [0 0 0 0  0 0 0 1  1 1 1 0  0 0 0 0]
-        [0 0 1 0  0 0 1 0  0 1 1 0  0 0 0 0]
-        [0 0 0 0  1 1 1 0  1 0 0 0  0 0 0 0]
-        [0 1 1 0  0 0 1 0  0 0 1 0  0 0 0 0]
+        [0 0 0 0  1 0 0 0  1 1 1 0  0 0 0 0] [0 0 1 1  0 0 1 0  0 0 1 0  0 0 0 0]
+        [0 0 0 0  1 1 1 0  0 0 1 0  0 0 0 0] [0 0 1 0  0 0 1 0  0 1 1 0  0 0 0 0]
+       ] /* --- L Piece --- */ [
+        [0 0 0 0  0 0 1 0  1 1 1 0  0 0 0 0] [0 1 0 0  0 1 0 0  0 1 1 0  0 0 0 0]
+        [0 0 0 0  1 1 1 0  1 0 0 0  0 0 0 0] [0 1 1 0  0 0 1 0  0 0 1 0  0 0 0 0]
        ] ]) &= all_pieces;
-    @([[0 0 0 0 0 0 0 0 0 0] [0 0 0 0 0 0 0 0 0 0] [0 0 0 0 0 0 0 0 0 0] [0 0 0 0 0 0 0 0 0 0]
-       [0 0 0 0 0 0 0 0 0 0] [0 0 0 0 0 0 0 0 0 0] [0 0 0 0 0 0 0 0 0 0] [0 0 0 0 0 0 0 0 0 0]
-       [0 0 0 0 0 0 0 0 0 0] [0 0 0 0 0 0 0 0 0 0] [0 0 0 0 0 0 0 0 0 0] [0 0 0 0 0 0 0 0 0 0]
-       [0 0 0 0 0 0 0 0 0 0] [0 0 0 0 0 0 0 0 0 0] [0 0 0 0 0 0 0 0 0 0] [0 0 0 0 0 0 0 0 0 0]
-       [0 0 0 0 0 0 0 0 0 0] [0 0 0 0 0 0 0 0 0 0] [0 0 0 0 0 0 0 0 0 0] [0 0 0 0 0 0 0 0 0 0]]) &= arena;
+    @([[0 0 0 0 0 0 0 0 0 0] [0 0 0 0 0 0 0 0 0 0] [0 0 0 0 0 0 0 0 0 0] [0 0 0 0 0 0 0 0 0 0] [0 0 0 0 0 0 0 0 0 0]
+       [0 0 0 0 0 0 0 0 0 0] [0 0 0 0 0 0 0 0 0 0] [0 0 0 0 0 0 0 0 0 0] [0 0 0 0 0 0 0 0 0 0] [0 0 0 0 0 0 0 0 0 0]
+       [0 0 0 0 0 0 0 0 0 0] [0 0 0 0 0 0 0 0 0 0] [0 0 0 0 0 0 0 0 0 0] [0 0 0 0 0 0 0 0 0 0] [0 0 0 0 0 0 0 0 0 0]
+       [0 0 0 0 0 0 0 0 0 0] [0 0 0 0 0 0 0 0 0 0] [0 0 0 0 0 0 0 0 0 0] [0 0 0 0 0 0 0 0 0 0] [0 0 0 0 0 0 0 0 0 0]]) &= board;
 
+    @(24) &= BOARD_DRAW_WIDTH; @(6) &= BOARD_DRAW_HEIGHT;
     @(20) &= M; @(10) &= N;
-    let x_pos: i32; @(0) &= x_pos;
+
+    let x_pos: i32; @(N 2 /) &= x_pos;
     let y_pos: i32; @(0) &= y_pos;
+    let drop_y_pos: i32; @(y_pos) &= drop_y_pos;
+
+    let score: i32;       @(0) &= score;
+    let level: i32;       @(0) &= level;
+    let total_lines: i32; @(0) &= total_lines;
+    let line_scores: [5]i32; @([0 40 100 300 1200]) &= line_scores;
+
+    let gravity_table: [30]i32;
+    @([48 43 38 33 28 23 18 13  8  6
+        5  5  5  4  4  4  3  3  3  2
+        2  2  2  2  2  2  2  2  2  1]) &= gravity_table;
 
     @(0) &> time &> srand;
 
     let curr_rotation: i32; @(0) &= curr_rotation; // 0 to 3 (modulus 4)
-    let curr_tetromino_idx: i32; :> new_tetromino &= curr_tetromino_idx;
+    let curr_tetromino_idx: i32; :> pick_new_tetromino &= curr_tetromino_idx;
     let curr_tetromino: [16]i32;
     @(all_pieces curr_tetromino_idx [] curr_rotation []) &= curr_tetromino;
 
-    :> enable_raw_input;
+    :> enable_raw_input @("\x1b[2J\x1b[H") &> print;
+    @("╭──────────────────────────────────────────────────────────╮\n") &> print;
+    @("│            Tetris implemented in Henceforth              │\n") &> print;
+    @("╰──────────────────────────────────────────────────────────╯\n") &> print;
+    @(0) &> fflush @pop;
 
     let fall_timer: i32; @(0) &= fall_timer;
     let fall_interval: i32; @(30) &= fall_interval; // 30 ticks is ~0.5s at 60fps
 
-    let running: bool; @(true) &= running;
-    @(arena) // leave arena on the stack and keep using it implicitly
-    while @(running) {
-        let key: i32;
-        let new_x_pos: i32; @(x_pos) &= new_x_pos;
-        let new_y_pos: i32; @(y_pos) &= new_y_pos;
+    let key: i32;
 
-        @("\x1b[H") &> print;
-        :> draw_arena;
+    let running: bool; @(true) &= running;
+    while @(running) {
         :> process_inputs &= key;
 
-        if @(key 113 == /* 'q' quit game    */) { @(false) &= running }
-        if @(key 97  == /* 'a' move left    */) { @(x_pos 1 -) &= new_x_pos } 
-        if @(key 100 == /* 'd' move right   */) { @(x_pos 1 +) &= new_x_pos }
-        if @(key 119 == /* 'w' rotate piece */) { @(curr_rotation 1 + 4 %) &= curr_rotation }
-        if @(key 32  == /* 'spacebar' drop  */) { 
-            // TODO: add missing logic here for drops
+        // update our tetromino and calculate validity of the new position
+        @(all_pieces board curr_tetromino_idx key x_pos y_pos curr_rotation)
+        &> update_tetromino &= curr_tetromino &= curr_rotation&= y_pos &= x_pos;
+
+        /* Calculate the piece drop preview */
+        @(y_pos) &= drop_y_pos;
+        while @(x_pos drop_y_pos 1 + curr_tetromino board) &> is_valid_position { @(drop_y_pos 1 +) &= drop_y_pos }
+        // draw the game and info about the score, etc
+        if @(key 32  == /* 'spacebar' drop  */) { @(drop_y_pos) &= y_pos }
+
+        @(board) &> draw_board;
+        @(x_pos y_pos curr_tetromino "#") &> draw_tetromino;
+        @(x_pos drop_y_pos curr_tetromino ".") &> draw_tetromino;
+        @(score level total_lines) &> draw_game_info;
+
+        if @(board curr_tetromino x_pos y_pos) &> should_place_piece {
+            // should be :> but there is a bug that makes that break right now
+            @(board curr_tetromino x_pos y_pos) &> add_to_board;
+            :> pick_new_tetromino &= curr_tetromino_idx;
+            @(N 2 /) &= x_pos; @(0) &= y_pos; // reset to the starting new piece position
+            @(0) &= drop_y_pos;
+            // maintain the old rotation because it doesn't really matter
+            @(all_pieces curr_tetromino_idx [] curr_rotation []) &= curr_tetromino;
+            if @(x_pos y_pos curr_tetromino board) &> is_valid_position {} else { @(false) &= running }
         }
-        // gravity tick
+
+        let cleared: i32; @(board) &> maybe_clear_lines &= cleared;
+        @(score line_scores cleared [] level 1 + * +) &= score;
+        @(total_lines cleared +) &= total_lines;
+        @(total_lines 10 /) &= level;
+
+        // apply gravity to the piece according to the level
+        let level_idx: i32; if @(level 29 <) { @(level) } else { @(29) } &= level_idx;
+        @(gravity_table level_idx []) &= fall_interval;
         @(fall_timer 1 +) &= fall_timer;
         if @(fall_timer fall_interval >=) {
-            @(0) &= fall_timer; // reset the timer
-            @(y_pos 1 +) &= new_y_pos;
+            @(0) &= fall_timer;
+            @(y_pos 1 +) &= y_pos;
         }
 
-        // actually access the specific tetromino rotation we have
-        @(all_pieces curr_tetromino_idx [] curr_rotation []) &= curr_tetromino;
+        @(0) &> fflush @pop
 
-        if @(new_x_pos new_y_pos curr_tetromino) &> is_valid_position {
-            @(new_x_pos) &= x_pos;
-            @(new_y_pos) &= y_pos;
-            @(arena curr_tetromino new_x_pos new_y_pos) &> add_to_arena;
-        }
-
-        :> maybe_clear_lines;
+        if @(key 113 == /* 'q' quit game */) { @(false) &= running }
         @(16666) &> usleep @pop // around 60fps tick
     }
+    
+    @(0 N 4 + "Game Over!") &> print_at_board;
+    @(board) &> draw_board; @("\n") &> print;
 
     :> restore_input;
-    
-    @pop
 }

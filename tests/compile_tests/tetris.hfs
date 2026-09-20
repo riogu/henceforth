@@ -158,11 +158,21 @@ fn should_place_piece: (/* board */ [20][10]i32 /* tetromino */ [16]i32 /* X pos
     @(should_place)
 }
 
-// process a move and apply it to the board
+/* process a move and apply it to the board
+   arrow keys arrive as ESC '[' <letter>, packed little-endian into v
+   buf[0] in memory (little-endian, lowest byte first):
+   [ 0x1B ][ 0x5B ][ 0x41 ][ 0x00 ]
+     ESC     '['     'A'  */
 fn process_inputs: () -> (i32) {
-    let buf: [1]i32; @(0 0) [&]= buf; // zero it first - read() only writes the low byte
-    let n: i32; @(0 buf 1) &> read &= n;
-    if @(n 1 ==) { @(buf 0 []) } else { @(1 0 -) }
+    let buf: [1]i32; @(0 0) [&]= buf; // read() fills the low bytes only
+    let n: i32; @(0 buf 3) &> read &= n;
+    let v: i32; @(buf 0 []) &= v;
+
+    if @(n 0 <=) { @(1) }
+    else {
+        if @(n 3 == v 256 % 27 == && v 256 / 256 % 91 == &&) { @(v 65536 / 256 %) }
+        else { @(v 256 %) }
+    }
 }
 
 // Draw board
@@ -265,12 +275,16 @@ fn update_tetromino: (/*all_pieces*/[7][4][16]i32 /*board*/[20][10]i32 /*curr_te
     if @(key 97  == /* 'a' move left    */) { @(new_x_pos 1 -) &= new_x_pos } 
     if @(key 100 == /* 'd' move right   */) { @(new_x_pos 1 +) &= new_x_pos }
     if @(key 119 == /* 'w' rotate piece */) { @(curr_rotation 1 + 4 %) &= new_rotation }
+    if @(key 66 == /* down  */) { @(new_y_pos 1 +) &= new_y_pos }
+    if @(key 68 == /* left  */) { @(new_x_pos 1 -) &= new_x_pos }
+    if @(key 67 == /* right */) { @(new_x_pos 1 +) &= new_x_pos }
+    if @(key 65 == /* up    */) { @(curr_rotation 1 + 4 %) &= new_rotation }
 
     // actually access the specific tetromino rotation we have
     let new_tetromino: [16]i32;
     @(all_pieces curr_tetromino_idx [] new_rotation []) &= new_tetromino;
 
-    if @(key 119 == /* only wall-kick on rotation */) {
+    if @(key 119 == /* only wall-kick on rotation */ key 65 == ||) {
         let k: i32; @(0) &= k;
         let kicked: bool; @(false) &= kicked;
 
@@ -337,7 +351,7 @@ fn main: () -> () {
        "\x1b[38;2;255;154;92m"  /* L  orange      #FF9A5C */]) &= piece_colors;
     let ghost_color: str; @("\x1b[38;2;94;106;131m") &= ghost_color;
 
-    @(14) &= BOARD_DRAW_WIDTH; @(6) &= BOARD_DRAW_HEIGHT;
+    @(17) &= BOARD_DRAW_WIDTH; @(6) &= BOARD_DRAW_HEIGHT;
     @(20) &= M; @(10) &= N;
 
     let x_pos: i32; @(N 2 /) &= x_pos;
@@ -362,9 +376,9 @@ fn main: () -> () {
     @(all_pieces curr_tetromino_idx [] curr_rotation []) &= curr_tetromino;
 
     :> enable_raw_input @("\x1b[2J\x1b[H") &> print;
-    @("╭───────────────────────────────────────────────╮\n") &> print;
-    @("│       Tetris implemented in Henceforth        │\n") &> print;
-    @("╰───────────────────────────────────────────────╯\n") &> print;
+    @("  ╭───────────────────────────────────────────────╮\n") &> print;
+    @("  │       Tetris implemented in Henceforth        │\n") &> print;
+    @("  ╰───────────────────────────────────────────────╯\n") &> print;
     @(0) &> fflush @pop;
 
     let fall_timer: i32; @(0) &= fall_timer;

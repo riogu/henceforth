@@ -27,15 +27,15 @@ fn move_cursor: (/* row */ i32 /* col */ i32) -> () {
 fn reset_cursor: () -> () { /* skip the initially printed header */ @(6 1) &> move_cursor }
 
 fn move_cursor_adjusted: (/* row */ i32 /* col */ i32) -> () {
-    let col: i32; @(24 +) &= col;
-    let row: i32; @(6 +) &= row;
+    let col: i32; @(2 * BOARD_DRAW_WIDTH +) &= col;
+    let row: i32; @(BOARD_DRAW_HEIGHT +) &= row;
     @("\x1b[") &> print @(row) &> print @(";") &> print @(col) &> print @("H") &> print
 }
 
 fn print_at_board: (/* row */ i32 /* col */ i32 /* thing to print */ str) -> () { @rrot &> move_cursor_adjusted &> print }
 
 // Add tetromino to board
-fn add_to_board: (/* board */ [20][10]i32 /* tetromino */ [16]i32 /* X pos */ i32 /* Y pos */ i32) -> () {
+fn add_to_board: (/*board*/[20][10]i32 /*tetromino*/[16]i32 /* Xpos*/i32 /*Y pos*/i32) -> () {
     let y_pos: i32; &= y_pos;
     let x_pos: i32; &= x_pos;
     let tetromino: [16]i32; &= tetromino;
@@ -43,12 +43,13 @@ fn add_to_board: (/* board */ [20][10]i32 /* tetromino */ [16]i32 /* X pos */ i3
 
     let i: i32; @(0) &= i;
     while @(i 16 !=) {
-        if @(tetromino i [] 1 ==) {
+        let cell: i32; @(tetromino i []) &= cell;
+        if @(cell 0 !=) {
             let x_pos_in_board: i32; @(x_pos i 4 % +) &= x_pos_in_board;
             let y_pos_in_board: i32; @(y_pos i 4 / +) &= y_pos_in_board;
             let curr_row: [10]i32; @(board y_pos_in_board []) &= curr_row;
             // write the piece onto the board
-            @(1 x_pos_in_board) [&]= curr_row;
+            @(cell x_pos_in_board) [&]= curr_row;
         }
         @(i 1 +) &= i;
     }
@@ -86,7 +87,7 @@ fn maybe_clear_lines: (/* board */ [20][10]i32) -> (/*cleared_line_count*/i32) {
         let j: i32; @(0) &= j;
         let filled_count: i32; @(0) &= filled_count;
         while @(N j !=) {
-            if @(board i [] j [] 1 ==) { @(filled_count 1 +) &= filled_count }
+            if @(board i [] j [] 0 !=) { @(filled_count 1 +) &= filled_count }
             @(j 1 +) &= j;
         }
         if @(filled_count N ==) {
@@ -107,7 +108,7 @@ fn is_valid_position: (/* X pos */ i32 /* Y pos */ i32 /* tetromino */ [16]i32 /
     let is_valid: bool; @(true) &= is_valid;
 
     while @(i 16 != is_valid &&) {
-        if @(curr_tetromino i [] 1 ==) {
+        if @(curr_tetromino i [] 0 !=) {
             let x_pos_in_board: i32; @(x_pos i 4 % +) &= x_pos_in_board;
             let y_pos_in_board: i32; @(y_pos i 4 / +) &= y_pos_in_board;
 
@@ -116,7 +117,7 @@ fn is_valid_position: (/* X pos */ i32 /* Y pos */ i32 /* tetromino */ [16]i32 /
                 @(false) &= is_valid;
                 break;
             }
-            if @(board y_pos_in_board [] x_pos_in_board [] 1 ==) {
+            if @(board y_pos_in_board [] x_pos_in_board [] 0 !=) {
                 @(false) &= is_valid;
                 break;
             }
@@ -136,7 +137,7 @@ fn should_place_piece: (/* board */ [20][10]i32 /* tetromino */ [16]i32 /* X pos
 
     let i: i32; @(0) &= i;
     while @(i 16 !=) {
-        if @(tetromino i [] 1 ==) {
+        if @(tetromino i [] 0 !=) {
             let x_pos_in_board: i32; @(x_pos i 4 % +) &= x_pos_in_board;
             let y_pos_in_board: i32; @(y_pos i 4 / +) &= y_pos_in_board;
             let y_pos_below: i32; @(y_pos_in_board 1 +) &= y_pos_below;
@@ -144,7 +145,7 @@ fn should_place_piece: (/* board */ [20][10]i32 /* tetromino */ [16]i32 /* X pos
                 @(true) &= should_place;
                 break;
             }
-            if @(board y_pos_below [] x_pos_in_board [] 1 ==) {
+            if @(board y_pos_below [] x_pos_in_board [] 0 !=) {
                 // the piece below this one is filled, so the piece is placed
                 @(true) &= should_place;
                 break;
@@ -165,29 +166,40 @@ fn process_inputs: () -> (i32) {
 }
 
 // Draw board
-fn draw_board: ([20][10]i32) -> () {
+fn draw_board: ([20][10]i32 /*piece_colors*/[7]str) -> () {
+    let piece_colors: [7]str; &= piece_colors;
     // the board is always on the stack without making a local
     // this function naturally always operates on the board
     let i: i32; @(0) &= i;
-    @(0 1 - 0 1 - "╭──────────╮") &> print_at_board;
+    @(0 1 - 0 1 - " ╭────────────────────╮") &> print_at_board;
     while @(i M <) {
-        @(i 0 1 - "│") &> print_at_board;
+        @(i 0 1 - " │") &> print_at_board;
 
         let j: i32; @(0) &= j;
         while @(j N !=) {
-            if @(@dup i [] j [] 1 ==) { @(i j "#") &> print_at_board } else { @(i j " ") &> print_at_board }
+
+            let cell: i32; @(@dup i [] j []) &= cell;
+            if @(cell 0 !=) {
+                @(i j piece_colors cell 1 - []) &> print_at_board
+                @(i j "██") &> print_at_board
+                @(i j "\x1b[0m") &> print_at_board
+            } else { 
+                @(i j "  ") &> print_at_board
+            }
+
             @(j 1 +) &= j;
         }
 
-        @(i N  "│") &> print_at_board;
+        @(i N "│") &> print_at_board;
         @(i 1 +) &= i;
     }
-    @(20 0 1 - "╰──────────╯") &> print_at_board;
+    @(20 0 1 - " ╰────────────────────╯") &> print_at_board;
 
     @pop
 }
 
-fn draw_tetromino: (/* X pos */ i32 /* Y pos */ i32 /* tetromino */ [16]i32 /* how to draw it */ str) -> () {
+fn draw_tetromino: (/* X pos */ i32 /* Y pos */ i32 /* tetromino */ [16]i32 /* how to draw it */ str /*piece_color*/str) -> () {
+    let piece_color: str; &= piece_color;
     let tetromino_char: str; &= tetromino_char;
     let tetromino: [16]i32; &= tetromino;
     let y_pos: i32; &= y_pos;
@@ -195,34 +207,41 @@ fn draw_tetromino: (/* X pos */ i32 /* Y pos */ i32 /* tetromino */ [16]i32 /* h
 
     let i: i32; @(0) &= i;
     while @(i 16 !=) {
-        if @(tetromino i [] 1 ==) {
+        if @(tetromino i [] 0 !=) {
             let x_pos_in_board: i32; @(x_pos i 4 % +) &= x_pos_in_board;
             let y_pos_in_board: i32; @(y_pos i 4 / +) &= y_pos_in_board;
-            @(y_pos_in_board x_pos_in_board) &> move_cursor_adjusted @(tetromino_char) &> print;
+            @(y_pos_in_board x_pos_in_board piece_color) &> print_at_board
+            @(y_pos_in_board x_pos_in_board tetromino_char) &> print_at_board;
+            @(y_pos_in_board x_pos_in_board "\x1b[0m") &> print_at_board;
         }
         @(i 1 +) &= i;
     }
 }
 fn draw_game_info: (/*score*/i32 /*level*/i32 /*total_lines*/i32) -> () {
-    let total_lines: i32; &= total_lines;
+    let lines: i32; &= lines;
     let level: i32; &= level;
     let score: i32; &= score;
-    let game_info_width: i32; @(BOARD_DRAW_WIDTH 10 -) &= game_info_width;
+    let game_info_width: i32; @(BOARD_DRAW_WIDTH 11 -) &= game_info_width;
     let game_info_height: i32; @(BOARD_DRAW_HEIGHT) &= game_info_height;
 
-    @(game_info_height game_info_width) &> move_cursor @("Score:") &> print;
-    @(game_info_height 1 +) &= game_info_height;
-    @(game_info_height game_info_width) &> move_cursor @(score) &> print;
+    @(game_info_height game_info_width) &> move_cursor @("╭───────╮") &> print; @(game_info_height 1 +) &= game_info_height;
+    @(game_info_height game_info_width) &> move_cursor @("│Score: │") &> print; @(game_info_height 1 +) &= game_info_height;
+    @(game_info_height game_info_width) &> move_cursor @("│       │") &> print;
+    @(game_info_height game_info_width 2 +) &> move_cursor @(score)   &> print; @(game_info_height 1 +) &= game_info_height;
+    @(game_info_height game_info_width) &> move_cursor @("│") &> print;
+    @(game_info_height game_info_width) &> move_cursor @("╰───────╯") &> print; @(game_info_height 1 +) &= game_info_height;
 
-    @(game_info_height 2 +) &= game_info_height;
-    @(game_info_height game_info_width) &> move_cursor @("Level:") &> print;
-    @(game_info_height 1 +) &= game_info_height;
-    @(game_info_height game_info_width) &> move_cursor @(level) &> print;
+    @(game_info_height game_info_width) &> move_cursor @("╭───────╮") &> print; @(game_info_height 1 +) &= game_info_height;
+    @(game_info_height game_info_width) &> move_cursor @("│Level: │") &> print; @(game_info_height 1 +) &= game_info_height;
+    @(game_info_height game_info_width) &> move_cursor @("│       │") &> print;
+    @(game_info_height game_info_width 2 +) &> move_cursor @(level)   &> print; @(game_info_height 1 +) &= game_info_height;
+    @(game_info_height game_info_width) &> move_cursor @("╰───────╯") &> print; @(game_info_height 1 +) &= game_info_height;
 
-    @(game_info_height 2 +) &= game_info_height;
-    @(game_info_height game_info_width) &> move_cursor @("Lines:") &> print;
-    @(game_info_height 1 +) &= game_info_height;
-    @(game_info_height game_info_width) &> move_cursor @(total_lines) &> print;
+    @(game_info_height game_info_width) &> move_cursor @("╭───────╮") &> print; @(game_info_height 1 +) &= game_info_height;
+    @(game_info_height game_info_width) &> move_cursor @("│Lines: │") &> print; @(game_info_height 1 +) &= game_info_height;
+    @(game_info_height game_info_width) &> move_cursor @("│       │") &> print;
+    @(game_info_height game_info_width 2 +) &> move_cursor @(lines)   &> print; @(game_info_height 1 +) &= game_info_height;
+    @(game_info_height game_info_width) &> move_cursor @("╰───────╯") &> print;
 
 }
 
@@ -242,6 +261,7 @@ fn update_tetromino: (/*all_pieces*/[7][4][16]i32 /*board*/[20][10]i32 /*curr_te
     let new_y_pos: i32; @(y_pos) &= new_y_pos;
     let new_rotation: i32; @(curr_rotation) &= new_rotation;
 
+    if @(key 115 == /* 's' move down    */) { @(new_y_pos 1 +) &= new_y_pos } 
     if @(key 97  == /* 'a' move left    */) { @(new_x_pos 1 -) &= new_x_pos } 
     if @(key 100 == /* 'd' move right   */) { @(new_x_pos 1 +) &= new_x_pos }
     if @(key 119 == /* 'w' rotate piece */) { @(curr_rotation 1 + 4 %) &= new_rotation }
@@ -250,12 +270,31 @@ fn update_tetromino: (/*all_pieces*/[7][4][16]i32 /*board*/[20][10]i32 /*curr_te
     let new_tetromino: [16]i32;
     @(all_pieces curr_tetromino_idx [] new_rotation []) &= new_tetromino;
 
+    if @(key 119 == /* only wall-kick on rotation */) {
+        let k: i32; @(0) &= k;
+        let kicked: bool; @(false) &= kicked;
+
+        while @(k 5 != kicked ! &&) {
+            let offset: i32; @(0) &= offset;
+            if @(k 1 ==) { @(1) &= offset } if @(k 2 ==) { @(0 1 -) &= offset }
+            if @(k 3 ==) { @(2) &= offset } if @(k 4 ==) { @(0 2 -) &= offset }
+
+            let try_x: i32; @(new_x_pos offset +) &= try_x;
+            if @(try_x new_y_pos new_tetromino board) &> is_valid_position {
+                @(try_x) &= new_x_pos;
+                @(true) &= kicked;
+            }
+            @(k 1 +) &= k;
+        }
+    }
+
     if @(new_x_pos new_y_pos new_tetromino board) &> is_valid_position {
         @(new_x_pos) &= x_pos;
         @(new_y_pos) &= y_pos;
         @(new_tetromino) &= curr_tetromino;
         @(new_rotation) &= curr_rotation;
     }
+
     @(x_pos y_pos curr_rotation curr_tetromino)
 }
 
@@ -268,38 +307,45 @@ fn main: () -> () {
         [0 0 0 0  1 1 1 1  0 0 0 0  0 0 0 0]  /* 0   deg  */ [0 0 1 0  0 0 1 0  0 0 1 0  0 0 1 0]  /* 90  deg  */
         [0 0 0 0  0 0 0 0  1 1 1 1  0 0 0 0]  /* 180 deg  */ [0 1 0 0  0 1 0 0  0 1 0 0  0 1 0 0]  /* 270 deg  */
        ] /* --- O Piece --- */ [
-        [0 0 0 0  0 1 1 0  0 1 1 0  0 0 0 0] [0 0 0 0  0 1 1 0  0 1 1 0  0 0 0 0]
-        [0 0 0 0  0 1 1 0  0 1 1 0  0 0 0 0] [0 0 0 0  0 1 1 0  0 1 1 0  0 0 0 0]
+        [0 0 0 0  0 2 2 0  0 2 2 0  0 0 0 0] [0 0 0 0  0 2 2 0  0 2 2 0  0 0 0 0]
+        [0 0 0 0  0 2 2 0  0 2 2 0  0 0 0 0] [0 0 0 0  0 2 2 0  0 2 2 0  0 0 0 0]
        ] /* --- S Piece --- */ [
-        [0 0 0 0  0 0 1 1  0 1 1 0  0 0 0 0] [0 0 1 0  0 0 1 1  0 0 0 1  0 0 0 0]
-        [0 0 0 0  0 1 1 0  1 1 0 0  0 0 0 0] [0 1 0 0  0 1 1 0  0 0 1 0  0 0 0 0]
+        [0 0 0 0  0 0 3 3  0 3 3 0  0 0 0 0] [0 0 3 0  0 0 3 3  0 0 0 3  0 0 0 0]
+        [0 0 0 0  0 3 3 0  3 3 0 0  0 0 0 0] [0 3 0 0  0 3 3 0  0 0 3 0  0 0 0 0]
        ] /* --- Z Piece --- */ [
-        [0 0 0 0  1 1 0 0  0 1 1 0  0 0 0 0] [0 0 0 1  0 0 1 1  0 0 1 0  0 0 0 0]
-        [0 0 0 0  1 1 0 0  0 1 1 0  0 0 0 0] [0 0 1 0  0 1 1 0  0 1 0 0  0 0 0 0]
+        [0 0 0 0  4 4 0 0  0 4 4 0  0 0 0 0] [0 0 0 4  0 0 4 4  0 0 4 0  0 0 0 0]
+        [0 0 0 0  4 4 0 0  0 4 4 0  0 0 0 0] [0 0 4 0  0 4 4 0  0 4 0 0  0 0 0 0]
        ] /* --- T Piece --- */ [
-        [0 1 0 0  1 1 1 0  0 0 0 0  0 0 0 0] [0 1 0 0  0 1 1 0  0 1 0 0  0 0 0 0]
-        [0 0 0 0  1 1 1 0  0 1 0 0  0 0 0 0] [0 1 0 0  1 1 0 0  0 1 0 0  0 0 0 0]
+        [0 5 0 0  5 5 5 0  0 0 0 0  0 0 0 0] [0 5 0 0  0 5 5 0  0 5 0 0  0 0 0 0]
+        [0 0 0 0  5 5 5 0  0 5 0 0  0 0 0 0] [0 5 0 0  5 5 0 0  0 5 0 0  0 0 0 0]
        ] /* --- J Piece --- */ [
-        [0 0 0 0  1 0 0 0  1 1 1 0  0 0 0 0] [0 0 1 1  0 0 1 0  0 0 1 0  0 0 0 0]
-        [0 0 0 0  1 1 1 0  0 0 1 0  0 0 0 0] [0 0 1 0  0 0 1 0  0 1 1 0  0 0 0 0]
+        [0 0 0 0  6 0 0 0  6 6 6 0  0 0 0 0] [0 0 6 6  0 0 6 0  0 0 6 0  0 0 0 0]
+        [0 0 0 0  6 6 6 0  0 0 6 0  0 0 0 0] [0 0 6 0  0 0 6 0  0 6 6 0  0 0 0 0]
        ] /* --- L Piece --- */ [
-        [0 0 0 0  0 0 1 0  1 1 1 0  0 0 0 0] [0 1 0 0  0 1 0 0  0 1 1 0  0 0 0 0]
-        [0 0 0 0  1 1 1 0  1 0 0 0  0 0 0 0] [0 1 1 0  0 0 1 0  0 0 1 0  0 0 0 0]
+        [0 0 0 0  0 0 7 0  7 7 7 0  0 0 0 0] [0 7 0 0  0 7 0 0  0 7 7 0  0 0 0 0]
+        [0 0 0 0  7 7 7 0  7 0 0 0  0 0 0 0] [0 7 7 0  0 0 7 0  0 0 7 0  0 0 0 0]
        ] ]) &= all_pieces;
     @([[0 0 0 0 0 0 0 0 0 0] [0 0 0 0 0 0 0 0 0 0] [0 0 0 0 0 0 0 0 0 0] [0 0 0 0 0 0 0 0 0 0] [0 0 0 0 0 0 0 0 0 0]
        [0 0 0 0 0 0 0 0 0 0] [0 0 0 0 0 0 0 0 0 0] [0 0 0 0 0 0 0 0 0 0] [0 0 0 0 0 0 0 0 0 0] [0 0 0 0 0 0 0 0 0 0]
        [0 0 0 0 0 0 0 0 0 0] [0 0 0 0 0 0 0 0 0 0] [0 0 0 0 0 0 0 0 0 0] [0 0 0 0 0 0 0 0 0 0] [0 0 0 0 0 0 0 0 0 0]
        [0 0 0 0 0 0 0 0 0 0] [0 0 0 0 0 0 0 0 0 0] [0 0 0 0 0 0 0 0 0 0] [0 0 0 0 0 0 0 0 0 0] [0 0 0 0 0 0 0 0 0 0]]) &= board;
 
-    @(24) &= BOARD_DRAW_WIDTH; @(6) &= BOARD_DRAW_HEIGHT;
+    let piece_colors: [7]str;
+    @(["\x1b[38;2;90;188;172m"  /* I  cyan        #5ABCAC */ "\x1b[38;2;252;191;85m"  /* O  yellow #FCBF55 */
+       "\x1b[38;2;120;183;215m" /* S  blue_strong #78B7D7 */ "\x1b[38;2;227;92;92m"   /* Z  red    #e35c5c */
+       "\x1b[38;2;224;180;187m" /* T  pink        #E0B4BB */ "\x1b[38;2;86;124;198m"  /* J  blue   #567CC6 */
+       "\x1b[38;2;255;154;92m"  /* L  orange      #FF9A5C */]) &= piece_colors;
+    let ghost_color: str; @("\x1b[38;2;94;106;131m") &= ghost_color;
+
+    @(14) &= BOARD_DRAW_WIDTH; @(6) &= BOARD_DRAW_HEIGHT;
     @(20) &= M; @(10) &= N;
 
     let x_pos: i32; @(N 2 /) &= x_pos;
     let y_pos: i32; @(0) &= y_pos;
     let drop_y_pos: i32; @(y_pos) &= drop_y_pos;
 
-    let score: i32;       @(0) &= score;
-    let level: i32;       @(0) &= level;
+    let score: i32; @(0) &= score;
+    let level: i32; @(0) &= level;
     let total_lines: i32; @(0) &= total_lines;
     let line_scores: [5]i32; @([0 40 100 300 1200]) &= line_scores;
 
@@ -316,19 +362,24 @@ fn main: () -> () {
     @(all_pieces curr_tetromino_idx [] curr_rotation []) &= curr_tetromino;
 
     :> enable_raw_input @("\x1b[2J\x1b[H") &> print;
-    @("╭──────────────────────────────────────────────────────────╮\n") &> print;
-    @("│            Tetris implemented in Henceforth              │\n") &> print;
-    @("╰──────────────────────────────────────────────────────────╯\n") &> print;
+    @("╭───────────────────────────────────────────────╮\n") &> print;
+    @("│       Tetris implemented in Henceforth        │\n") &> print;
+    @("╰───────────────────────────────────────────────╯\n") &> print;
     @(0) &> fflush @pop;
 
     let fall_timer: i32; @(0) &= fall_timer;
     let fall_interval: i32; @(30) &= fall_interval; // 30 ticks is ~0.5s at 60fps
+
+    let lock_timer: i32; @(0) &= lock_timer;
+    let lock_delay: i32; @(30) &= lock_delay;       // ~0.5s at 60fps
+    let lock_resets: i32; @(0) &= lock_resets;
 
     let key: i32;
 
     let running: bool; @(true) &= running;
     while @(running) {
         :> process_inputs &= key;
+        if @(key 113 == /* 'q' quit game */) { @(false) &= running }
 
         // update our tetromino and calculate validity of the new position
         @(all_pieces board curr_tetromino_idx key x_pos y_pos curr_rotation)
@@ -338,22 +389,38 @@ fn main: () -> () {
         @(y_pos) &= drop_y_pos;
         while @(x_pos drop_y_pos 1 + curr_tetromino board) &> is_valid_position { @(drop_y_pos 1 +) &= drop_y_pos }
         // draw the game and info about the score, etc
-        if @(key 32  == /* 'spacebar' drop  */) { @(drop_y_pos) &= y_pos }
+        if @(key 32 ==) { @(drop_y_pos) &= y_pos; @(lock_delay) &= lock_timer }
 
-        @(board) &> draw_board;
-        @(x_pos y_pos curr_tetromino "#") &> draw_tetromino;
-        @(x_pos drop_y_pos curr_tetromino ".") &> draw_tetromino;
+        @("\x1b[?2026h") &> print;
+        @(board piece_colors) &> draw_board;
+        @(x_pos drop_y_pos curr_tetromino "░░" ghost_color) &> draw_tetromino;
+        @(x_pos y_pos curr_tetromino "██" piece_colors curr_tetromino_idx []) &> draw_tetromino;
         @(score level total_lines) &> draw_game_info;
+        @("\x1b[?2026l") &> print;
 
         if @(board curr_tetromino x_pos y_pos) &> should_place_piece {
-            // should be :> but there is a bug that makes that break right now
-            @(board curr_tetromino x_pos y_pos) &> add_to_board;
-            :> pick_new_tetromino &= curr_tetromino_idx;
-            @(N 2 /) &= x_pos; @(0) &= y_pos; // reset to the starting new piece position
-            @(0) &= drop_y_pos;
-            // maintain the old rotation because it doesn't really matter
-            @(all_pieces curr_tetromino_idx [] curr_rotation []) &= curr_tetromino;
-            if @(x_pos y_pos curr_tetromino board) &> is_valid_position {} else { @(false) &= running }
+
+            @(lock_timer 1 +) &= lock_timer;
+            if @(lock_timer lock_delay >=) {
+
+                @(board curr_tetromino x_pos y_pos) &> add_to_board;
+
+                :> pick_new_tetromino &= curr_tetromino_idx;
+                @(all_pieces curr_tetromino_idx [] curr_rotation []) &= curr_tetromino;
+
+                @(N 2 /) &= x_pos; @(0) &= y_pos; // reset to the starting new piece position
+                @(0) &= drop_y_pos;
+
+                // check if we should end the game or not
+                if @(x_pos y_pos curr_tetromino board) &> is_valid_position {} else {
+                    @(board curr_tetromino x_pos y_pos) &> add_to_board;
+                    @(false) &= running;
+                }
+                @(0) &= lock_timer;
+                @(0) &= lock_resets;
+            } 
+        } else {
+            @(0) &= lock_timer;
         }
 
         let cleared: i32; @(board) &> maybe_clear_lines &= cleared;
@@ -372,12 +439,11 @@ fn main: () -> () {
 
         @(0) &> fflush @pop
 
-        if @(key 113 == /* 'q' quit game */) { @(false) &= running }
         @(16666) &> usleep @pop // around 60fps tick
     }
     
-    @(0 N 4 + "Game Over!") &> print_at_board;
-    @(board) &> draw_board; @("\n") &> print;
+    @(0 N 2 + "Game Over!") &> print_at_board;
+    @(board piece_colors) &> draw_board; @("\n") &> print;
 
     :> restore_input;
 }

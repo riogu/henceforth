@@ -61,6 +61,7 @@ impl IrLowererError {
         let func_ids: Vec<IrFuncId> = ir_arena.functions.keys().collect();
         let output = print(&func_ids, &ir_arena);
         match output {
+            Some(output) if ast_repr.is_empty() => prettify_ir(output),
             Some(output) => format!("{}\n\n{}", ast_repr, prettify_ir(output)),
             None => format!("{}", ast_repr),
         }

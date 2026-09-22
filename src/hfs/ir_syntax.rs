@@ -950,6 +950,12 @@ mod iso {
             },
         )
     }
+    pub fn term_unreachable() -> Iso<(), TerminatorInst> {
+        Iso::new(
+            |()| Some(TerminatorInst::Unreachable),
+            |term| if matches!(term, TerminatorInst::Unreachable) { Some(()) } else { None },
+        )
+    }
     pub fn term_branch() -> Iso<(InstId, BlockId, BlockId), TerminatorInst> {
         use crate::hfs::Span;
         Iso::new(
@@ -995,6 +1001,13 @@ mod iso {
             // since nothing here exercises array codegen (same idea as fncall ignoring is_move)
             |()| Some(Instruction::Alloca { span: Span::default(), type_id: TypeId::default(), array_len: InstId::default() }),
             |inst| if matches!(inst, Instruction::Alloca { .. }) { Some(()) } else { None },
+        )
+    }
+
+    pub fn inst_global_alloca() -> Iso<(), Instruction> {
+        Iso::new(
+            |()| Some(Instruction::GlobalAlloca(crate::hfs::GlobalIrVarId::default())),
+            |inst| if matches!(inst, Instruction::GlobalAlloca(_)) { Some(()) } else { None },
         )
     }
 
@@ -1163,6 +1176,9 @@ fn syntax_parameter<S: Syntax>(s: &S) -> S::Output<Instruction> {
 fn syntax_alloca<S: Syntax>(s: &S) -> S::Output<Instruction> {
     s.iso(iso::inst_alloca(), s.literal_str("alloca"))
 }
+fn syntax_global_alloca<S: Syntax>(s: &S) -> S::Output<Instruction> {
+    s.iso(iso::inst_global_alloca(), s.literal_str("global"))
+}
 fn syntax_retval<S: Syntax>(s: &S) -> S::Output<Instruction> {
     s.iso(iso::inst_retval(), s.literal_str("retval"))
 }
@@ -1240,6 +1256,7 @@ fn syntax_inst<S: Syntax>(s: &S, names: &NameMap) -> S::Output<Instruction> {
         syntax_load(s, names),
         syntax_store(s, names),
         syntax_alloca(s),
+        syntax_global_alloca(s),
         syntax_gep(s, names),
         syntax_binop(s, names),
         syntax_unop(s, names),
@@ -1283,7 +1300,12 @@ fn syntax_jump<S: Syntax>(s: &S, names: &NameMap) -> S::Output<TerminatorInst> {
 }
 
 pub fn syntax_term<S: Syntax>(s: &S, names: &NameMap) -> S::Output<TerminatorInst> {
-    s.choice(vec![syntax_return(s, names), syntax_branch(s, names), syntax_jump(s, names)])
+    s.choice(vec![
+        syntax_return(s, names),
+        syntax_branch(s, names),
+        syntax_jump(s, names),
+        s.iso(iso::term_unreachable(), s.keyword("unreachable")),
+    ])
 }
 
 fn syntax_term_opt<S: Syntax>(s: &S, names: &NameMap) -> S::Output<Option<TerminatorInst>> {
@@ -1680,21 +1702,34 @@ pub fn print(func_ids: &[IrFuncId], arena: &IrArena) -> Option<String> {
                     .collect();
                 format!("({})", inner.join(" "))
             },
-            IrType::Array { hfs_type, length, .. } => {
+            IrType::Array { hfs_type, length, ptr_count } => {
                 let elem_name = names.type_to_name.get(hfs_type).cloned().unwrap_or_else(|| format!("{}", hfs_type.0));
                 let len_repr = match length.and_then(|id| arena.try_get_inst(id)) {
                     Some(Instruction::Literal { literal: Literal::Integer(n), .. }) => n.to_string(),
                     _ => "n".to_string(),
                 };
-                format!("arr[{}]{}", len_repr, elem_name)
+                format!("arr[{}]{}{}", len_repr, elem_name, "*".repeat(*ptr_count))
             },
-            _ => continue,
+            IrType::Int { ptr_count } => format!("i32{}", "*".repeat(*ptr_count)),
+            IrType::Float { ptr_count } => format!("f32{}", "*".repeat(*ptr_count)),
+            IrType::Bool { ptr_count } => format!("bool{}", "*".repeat(*ptr_count)),
+            IrType::String { ptr_count } => format!("str{}", "*".repeat(*ptr_count)),
         };
         names.type_to_name.insert(type_id, name.clone());
         names.name_to_type.insert(name, type_id);
     }
 
     let mut inst_counter = 0usize;
+    let mut global_header = String::new();
+    for (inst_id, inst) in arena.instructions.iter() {
+        let Instruction::GlobalAlloca(var_id) = inst else { continue };
+        let var = arena.get_var(*var_id);
+        let type_name = names.type_to_name.get(&var.hfs_type).cloned().unwrap_or_else(|| format!("{}", var.hfs_type.0));
+        global_header.push_str(&format!("global %{} = {} @{}\n", inst_counter, type_name, var.name));
+        names.inst_to_name.insert(inst_id, inst_counter);
+        names.name_to_inst.insert(inst_counter, inst_id);
+        inst_counter += 1;
+    }
     for func_id in func_ids {
         let func = arena.get_func(*func_id);
         names.func_to_name.insert(*func_id, func.name.clone());
@@ -1755,5 +1790,5 @@ pub fn print(func_ids: &[IrFuncId], arena: &IrArena) -> Option<String> {
     let printer = Printer;
     let syntax = syntax_top_level(&printer, &names);
 
-    (syntax.0)(raw_functions)
+    (syntax.0)(raw_functions).map(|output| format!("{}{}", global_header, output))
 }

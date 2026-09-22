@@ -72,6 +72,13 @@ struct Args {
     verbose: bool,
 }
 
+fn plain_ir_dump(ir_arena: &hfs::IrArena) -> String {
+    colored::control::set_override(false);
+    let dump = IrLowererError::dump_ast_and_ir(None, ir_arena);
+    colored::control::unset_override();
+    dump
+}
+
 fn run() -> Result<i32, Box<dyn CompileError>> {
     let args = Args::parse();
     let file = hfs::File::new(args.source);
@@ -93,11 +100,11 @@ fn run() -> Result<i32, Box<dyn CompileError>> {
         hfs::IrLowerer::lower_to_mir(top_level_nodes, ast_arena.clone(), diagnostic_info.clone())?;
 
     if args.print_ir_o0 {
-        println!("IR before optimizations:{}", IrLowererError::dump_ast_and_ir(None, &ir_arena));
+        println!("IR before optimizations:\n{}", IrLowererError::dump_ast_and_ir(None, &ir_arena));
     }
     if args.emit_ir_o0 {
         let path = diagnostic_info.path.with_extension("O0.hfsir");
-        std::fs::write(&path, IrLowererError::dump_ast_and_ir(None, &ir_arena))
+        std::fs::write(&path, plain_ir_dump(&ir_arena))
             .unwrap_or_else(|e| panic!("failed to write {}: {e}", path.display()));
     }
 
@@ -106,11 +113,11 @@ fn run() -> Result<i32, Box<dyn CompileError>> {
     }
 
     if args.print_ir {
-        println!("IR after optimizations:{}", IrLowererError::dump_ast_and_ir(None, &ir_arena));
+        println!("IR after optimizations:\n{}", IrLowererError::dump_ast_and_ir(None, &ir_arena));
     }
     if args.emit_ir {
         let path = diagnostic_info.path.with_extension("hfsir");
-        std::fs::write(&path, IrLowererError::dump_ast_and_ir(None, &ir_arena))
+        std::fs::write(&path, plain_ir_dump(&ir_arena))
             .unwrap_or_else(|e| panic!("failed to write {}: {e}", path.display()));
     }
 

@@ -43,6 +43,9 @@ struct Args {
     /// Write the IR after optimizations to a .hfsir file
     #[arg(long)]
     emit_ir: bool,
+    /// Write the CFG after optimizations to a .dot file (render with `dot -Tpng x.dot -o x.png`)
+    #[arg(long = "emit-cfg-dot")]
+    emit_cfg_dot: bool,
     /// Print the input source file to the terminal
     #[arg(long)]
     print_file: bool,
@@ -118,6 +121,11 @@ fn run() -> Result<i32, Box<dyn CompileError>> {
     if args.emit_ir {
         let path = diagnostic_info.path.with_extension("hfsir");
         std::fs::write(&path, plain_ir_dump(&ir_arena))
+            .unwrap_or_else(|e| panic!("failed to write {}: {e}", path.display()));
+    }
+    if args.emit_cfg_dot {
+        let path = diagnostic_info.path.with_extension("dot");
+        std::fs::write(&path, ir_arena.generate_dot(&top_level_insts))
             .unwrap_or_else(|e| panic!("failed to write {}: {e}", path.display()));
     }
 

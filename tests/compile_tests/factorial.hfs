@@ -1,6 +1,5 @@
 //? COMPILE
-fn factorial: (i32 i32) -> (i32) {
-    @pop
+fn factorial: (i32) -> (i32) {
     let n: i32;
     let result: i32;
     &= n;
@@ -13,9 +12,7 @@ fn factorial: (i32 i32) -> (i32) {
 }
 
 fn main: () -> () {
-    @( 5 312) &> factorial;
-    if @(@dup 120 ==) {
-        @("factorial example\n") &> print;
-    }
-    @pop 
+    @(5) &> factorial;
+    if @(@dup 120 ==) { @("factorial example\n") &> print }
+    @pop
 }

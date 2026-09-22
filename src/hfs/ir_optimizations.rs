@@ -135,7 +135,7 @@ impl IrPass for DeadCodeElimination {
             let Some(inst) = arena.try_get_inst(inst_id) else {
                 continue; // already deleted, don't add again
             };
-            for operand in inst.get_operands() {
+            for operand in inst.get_operands(arena) {
                 let Some(operand_inst) = arena.try_get_inst(operand) else {
                     continue; // already deleted, don't add again
                 };

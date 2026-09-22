@@ -165,7 +165,8 @@ impl IrLowerer {
         let length_inst = match self.ast_arena.get_expr(length_expr).clone() {
             Expression::Literal(literal) => {
                 let span = *self.ast_arena.get_expr_span(length_expr);
-                self.arena.instructions.insert(Instruction::Literal { span, literal })
+                let entry_block = self.arena.get_func(self.ir_context.curr_func).entry_block;
+                self.arena.alloc_inst_for(Instruction::Literal { span, literal }, entry_block)
             },
             _ => self.lower_expr(length_expr)?,
         };

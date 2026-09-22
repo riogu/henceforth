@@ -250,14 +250,19 @@ impl Instruction {
                     },
                 IrOperation::Not(inst_id) => *inst_id = new_id,
             },
-            Instruction::Alloca { array_len, .. } => *array_len = new_id,
+            Instruction::Alloca { array_len, .. } =>
+                if operand_idx == 0 {
+                    *array_len = new_id
+                } else {
+                    panic!("[internal error] can't replace a nested array dimension's length operand")
+                },
             Instruction::Literal { .. }
             | Instruction::GlobalAlloca(_)
             | Instruction::Parameter { .. }
             | Instruction::ReturnValue { .. } => panic!("[internal error] can't replace operand of instruction with no operands"),
         }
     }
-    pub fn get_operands(&self) -> Vec<InstId> {
+    pub fn get_operands(&self, arena: &IrArena) -> Vec<InstId> {
         match self {
             Instruction::Store { address, value, .. } => vec![*address, *value],
             Instruction::Load { address, .. } => vec![*address],
@@ -288,7 +293,17 @@ impl Instruction {
                 },
                 IrOperation::Not(inst_id) => vec![*inst_id],
             },
-            Instruction::Alloca { array_len, .. } => vec![*array_len],
+            Instruction::Alloca { array_len, type_id, .. } => {
+                let mut operands = vec![*array_len];
+                let mut elem_type = *type_id;
+                while let IrType::Array { hfs_type, .. } = arena.get_type(elem_type) {
+                    elem_type = *hfs_type;
+                    if let IrType::Array { length: Some(length), .. } = arena.get_type(elem_type) {
+                        operands.push(*length);
+                    }
+                }
+                operands
+            },
             Instruction::Literal { .. }
             | Instruction::GlobalAlloca(_)
             | Instruction::Parameter { .. }
@@ -357,55 +372,23 @@ impl Instruction {
 }
 impl IrArena {
     pub fn generate_dot(&self, top_level: &Vec<IrTopLevelId>) -> String {
+        let func_ids: Vec<IrFuncId> =
+            top_level.iter().filter_map(|node| if let IrTopLevelId::FunctionDecl(f) = node { Some(*f) } else { None }).collect();
+        // shared with the textual IR printer, so this sees array/pointer type names and globals
+        // correctly instead of maintaining its own drifting copy of the same bookkeeping.
+        let (names, _global_header) = crate::hfs::ir_syntax::build_name_map(&func_ids, self);
+
         let mut out = String::from("digraph CFG {\n");
         out.push_str("    node [shape=box fontname=\"Monospace\"]\n");
 
-        for node in top_level {
-            let IrTopLevelId::FunctionDecl(func_id) = node else {
-                continue;
-            };
-
-            let func_name = self.get_func(*func_id).name.clone();
+        for func_id in &func_ids {
+            let func_id = *func_id;
+            let func_name = self.get_func(func_id).name.clone();
 
             out.push_str(&format!("    subgraph cluster_{} {{\n", func_name));
             out.push_str(&format!("        label=\"fn {}\";\n", func_name));
 
-            let mut names = crate::hfs::ir_syntax::NameMap::default();
-            names.type_to_name.insert(crate::hfs::INT_TYPE_ID, "i32".to_string());
-            names.type_to_name.insert(crate::hfs::FLOAT_TYPE_ID, "f32".to_string());
-            names.type_to_name.insert(crate::hfs::BOOL_TYPE_ID, "bool".to_string());
-            names.type_to_name.insert(crate::hfs::STRING_TYPE_ID, "str".to_string());
-
-            let mut inst_counter = 0usize;
-            for bid in self.get_blocks_in(*func_id) {
-                for inst_id in &self.get_block(bid).instructions.clone() {
-                    names.inst_to_name.insert(*inst_id, inst_counter);
-                    names.name_to_inst.insert(inst_counter, *inst_id);
-                    inst_counter += 1;
-                }
-            }
-            for bid in self.get_blocks_in(*func_id) {
-                let name = self.get_block(bid).name.clone();
-                names.block_to_name.insert(bid, name.clone());
-                names.unmangled_to_block.insert(name, bid);
-            }
-            for (fid, f) in self.functions.iter() {
-                names.func_to_name.insert(fid, f.name.clone());
-            }
-            for (i, typ) in self.types.iter().enumerate() {
-                let tid = TypeId(i);
-                if !names.type_to_name.contains_key(&tid) {
-                    if let IrType::Tuple { type_ids, .. } = typ {
-                        let inner: Vec<String> = type_ids
-                            .iter()
-                            .map(|id| names.type_to_name.get(id).cloned().unwrap_or_else(|| format!("t{}", id.0)))
-                            .collect();
-                        names.type_to_name.insert(tid, format!("({})", inner.join(" ")));
-                    }
-                }
-            }
-
-            let block_ids = self.get_blocks_in(*func_id);
+            let block_ids = self.get_blocks_in(func_id);
             for block_id in &block_ids {
                 let (block_name, inst_ids, terminator) = {
                     let block = self.get_block(*block_id);

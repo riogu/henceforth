@@ -995,12 +995,10 @@ mod iso {
             },
         )
     }
-    pub fn inst_alloca() -> Iso<(), Instruction> {
+    pub fn inst_alloca() -> Iso<InstId, Instruction> {
         Iso::new(
-            // this textual format doesn't have array alloca syntax, so array_len is a dummy: fine
-            // since nothing here exercises array codegen (same idea as fncall ignoring is_move)
-            |()| Some(Instruction::Alloca { span: Span::default(), type_id: TypeId::default(), array_len: InstId::default() }),
-            |inst| if matches!(inst, Instruction::Alloca { .. }) { Some(()) } else { None },
+            |array_len| Some(Instruction::Alloca { span: Span::default(), type_id: TypeId::default(), array_len }),
+            |inst| if let Instruction::Alloca { array_len, .. } = inst { Some(array_len) } else { None },
         )
     }
 
@@ -1173,8 +1171,8 @@ fn syntax_parameter<S: Syntax>(s: &S) -> S::Output<Instruction> {
     )
 }
 
-fn syntax_alloca<S: Syntax>(s: &S) -> S::Output<Instruction> {
-    s.iso(iso::inst_alloca(), s.literal_str("alloca"))
+fn syntax_alloca<S: Syntax>(s: &S, names: &NameMap) -> S::Output<Instruction> {
+    s.iso(iso::inst_alloca(), s.ignore_left(s.keyword("alloca"), s.inst_name(names)))
 }
 fn syntax_global_alloca<S: Syntax>(s: &S) -> S::Output<Instruction> {
     s.iso(iso::inst_global_alloca(), s.literal_str("global"))
@@ -1255,7 +1253,7 @@ fn syntax_inst<S: Syntax>(s: &S, names: &NameMap) -> S::Output<Instruction> {
         syntax_load_element(s, names),
         syntax_load(s, names),
         syntax_store(s, names),
-        syntax_alloca(s),
+        syntax_alloca(s, names),
         syntax_global_alloca(s),
         syntax_gep(s, names),
         syntax_binop(s, names),
@@ -1668,7 +1666,10 @@ pub fn parse(input: &str, arena: &mut IrArena) -> Option<Vec<IrFuncId>> {
     Some(func_ids)
 }
 
-pub fn print(func_ids: &[IrFuncId], arena: &IrArena) -> Option<String> {
+// Builds the name map (types, globals, blocks, instructions) shared by every consumer that needs
+// to render IR as text - the textual printer/parser here, and generate_dot in hfs_ir.rs. Also
+// returns the "global %N = ..." header lines, since those aren't tied to any one function/block.
+pub fn build_name_map(func_ids: &[IrFuncId], arena: &IrArena) -> (NameMap, String) {
     let mut names = NameMap {
         inst_to_name: HashMap::new(),
         name_to_inst: HashMap::new(),
@@ -1741,13 +1742,19 @@ pub fn print(func_ids: &[IrFuncId], arena: &IrArena) -> Option<String> {
             names.name_to_block.insert(block.name.clone(), block_id);
             names.unmangled_to_block.insert(block.name.clone(), block_id);
 
-            for inst_id in &block.instructions {
-                names.inst_to_name.insert(*inst_id, inst_counter);
-                names.name_to_inst.insert(inst_counter, *inst_id);
+            for &inst_id in &block.instructions {
+                names.inst_to_name.insert(inst_id, inst_counter);
+                names.name_to_inst.insert(inst_counter, inst_id);
                 inst_counter += 1;
             }
         }
     }
+
+    (names, global_header)
+}
+
+pub fn print(func_ids: &[IrFuncId], arena: &IrArena) -> Option<String> {
+    let (names, global_header) = build_name_map(func_ids, arena);
 
     let mut raw_functions = Vec::new();
     for func_id in func_ids {
@@ -1788,6 +1795,7 @@ pub fn print(func_ids: &[IrFuncId], arena: &IrArena) -> Option<String> {
         raw_functions.push(RawFunction { name: func_name, param_type, return_type, blocks });
     }
     let printer = Printer;
+    { let ri = syntax_raw_inst(&printer, &names); for f in &raw_functions { for b in &f.blocks { for i in &b.insts { if (ri.0)(i.clone()).is_none() { eprintln!("TMPFAIL inst {:?}", i); } } } } }
     let syntax = syntax_top_level(&printer, &names);
 
     (syntax.0)(raw_functions).map(|output| format!("{}{}", global_header, output))

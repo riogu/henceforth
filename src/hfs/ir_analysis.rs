@@ -25,7 +25,7 @@ impl DefUseInfo {
             for inst_id in block.instructions.clone() {
                 // iterate every instruction, check what is in its operands and add the current inst to
                 // the operand's user list (because this instruction is a user of that operand's value)
-                for (op_idx, operand_id) in arena.get_inst(inst_id).get_operands().iter().enumerate() {
+                for (op_idx, operand_id) in arena.get_inst(inst_id).get_operands(arena).iter().enumerate() {
                     def_use.add_user(*operand_id, inst_id, op_idx);
                 }
             }

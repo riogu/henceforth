@@ -180,6 +180,8 @@ fn draw_board: ([20][10]i32 /*piece_colors*/[7]str) -> () {
     let piece_colors: [7]str; &= piece_colors;
     // the board is always on the stack without making a local
     // this function naturally always operates on the board
+
+
     let i: i32; @(0) &= i;
     @(0 1 - 0 1 - " ╭────────────────────╮") &> print_at_board;
     while @(i M <) {
@@ -448,7 +450,7 @@ fn main: () -> () {
         @(fall_timer 1 +) &= fall_timer;
         if @(fall_timer fall_interval >=) {
             @(0) &= fall_timer;
-            @(y_pos 1 +) &= y_pos;
+            if @(x_pos y_pos 1 + curr_tetromino board) &> is_valid_position { @(y_pos 1 +) &= y_pos }
         }
 
         @(0) &> fflush @pop

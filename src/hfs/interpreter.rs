@@ -104,7 +104,7 @@ fn read_input_line() -> String {
 
 fn call_builtin(builtin: Builtin, args: Vec<RuntimeValue>) -> Vec<RuntimeValue> {
     match builtin {
-        Builtin::Print => {
+        Builtin::Print | Builtin::PrintStack => {
             for arg in &args {
                 print_runtime_value(arg);
             }

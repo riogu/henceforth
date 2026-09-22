@@ -724,11 +724,13 @@ impl StackAnalyzer {
                 let ElaboratedType::Tuple { type_ids: param_types, .. } = self.arena.get_type(func_decl.param_type) else {
                     panic!("[internal error] functions only recieve tuples at the moment.")
                 };
+                let is_print_stack = matches!(find_builtin(&func_decl.name), Some(spec) if spec.builtin == Builtin::PrintStack);
+                let param_count = if is_print_stack { self.arena.hfs_stack.len() } else { param_types.len() };
                 let mut arg_count = 0;
                 let mut arg_types = Vec::new();
                 let mut arg_expr_spans = Vec::new();
                 let mut arg_exprs = Vec::new();
-                for _ in 0..param_types.len() {
+                for _ in 0..param_count {
                     let arg_expr = self.arena.pop_or_error(self.unresolved_arena.get_unresolved_stmt_span(id))?;
                     arg_expr_spans.push(self.arena.get_expr_span(arg_expr).clone());
                     arg_types.push(self.arena.get_type_id_of_expr(arg_expr)?);
@@ -749,9 +751,9 @@ impl StackAnalyzer {
                     }
                 }
                 // first make sure calling this function is valid given the stack state, except for
-                // print, which is the one builtin that genuinely accepts any argument type
+                // print and print_stack, which accept any argument types
                 let is_print = matches!(find_builtin(&func_decl.name), Some(spec) if spec.builtin == Builtin::Print);
-                if !is_print {
+                if !is_print && !is_print_stack {
                     self.arena.validate_func_call(func_decl.param_type, arg_type_id, arg_expr_spans)?;
                 }
 

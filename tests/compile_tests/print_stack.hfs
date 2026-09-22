@@ -1,0 +1,11 @@
+//? COMPILE
+fn main: () -> () {
+    @("a" 1 true) &> print_stack;
+    @("\n") &> print;
+
+    @(2 3) :> print_stack;
+    @pop_all
+    @("\n") &> print;
+
+    @() &> print_stack;
+}

@@ -9,6 +9,7 @@ use crate::hfs::{FLOAT_TYPE_ID, INT_TYPE_ID, STRING_TYPE_ID, TypeId};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Builtin {
     Print,
+    PrintStack,
     InputInt,
     InputFloat,
     InputStr,
@@ -27,6 +28,9 @@ pub struct BuiltinSpec {
 
 pub const BUILTINS: &[BuiltinSpec] = &[
     BuiltinSpec { name: "print", builtin: Builtin::Print, params: &[INT_TYPE_ID], returns: &[] },
+    // print_stack's arity isn't fixed it prints everything currently on the stack
+    // so its arg count is computed at the call site 
+    BuiltinSpec { name: "print_stack", builtin: Builtin::PrintStack, params: &[], returns: &[] },
     BuiltinSpec { name: "input_int", builtin: Builtin::InputInt, params: &[], returns: &[INT_TYPE_ID] },
     BuiltinSpec { name: "input_float", builtin: Builtin::InputFloat, params: &[], returns: &[FLOAT_TYPE_ID] },
     BuiltinSpec { name: "input_str", builtin: Builtin::InputStr, params: &[], returns: &[STRING_TYPE_ID] },

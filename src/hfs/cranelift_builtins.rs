@@ -134,6 +134,10 @@ pub fn translate_builtin_call(
     let ptr_ty = module.target_config().pointer_type();
     match builtin {
         Builtin::Print => translate_print(args[0], arena, builder, module, ctx, values, ptr_ty),
+        Builtin::PrintStack =>
+            for &arg in args {
+                translate_print(arg, arena, builder, module, ctx, values, ptr_ty);
+            },
         Builtin::InputInt => translate_input_int(return_values[0], builder, module, ctx, values, ptr_ty),
         Builtin::InputFloat => translate_input_float(return_values[0], builder, module, ctx, values, ptr_ty),
         Builtin::InputStr => translate_input_str(return_values[0], builder, module, ctx, values, ptr_ty),

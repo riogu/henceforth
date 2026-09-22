@@ -3,7 +3,11 @@ use std::{collections::HashSet, fmt::Display, vec};
 use indexmap::IndexMap;
 use slotmap::new_key_type;
 
-use crate::hfs::{IrArena, IrType, Literal, Span, ast::*, ir_pretty_printing::prettify_ir, print, syntax_term};
+use crate::hfs::{
+    IrArena, IrType, Literal, Span, ast::*,
+    ir_pretty_printing::{colorize_dot_label, prettify_ir},
+    print, syntax_term,
+};
 /*
 =================================================================================================
 Control Flow Graph IR Pass (HFS MIR - Medium-level IR)
@@ -379,14 +383,19 @@ impl IrArena {
         let (names, _global_header) = crate::hfs::ir_syntax::build_name_map(&func_ids, self);
 
         let mut out = String::from("digraph CFG {\n");
-        out.push_str("    node [shape=box fontname=\"Monospace\"]\n");
+        out.push_str("    bgcolor=\"#2F333C\"\n"); // colors.bg
+        out.push_str(
+            "    node [shape=box fontname=\"Monospace\" style=filled fillcolor=\"#3A4356\" color=\"#5E6A83\" fontcolor=\"#E7F2FC\"]\n", // bg_highlight / comment / fg
+        );
+        out.push_str("    edge [color=\"#8897B6\" fontcolor=\"#CDD4E8\"]\n"); // ui_grey / fg_dim
 
         for func_id in &func_ids {
             let func_id = *func_id;
             let func_name = self.get_func(func_id).name.clone();
 
             out.push_str(&format!("    subgraph cluster_{} {{\n", func_name));
-            out.push_str(&format!("        label=\"fn {}\";\n", func_name));
+            out.push_str("        bgcolor=\"#313645\"; color=\"#5E6A83\";\n"); // bg_light / comment
+            out.push_str(&format!("        label=\"fn {}\"; fontcolor=\"#E7F2FC\";\n", func_name)); // fg
 
             let block_ids = self.get_blocks_in(func_id);
             for block_id in &block_ids {
@@ -420,8 +429,8 @@ impl IrArena {
                     lines.push(format!("  {}", text));
                 }
 
-                let label = lines.join("\\l").replace('"', "\\\"");
-                out.push_str(&format!("        {}_{} [label=\"{}\\l\"];\n", func_name, block_name, label));
+                let label = colorize_dot_label(&lines);
+                out.push_str(&format!("        {}_{} [label=<{}>];\n", func_name, block_name, label));
             }
 
             for block_id in &block_ids {

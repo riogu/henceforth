@@ -1,0 +1,40 @@
+//? OPT -O0 -iterative
+fn print: (i32) -> () {
+  start_1:
+    %0 = i32 %arg0
+    %1 = () ()
+    return %1
+}
+fn main: () -> () {
+  start_2:
+    %2 = i32 1
+    %3 = i32 alloca %2
+    %4 = i32 2
+    store %4, %3
+    %6 = i32 load %3
+    %7 = i32 7
+    %8 = arr[n]arr[7]i32 alloca %6
+    %9 = i32 1
+    %10 = i32* alloca %9
+    store %8, %10
+    %12 = arr[n]arr[7]i32 load %10
+    %13 = i32 0
+    %14 = arr[7]i32 gep %12, %13
+    %15 = i32 3
+    %16 = i32 gep %14, %15
+    %17 = i32 load %16
+    %18 = () call print(%17)
+    %19 = () ()
+    return %19
+}
+
+// regression coverage for a nested array type's inner dimension length (the literal 7 here, for
+// [n][7]i32): it's only reachable through the element type's own IrType::Array::length, not
+// through any instruction's operand list directly, so it used to be invisible to DCE's liveness
+// analysis and get silently deleted out from under the type system unless it was kept "floating"
+// (excluded from every block, immune to DCE by construction). Instruction::Alloca::get_operands
+// now walks the type chain and reports it as a real operand instead, so it survives as an ordinary
+// block-resident instruction like anything else - no special-casing needed.
+//? CHECK FN "main"
+//? CHECK "i32 7"
+//? CHECK COUNT 1 "alloca"

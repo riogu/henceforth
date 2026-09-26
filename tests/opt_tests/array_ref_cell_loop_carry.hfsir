@@ -1,0 +1,100 @@
+//? OPT -O0 -iterative
+fn print: (i32) -> () {
+  start_1:
+    %0 = i32 %arg0
+    %1 = () ()
+    return %1
+}
+fn main: () -> () {
+  start_2:
+    %2 = i32 2
+    %3 = i32 3
+    %4 = arr[2]arr[3]i32 alloca %2
+    %5 = i32 1
+    %6 = i32* alloca %5
+    store %4, %6
+    %8 = i32 2
+    %9 = i32 3
+    %10 = arr[2]arr[3]i32 alloca %8
+    %11 = i32 3
+    %12 = arr[3]i32 alloca %11
+    %13 = i32 10
+    %14 = i32 0
+    %15 = i32 gep %12, %14
+    store %13, %15
+    %17 = i32 11
+    %18 = i32 1
+    %19 = i32 gep %12, %18
+    store %17, %19
+    %21 = i32 12
+    %22 = i32 2
+    %23 = i32 gep %12, %22
+    store %21, %23
+    %25 = i32 0
+    %26 = arr[3]i32 gep %10, %25
+    store %12, %26
+    %28 = i32 3
+    %29 = arr[3]i32 alloca %28
+    %30 = i32 20
+    %31 = i32 0
+    %32 = i32 gep %29, %31
+    store %30, %32
+    %34 = i32 21
+    %35 = i32 1
+    %36 = i32 gep %29, %35
+    store %34, %36
+    %38 = i32 22
+    %39 = i32 2
+    %40 = i32 gep %29, %39
+    store %38, %40
+    %42 = i32 1
+    %43 = arr[3]i32 gep %10, %42
+    store %29, %43
+    store %10, %6
+    %46 = i32 3
+    %47 = arr[3]i32 alloca %46
+    %48 = i32 1
+    %49 = i32* alloca %48
+    store %47, %49
+    %51 = arr[2]arr[3]i32 load %6
+    %52 = i32 0
+    %53 = arr[3]i32 gep %51, %52
+    store %53, %49
+    %55 = i32 1
+    %56 = i32 alloca %55
+    %57 = i32 0
+    store %57, %56
+    jump while_cond_3
+  while_cond_3:
+    %59 = i32 load %56
+    %60 = i32 4
+    %61 = bool %59 != %60
+    branch %61, while_body_4 while_end_5
+  while_end_5:
+    %75 = () ()
+    return %75
+  while_body_4:
+    %62 = arr[3]i32 load %49
+    %63 = i32 0
+    %64 = i32 gep %62, %63
+    %65 = i32 load %64
+    %66 = () call print(%65)
+    %67 = arr[2]arr[3]i32 load %6
+    %68 = i32 1
+    %69 = arr[3]i32 gep %67, %68
+    store %69, %49
+    %71 = i32 load %56
+    %72 = i32 1
+    %73 = i32 %71 + %72
+    store %73, %56
+    jump while_cond_3
+}
+
+// regression coverage for the array-reference-cell Mem2Reg promotion: reassigning an array local
+// (&=) inside a loop used to be a compile-time alias rewrite invisible to Mem2Reg, so a read
+// preceding the reassignment in program order (like the print at the top of the loop body) kept
+// seeing the pre-loop value forever instead of the value from the previous iteration.
+//? CHECK FN "main"
+//? CHECK COUNT 3 "alloca"
+//? CHECK BLOCK "while_cond_3"
+//? CHECK COUNT 2 "phi"

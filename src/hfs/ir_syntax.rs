@@ -366,8 +366,15 @@ impl Syntax for IrParser {
                 };
                 let s = input[..=end].to_string();
                 Some((s, &input[end + 1..], offset + end + 1))
+            } else if input.starts_with("arr[") {
+                let len = input.chars().take_while(|c| !c.is_whitespace()).map(|c| c.len_utf8()).sum::<usize>();
+                let s = input[..len].to_string();
+                Some((s, &input[len..], offset + len))
             } else {
-                (identifier.0)(input, offset)
+                let (name, rest, new_offset) = (identifier.0)(input, offset)?;
+                let star_len = rest.chars().take_while(|c| *c == '*').count();
+                let s = format!("{name}{}", &rest[..star_len]);
+                Some((s, &rest[star_len..], new_offset + star_len))
             }
         }))
     }
@@ -1412,6 +1419,67 @@ fn collect_tuple_type(name: &str, arena: &mut IrArena, names: &mut NameMap) {
     names.name_to_type.insert(name.to_string(), type_id);
 }
 
+// Same idea as collect_tuple_type, for array type names ("arr[7]i32", "arr[n]arr[3]i32*" for a
+// symbolic/erased length, etc).
+fn collect_array_type(name: &str, arena: &mut IrArena, names: &mut NameMap, block_id: Option<BlockId>) -> Option<TypeId> {
+    if let Some(&existing) = names.name_to_type.get(name) {
+        return Some(existing);
+    }
+    let base = name.trim_end_matches('*');
+    let ptr_count = name.len() - base.len();
+    let rest = base.strip_prefix("arr[")?;
+    let (len_str, elem_name) = rest.split_once(']')?;
+    let length = if len_str == "n" {
+        None
+    } else {
+        let n: i32 = len_str.parse().ok()?;
+        let literal = Instruction::Literal { span: Span::default(), literal: Literal::Integer(n) };
+        match block_id {
+            Some(block_id) => arena.alloc_inst_for(literal, block_id),
+            None => arena.instructions.insert(literal),
+        }
+        .into()
+    };
+    let hfs_type = match names.name_to_type.get(elem_name) {
+        Some(&id) => id,
+        None => {
+            collect_tuple_type(elem_name, arena, names);
+            match names.name_to_type.get(elem_name) {
+                Some(&id) => id,
+                None => collect_array_type(elem_name, arena, names, block_id)?,
+            }
+        },
+    };
+    let type_id = arena.alloc_type(IrType::Array { hfs_type, length, ptr_count }, Span::default());
+    names.type_to_name.insert(type_id, name.to_string());
+    names.name_to_type.insert(name.to_string(), type_id);
+    Some(type_id)
+}
+
+fn collect_ptr_type(name: &str, arena: &mut IrArena, names: &mut NameMap) -> Option<TypeId> {
+    if let Some(&existing) = names.name_to_type.get(name) {
+        return Some(existing);
+    }
+    let base = name.trim_end_matches('*');
+    let ptr_count = name.len() - base.len();
+    if ptr_count == 0 {
+        return None;
+    }
+    let base_id = *names.name_to_type.get(base)?;
+    let bumped = match arena.get_type(base_id).clone() {
+        IrType::Int { .. } => IrType::Int { ptr_count },
+        IrType::Float { .. } => IrType::Float { ptr_count },
+        IrType::Bool { .. } => IrType::Bool { ptr_count },
+        IrType::String { .. } => IrType::String { ptr_count },
+        IrType::Array { hfs_type, length, .. } => IrType::Array { hfs_type, length, ptr_count },
+        IrType::Tuple { type_ids, .. } => IrType::Tuple { type_ids, ptr_count },
+    };
+    let type_id = arena.alloc_type(bumped, Span::default());
+    names.type_to_name.insert(type_id, name.to_string());
+    names.name_to_type.insert(name.to_string(), type_id);
+    Some(type_id)
+}
+
 // Name collection pass
 //
 // Simple scan over the text for functions, blocks and instructions
@@ -1420,6 +1488,7 @@ fn collect_names(input: &str, arena: &mut IrArena, names: &mut NameMap) {
     let placeholder_type = INT_TYPE_ID;
 
     let mut current_func: Option<IrFuncId> = None;
+    let mut current_block: Option<BlockId> = None;
 
     for line in input.lines() {
         let line = line.trim();
@@ -1462,6 +1531,7 @@ fn collect_names(input: &str, arena: &mut IrArena, names: &mut NameMap) {
                 names.block_to_name.insert(block_id, actual_name.clone());
                 names.name_to_block.insert(actual_name, block_id);
                 names.unmangled_to_block.insert(name, block_id);
+                current_block = Some(block_id);
             }
             continue;
         }
@@ -1473,6 +1543,15 @@ fn collect_names(input: &str, arena: &mut IrArena, names: &mut NameMap) {
                     let inst_id = arena.instructions.insert(placeholder_inst());
                     names.inst_to_name.insert(inst_id, num);
                     names.name_to_inst.insert(num, inst_id);
+                }
+            }
+            // register any array or pointer type name on this line too (e.g. "%8 = arr[n]arr[7]i32
+            // alloca %6", or a reference cell's "%6 = i32* alloca %5")
+            if let Some(type_name) = rest.split_once("= ").and_then(|(_, after)| after.split_whitespace().next()) {
+                if type_name.starts_with("arr[") {
+                    collect_array_type(type_name, arena, names, current_block);
+                } else if type_name.ends_with('*') {
+                    collect_ptr_type(type_name, arena, names);
                 }
             }
             continue;
@@ -1548,6 +1627,8 @@ fn parse_function<'a>(
                     let inst = match inst {
                         Instruction::Alloca { span, array_len, .. } => Instruction::Alloca { span, type_id, array_len },
                         Instruction::ReturnValue { span, .. } => Instruction::ReturnValue { span, type_id },
+                        Instruction::GetElementPtr { span, address, indexes, .. } =>
+                            Instruction::GetElementPtr { span, address, indexes, type_id },
                         other => other,
                     };
                     arena.fill_inst(id, inst, raw_block.id);

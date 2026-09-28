@@ -78,5 +78,3 @@ fn main: () -> () {
 ## Documentation
 
 Language reference and usage docs can be found [here](https://riogu.github.io/henceforth).
-
-(... rest unchanged: Contributing, Command Line Usage, Reporting a Bug ...)

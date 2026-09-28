@@ -2,13 +2,15 @@
 name = "henceforth"
 version = "1.0.0"
 edition = "2024"
+description = "A statically-typed stack-based programming language with an imperative twist."
+license = "GPL-2.0-or-later"
+repository = "https://github.com/riogu/henceforth"
 
 [dependencies]
 clap = { version = "4.5.50", features = ["derive"] }
 slotmap = { version = "1.0" }
 indexmap  = { version = "2.13" }
 colored = "3.1.1"
-libtest-mimic = "0.8.2"
 cranelift-codegen = { version = "0.128.4", optional = true }
 cranelift-frontend = { version = "0.128.4", optional = true }
 cranelift-module = { version = "0.128.4", optional = true }
@@ -17,6 +19,7 @@ cranelift-native = { version = "0.128.4", optional = true }
 
 [dev-dependencies]
 pretty_assertions = "1.4.1"
+libtest-mimic = "0.8.2"
 
 [lib]
 name = "henceforth"

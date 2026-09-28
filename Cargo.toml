@@ -1,6 +1,6 @@
 [package]
 name = "henceforth"
-version = "1.0.1"
+version = "1.0.2"
 edition = "2024"
 description = "A statically-typed stack-based programming language with an imperative twist."
 license = "GPL-2.0-or-later"

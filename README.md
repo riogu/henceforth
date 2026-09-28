@@ -5,7 +5,7 @@
 
 #### A statically-typed stack-based programming language with an imperative twist.
 
-For an overview of the language and how the compiler works, see the [v1.0 release writeup](<link to your blog post>).
+For an overview of the language and how the compiler works, see the [v1.0 release writeup](https://riogu.github.io/posts/henceforth-v1).
 
 ## What Is Henceforth?
 

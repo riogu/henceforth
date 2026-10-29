@@ -1,38 +1,30 @@
 # Introduction
 
-Henceforth is a stack-based programming language that emphasizes direct stack manipulation, in a more modern way than its predecessors, like Forth or Joy, while also giving users the convenience of imperative programming.
-Unlike traditional languages with nested function calls and expressions, Henceforth operations work with a stack data structure, giving programmers fine-grained control over the program's execution, while also being user-friendly.
+Henceforth is a programming language that aims to bridge the gap between imperative and stack-based languages, acting as a sort of softer introduction to the latter, as opposed to languages like Forth or Factor. 
 
-## Key Characteristics
-### Stack-based execution
-At the core of Henceforth is the stack. Instead of complex expressions being evaluated and stored into variables, Henceforth has a more step-by-step approach, and variables are nothing more than wrappers for simple values. This makes data processing more explicit, predictable and natural.
+This reference describes the Henceforth language, its syntax, its semantics, and the constructs available to a programmer when writing Henceforth. While it may provide small guided examples related to each construct, it is not a tutorial, and it is not a formal specification of the compiler or the language.
+For a worked example, read the [last section of the reference](./tic-tac-toe.md)
+If you want to look something up while you already know roughly what you're doing, this is the document for that.
 
-### Explicit stack manipulation
-By integrating imperative programming features into a stack-based language, it might get a little confusing whether or not something affects the stack. Henceforth uses special notation to fix this issue, making it explicit when something is manipulating the stack.
+## Who this is for
 
-### Seamless context switching
-Unlike Forth, where everything is in one stack, Henceforth creates a new stack for every function, merging the callee and caller's stacks when the function is done executing, all done in a way that feels natural.
-Control flow is also handled by the compiler, so that, for example, __every__ branch of an if statement starts with the same stack.
+This reference assumes you've programmed before and are comfortable with basic ideas like variables, functions, and control flow. It does not assume prior experience with stack-based languages or other more advanced features of the language, as those will be explained thoroughly.
 
-### Strong Static Typing
-Despite its low-level feel, Henceforth is statically typed with types like `i32`, `f32`, `string`, and `bool`. The type system ensures stack operations are safe and well-defined.
+## How to read this reference
 
-## Quick Feature Overview
-### Functions with Stack-Based Arguments
-```
-fn add: (i32 i32) -> (i32) {
-  @(+); 
-}
-```
+Each section documents one part of the language, generally moving from the smallests building blocks to larger ones. Sections are meant to be read in order the first time through, then looked independently afterwards.
 
-### Stack Blocks for Direct Fine-grained Manipulation
-```
-@(1 3 + 2 *)  // Push 1, push 3, add, push 2, multiply
-```
+Code examples will appear throughout the reference. Whenever an operation's effect on the stack matters, it's shown using stack notation in a comment (`// (stack before) -> (stack after)`), (always listing the entirety of the current stack, except for function and stack operation signatures, where only the relevant elements from the top of the stack are shown), where the top of the stack is to the right.
 
-### Several Ways to Call Functions
-```
-@(5 3) :> add; // copies the arguments
-@(5 3) &> add; // moves the arguments
-```
+## Structure of this reference
 
+- [Lexical Structure](./lexical-structure.md) - how source code is divided into its lexical elements: identifiers, literals, comments, keywords and operators
+- [Types](./types.md) - the types available in Henceforth, their properties and how they're written
+- [Stack Operations](./stack.md) - the operators and keywords that work directly on the stack
+- [Variables](./variables.md) - declaring and using variables
+- [Functions](./functions.md) - declaring functions and function call stack context-switching
+- [Assignments and Calls](./assignments-and-calls.md) - binding values and invoking functions, and the copy/move semantics that affect both
+- [Control Flow](./control-flow.md) - conditionals and loops
+- [Arrays](./arrays.md) - array types, indexing, and bounds behavior
+- [Builtins](./builtins.md) - list of functions available in Henceforth and their purpose
+- [Tic-tac-toe](./tic-tac-toe.md) - a fully worked example of a more complex Henceforth program

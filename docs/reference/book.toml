@@ -7,3 +7,4 @@ title = "Henceforth Language Reference"
 [output.html]
 additional-css = ["theme/custom.css"]
 additional-js = ["theme/custom.js"]
+

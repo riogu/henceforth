@@ -499,7 +499,7 @@ impl Parser {
     }
     // <stack_operation> ::= <binary_op> | <unary_op>
     // <binary_op> ::= "+" | "-" | "*" | "/" | ">" | "<" | "==" | "&&" | "||"
-    // <unary_op>  ::= "!" | "~"
+    // <unary_op>  ::= "!" 
     fn stack_operation(&mut self) -> Result<UnresolvedExprId, Box<dyn CompileError>> {
         let token = match self.next_token() {
             Some(token) => token,
@@ -659,7 +659,7 @@ impl Parser {
         Ok(self.arena.alloc_unresolved_stmt(UnresolvedStatement::StackBlock(vec![keyword]), token.span))
     }
 
-    // <stack-keyword> ::= @pop | @pop_all | @dup | @swap | @over | @rot | @rrot | @nip | @tuck | @print
+    // <stack-keyword> ::= @pop | @pop_all | @dup | @swap | @over | @rot | @rrot | @nip | @tuck
     fn stack_keyword_expr(&mut self) -> Result<UnresolvedExprId, Box<dyn CompileError>> {
         let (name, token) = self.expect_stack_keyword()?;
         Ok(self.arena.alloc_unresolved_expr(UnresolvedExpression::StackKeyword(name), token.span))

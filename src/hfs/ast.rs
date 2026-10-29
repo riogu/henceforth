@@ -107,22 +107,6 @@ pub struct FunctionDeclaration {
     pub parameter_exprs: Vec<ExprId>,
 }
 
-#[derive(Debug, Clone)]
-pub struct StackKeywordDeclaration<'a> {
-    pub name: &'a str,
-    pub expected_args_size: Option<usize>,
-    pub return_size: usize,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct StackKeyword {
-    pub name: String,
-    pub parameter_exprs: Vec<ExprId>,
-    pub param_type: TypeId,
-    pub return_type: TypeId,
-    pub return_values: Vec<ExprId>,
-}
-
 // ============================================================================
 // Statements
 
@@ -376,14 +360,6 @@ impl AstArena {
     pub fn get_func(&self, id: FuncId) -> &FunctionDeclaration { &self.functions[id.0] }
     pub fn get_type(&self, id: TypeId) -> &ElaboratedType { &self.types[id.0] }
 
-    pub fn get_stack_keyword_from_name(&self, name: &str) -> &StackKeywordDeclaration<'_> {
-        if let Some(keyword) = STACK_KEYWORDS.iter().find(|keyword| keyword.name == name) {
-            keyword
-        } else {
-            panic!("[internal error] invalid stack keyword (lexer resolves this)");
-        }
-    }
-
     // Mutable accessor methods
     pub fn get_expr_mut(&mut self, id: ExprId) -> &mut Expression { &mut self.exprs[id.0] }
     pub fn get_stmt_mut(&mut self, id: StmtId) -> &mut Statement { &mut self.stmts[id.0] }
@@ -531,20 +507,3 @@ macro_rules! effect {
         }
     };
 }
-
-// ============================================================================
-// Type-safe ID types
-// ============================================================================
-
-const STACK_KEYWORDS: &[StackKeywordDeclaration] = &[
-    StackKeywordDeclaration { name: "@pop", expected_args_size: Some(1), return_size: 0 },
-    StackKeywordDeclaration { name: "@pop_all", expected_args_size: None, return_size: 0 },
-    StackKeywordDeclaration { name: "@dup", expected_args_size: Some(1), return_size: 2 },
-    StackKeywordDeclaration { name: "@swap", expected_args_size: Some(2), return_size: 2 },
-    StackKeywordDeclaration { name: "@over", expected_args_size: Some(2), return_size: 3 },
-    StackKeywordDeclaration { name: "@rot", expected_args_size: Some(3), return_size: 3 },
-    StackKeywordDeclaration { name: "@rrot", expected_args_size: Some(3), return_size: 3 },
-    StackKeywordDeclaration { name: "@nip", expected_args_size: Some(2), return_size: 1 },
-    StackKeywordDeclaration { name: "@tuck", expected_args_size: Some(2), return_size: 3 },
-    StackKeywordDeclaration { name: "@print", expected_args_size: Some(1), return_size: 1 },
-];

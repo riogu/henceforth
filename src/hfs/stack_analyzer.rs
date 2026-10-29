@@ -1129,10 +1129,7 @@ impl StackAnalyzer {
                 Ok(())
             },
             "@rev" => {
-                while !self.arena.hfs_stack.is_empty() {
-                    let id = self.arena.pop_or_error(span)?;
-                    self.arena.hfs_stack.push(id);
-                }
+                self.arena.hfs_stack.reverse();
                 Ok(())
             },
             "@depth" => {

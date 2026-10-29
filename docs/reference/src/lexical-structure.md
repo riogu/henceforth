@@ -2,20 +2,10 @@
 This section describes the basic lexical elements that make up Henceforth source code.
 
 ## Comments
-Line comments are indicated by `//`. Block comments are opened with `/*` and closed with. `*/`, and can be nested.
+Comments are indicated by `//`.
 ```
-  // this is a comment
-
-  /*
-    this is also a comment
-  */
-
-  /*
-    /*
-        this is a nested comment
-    */
-    this is still a comment
-  */
+// this is a comment
+this is no longer part of the comment
 ```
 ## Identifiers
 Function and variable identifiers can contain `a-z`, `A-Z`, `0-9` and `_`, except for the first character, which can't be a number.
@@ -66,12 +56,6 @@ true
 false
 ```
 
-Tuple literals group other literals together:
-```
-(5 3 "string")
-(5.25 "test" true)
-```
-
 ## Keywords
 The following identifiers are reserved as keywords and can't be used as an identifier.
 ```
@@ -98,6 +82,8 @@ bool
 @rrot
 @nip
 @tuck
+@rev
+@depth
 ```
 
 ## Operators
@@ -105,39 +91,42 @@ Henceforth provides several categories of operators.
 
 **Arithmetic Operators**
 ```
-+    addition
--    subtraction
-*    multiplication
-/    division
-%    modulo
++  //  addition
+-  //  subtraction
+*  //  multiplication
+/  //  division
+%  //  modulo
 ```
 **Comparison Operators**
 ```
-==   equal to
-!=   not equal to
-<    less than
->    greater than
-<=   less than or equal to
->=   greater than or equal to
+== //  equal to
+!= //  not equal to
+<  //  less than
+>  //  greater than
+<= //  less than or equal to
+>= //  greater than or equal to
 ```
 
 **Logical Operators**
 ```
-&&   logical AND
-||   logical OR
-!    logical NOT
+&& //  logical AND
+|| //  logical OR
+!  //  logical NOT
 ```
 
-**Special Syntax**
+## Miscellaneous
 ```
-@    stack block indicator
-()   tuple constructor/stack block delimiter
-:    function signature separator
-->   return type indicator/argument redirection
-{}   block delimiters
-;    statement terminator
-:=   copy top value to variable
-&=   pop to variable
-:>   copy arguments to function call   
-&>   move arguments to function call
+@    // stack block indicator
+()   // stack block delimiter
+:    // function signature separator
+->   // return type indicator/argument redirection
+{}   // block delimiters
+;    // statement terminator (optional)
+:=   // copy top value to variable
+&=   // pop to variable
+:>   // copy arguments to function call   
+&>   // move arguments to function call
+[]   // array indexing operator
+[:]= // copy value to array at a certain index
+[&]= // move value to array at a certain index
 ```

@@ -1,54 +1,55 @@
 # Functions
 
-Unlike other stack-based languages, functions in Henceforth are statically typed, giving a better abstraction than the normal approach of "pop from stack, push to stack".
+Functions in Henceforth are statically typed, giving the programmer a better abstraction than the normal approach of "pop arguments from stack, do operation _x_, push return values to stack", ensuring richer behavior than other untyped stack-based languages.
 
 ## Declaring functions
 
-Functions can be declared with the following syntax:
-```
+Functions are declared with a  name, argument types, and return types:
+```rs
 fn function_name: (i32) -> (str bool) {
   ...
 }
-/*
-fn <name>: (<argument types>) -> (<return types>) {
-  <body>
-}
-*/
 ```
-They must be declared on a global scope.
+> [!NOTE]
+> Functions must be declared on the global scope. Nested functions are not allowed.
 
-## How function calls affect the stack
+## Calling functions
 
 There are two operators to call a function:
-```
-@(1 2 3) :> foo;
-@(1 2 3) &> foo;
+```rs
+@(1 2 3) // () -> (1 2 3)
+:> foo; // (1 2 3) -> (1 2 3 <return values of foo>)
+@pop_all;
+@(1 2 3) // () -> (1 2 3)
+&> foo; // (1 2 3) -> (<return values of foo>)
+@pop_all;
 ```
 
-The `:>` operator copies the arguments, keeping them in the stack, and the `&>` operator moves the arguments, removing them from the stack. This syntax closely resembles the `:=` and `&=` operators, and their behavior is similar.
+This mirrors the `:=` and `&=` variable assignment operators, and behaves similarly. As with variable assignments, which are type-checked against the variable's declared type, a function call's arguments are type-checked against the function's declared parameter types.
+More on the semantics between these operators on [Assignments and Calls](./assignments-and-calls).
 
-## How context switches between function calls
+## Context switching between calls
 
-In Henceforth, functions have separate stacks, and these stacks are merged between function calls.
-Here's an example of a function that mimics the functionality of the `@dup` keyword.
-```
-fn duplicate: (i32) -> (i32 i32) {
+Every function has its own stack. When a function is called, the arguments are moved into the callee's stack. When it returns, its remaining stack is first type-checked against the declared return type, and then merged back into the caller's stack.
+
+Here's an example of a function that mimics the `@dup` keyword, duplicating the top of the stack.
+```rs
+fn dup: (i32) -> (i32 i32) {
   let temp: i32;
-  := temp;
-  @(temp);
+  := temp; // (<arg>) -> (<arg>), temp = <arg>
+  @(temp); // (<arg>) -> (<arg> <arg>)
 }
 
 fn main: () -> () {
-  @(5) &> duplicate;
+  @(5) &> dup;
   @pop_all;
 }
 ```
 Now we can trace the program's execution:
-- When `main` (the entry point for any Henceforth program) starts running, the stack is empty.
-- When calling `duplicate` with the argument `5`, the following happens:
-  - `5` is pushed into the stack of `main`, then we call dup by moving its argument with `&>`. 
-- When switching to the context of `duplicate`, the `main` stack is now empty, and the popped arguments are pushed into `duplicate`'s stack, which now contains `[5]`.
-- The function then creates a variable, copies the top of the stack (`5`) into it, and pushes the variable on the stack, essentially duplicating the value. Now the stack of `duplicate` contains `[5, 5]`
-- When finishing `duplicate`'s execution, `return` is not necessary, since the function will just return whatever is in the stack when the execution finishes. The `return` keyword is only necessary for early returns.
-- When switching context, like before, we put it into the stack of `main`, so now it contains `[5, 5]`.
-- If we tried returning now, the stack would be compared against the return type of main and it would fail. To fix that we use `@pop_all` to remove everything from the stack, so we can safely return.
+- `main` starts with an empty stack.
+- `@(5) &> dup` pushes 5, then moves it out of `main`'s stack and into `dup`'s stack. `main`'s stack is now `()`, `dup`'s is `(5)`.
+- Inside `dup`, `:=` temp copies the top of the stack into `temp`, which now has the value `5`, without popping it from the stack.
+- `@(temp)` pushes the value of that variable to the stack, so `dup`'s stack is now `(5 5)`.
+- `dup` then returns. No explicit `return` statement is needed, since a function implicitly returns whatever is left on its stack.`return` is only required for early returns. As mentioned earlier, when leaving a function, before merging the stacks, its stack is type-checked against its return types. Since `dup` has return type `(i32 i32)` and the current stack is `(5 5)`, it matches the expected types and return successfully.
+- On return, `dup`'s stack merges back into `main`'s, which is now `(5 5)`. Since we moved the argument of `dup` out of `main`'s stack when calling `dup`, `main`'s stack was left empty, so it is simply the return values of `dup`.
+- To ensure that `main` type-checks on return, since this function is expected to have nothing on the stack on return, we pop all of the existing elements using `@pop_all`.

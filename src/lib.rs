@@ -4,6 +4,11 @@ pub mod hfscheck {
     pub mod ir_check;
 }
 
+pub mod tools {
+    #[cfg(feature = "hfs_assert")]
+    pub mod hfs_assert;
+}
+
 pub mod hfs {
     pub mod ast;
     // pub mod ast_interpreter;

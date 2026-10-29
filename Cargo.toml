@@ -16,10 +16,12 @@ cranelift-frontend = { version = "0.128.4", optional = true }
 cranelift-module = { version = "0.128.4", optional = true }
 cranelift-object = { version = "0.128.4", optional = true }
 cranelift-native = { version = "0.128.4", optional = true }
+z3 = { version = "0.19", optional = true }
 
 [dev-dependencies]
 pretty_assertions = "1.4.1"
 libtest-mimic = "0.8.2"
+
 
 [lib]
 name = "henceforth"
@@ -54,3 +56,5 @@ cranelift = [
   "dep:cranelift-object",
   "dep:cranelift-native",
 ]
+
+hfs_assert = ["dep:z3"]

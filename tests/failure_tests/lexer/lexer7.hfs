@@ -1,1 +1,1 @@
-fn main: () => () {} //? ERROR "unexpected character"
+fn main: () ~> () {} //? ERROR "unexpected character"

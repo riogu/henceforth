@@ -45,6 +45,8 @@ impl std::fmt::Display for Literal {
 pub const VALID_STACK_KEYWORDS: &[&str] =
     &["@pop", "@pop_all", "@dup", "@swap", "@over", "@rot", "@rrot", "@nip", "@tuck", "@rev", "@depth"];
 
+pub const VALID_STACK_MODIFIERS: &[&str] = &["pre", "post"];
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum TokenKind {
     // Keywords
@@ -106,6 +108,8 @@ pub enum TokenKind {
     LeftBracket,  // [
     RightBracket, // ]
     At,           // @
+    Hash,         // #
+    EqualSign,
 
     // Punctuation
     Semicolon, // ;
@@ -115,7 +119,7 @@ pub enum TokenKind {
     Arrow,     // ->
 
     // Special
-    Newline, // if significant whitespace
+    Newline,
 }
 
 impl fmt::Display for TokenKind {
@@ -173,6 +177,8 @@ impl fmt::Display for TokenKind {
             TokenKind::Dereference => write!(f, "^"),
             TokenKind::CopyArrayAssignment => write!(f, "[:]="),
             TokenKind::MoveArrayAssignment => write!(f, "[&]="),
+            TokenKind::Hash => write!(f, "#"),
+            TokenKind::EqualSign => write!(f, "="),
         }
     }
 }
@@ -377,6 +383,8 @@ impl TokenKind {
             | TokenKind::Semicolon
             | TokenKind::AddressOf
             | TokenKind::Dereference
+            | TokenKind::Hash
+            | TokenKind::EqualSign
             | TokenKind::Comma => 1,
             TokenKind::Newline => 0,
             TokenKind::CopyArrayAssignment => 4,

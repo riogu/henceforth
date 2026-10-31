@@ -56,6 +56,7 @@ impl Lexer {
                     ')' => TokenKind::RightParen,
                     '{' => TokenKind::LeftBrace,
                     '}' => TokenKind::RightBrace,
+                    '#' => TokenKind::Hash,
                     '[' =>
                         if let Some(c) = chars_iter.next_if(|char| char == &':' || char == &'&') {
                             if let Some(_) = chars_iter.next_if_eq(&']') {
@@ -164,12 +165,7 @@ impl Lexer {
                         if let Some(_) = chars_iter.next_if_eq(&'=') {
                             TokenKind::Equal
                         } else {
-                            return lexer_error!(
-                                LexerErrorKind::UnexpectedChar,
-                                file.path.clone(),
-                                Span::new(line_number + 1, line_offset + 1, 1),
-                                tokens
-                            );
+                            TokenKind::EqualSign
                         }, // ==
                     '!' =>
                         if let Some(_) = chars_iter.next_if_eq(&'=') {
@@ -204,6 +200,7 @@ impl Lexer {
                             }
                         } // &&
                     },
+                    ',' => TokenKind::Comma,
                     '|' =>
                         if let Some(_) = chars_iter.next_if_eq(&'|') {
                             TokenKind::Or

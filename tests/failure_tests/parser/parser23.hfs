@@ -1,0 +1,3 @@
+fn main: () -> () {
+	@( #(modifier = a) {} ) //? ERROR "invalid stack modifier * the valid modifiers are *"
+}

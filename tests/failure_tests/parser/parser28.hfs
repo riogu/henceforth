@@ -1,0 +1,2 @@
+fn main: () -> () {
+	@( #(post = a) { //? ERROR "expected stack expression or *"

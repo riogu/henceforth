@@ -1,0 +1,2 @@
+fn main: () -> () {
+	@( #(post = //? ERROR "expected * or * or identifier"

@@ -955,6 +955,7 @@ impl StackAnalyzer {
 
                 Ok(ExprId(usize::MAX)) // trust me bro
             },
+            UnresolvedExpression::StackEnvironment(stack_modifiers, unresolved_expr_ids) => todo!(),
         }
     }
 

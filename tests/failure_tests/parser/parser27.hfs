@@ -1,0 +1,3 @@
+fn main: () -> () {
+	@( #(post = a) { if } ) //? ERROR "expected stack expression found if"
+}

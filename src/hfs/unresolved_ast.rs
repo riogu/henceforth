@@ -44,6 +44,12 @@ impl UnresolvedOperation {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub enum StackModifier {
+    Pre(Vec<UnresolvedExprId>),
+    Post(Vec<UnresolvedExprId>)
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum UnresolvedExpression {
     Operation(UnresolvedOperation),
     Identifier(String),
@@ -51,6 +57,7 @@ pub enum UnresolvedExpression {
     Tuple { expressions: Vec<UnresolvedExprId> },
     ArrayLiteral { elements: Vec<UnresolvedExprId> },
     StackKeyword(String),
+    StackEnvironment(Vec<StackModifier>, Vec<UnresolvedExprId>)
 }
 
 #[derive(Debug, Clone, PartialEq)]

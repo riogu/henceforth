@@ -379,7 +379,7 @@ mod assertion_tests {
         let assertions = find_assertions(&path, fs::read_to_string(&path).expect("Could not read file."));
 
         assert_eq!(assertions.len(), 1);
-        assert_eq!(assertions[0], Assertion::Error(&path, 1, String::from("\"unexpected character\" ")));
+        assert_eq!(assertions[0], Assertion::Error(&path, 1, String::from("\"unexpected character\"")));
     }
 
     #[test]

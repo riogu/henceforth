@@ -3,9 +3,7 @@ use std::{fmt::Display, path::PathBuf};
 use colored::{ColoredString, Colorize, CustomColor};
 
 use crate::hfs::{
-    Span, TokenKind, Type, UnresolvedAstArena, UnresolvedExpression, UnresolvedFunctionDeclaration, UnresolvedOperation,
-    UnresolvedStatement, UnresolvedTopLevelId, UnresolvedType, UnresolvedVarDeclaration,
-    error::{CompileError, DebugInfo, Dumpable},
+    Span, TokenKind, Type, UnresolvedAstArena, UnresolvedExpression, UnresolvedFunctionDeclaration, UnresolvedOperation, UnresolvedStatement, UnresolvedTopLevelId, UnresolvedType, UnresolvedVarDeclaration, VALID_STACK_MODIFIERS, error::{CompileError, DebugInfo, Dumpable},
 };
 
 #[derive(Debug)]
@@ -46,6 +44,7 @@ impl Display for Expectable {
 #[derive(Debug)]
 pub enum ParserErrorKind {
     ExpectedButFound(Vec<Expectable>, Option<TokenKind>),
+    InvalidStackModifier(String),
 }
 
 #[derive(Debug)]
@@ -100,12 +99,25 @@ impl CompileError for ParserError {
                     (format!("expected {}", expected_repr), String::new())
                 },
             },
+            ParserErrorKind::InvalidStackModifier(modifier) => (
+                format!(
+                    "invalid stack modifier `{modifier}`, the valid modifiers are {}",
+                    VALID_STACK_MODIFIERS.iter().map(|kw| format!("`{}`", kw)).collect::<Vec<String>>().join(", ")
+                ),
+                String::new(),
+            ),
         }
     }
 
-    fn get_path(&self) -> PathBuf { self.path.clone() }
-    fn get_debug_info(&self) -> DebugInfo { self.debug_info.clone() }
-    fn get_span(&self) -> Span { self.span }
+    fn get_path(&self) -> PathBuf {
+        self.path.clone()
+    }
+    fn get_debug_info(&self) -> DebugInfo {
+        self.debug_info.clone()
+    }
+    fn get_span(&self) -> Span {
+        self.span
+    }
 }
 
 impl Display for ParserError {
@@ -118,7 +130,9 @@ impl Display for ParserError {
     }
 }
 
-fn indent(s: &ColoredString) -> ColoredString { ColoredString::from(s.trim_start_matches('\n').replace('\n', "\n\t")) }
+fn indent(s: &ColoredString) -> ColoredString {
+    ColoredString::from(s.trim_start_matches('\n').replace('\n', "\n\t"))
+}
 
 fn indent_list(items: &[ColoredString]) -> ColoredString {
     ColoredString::from(items.iter().map(|s| format!("\t{}", indent(s))).collect::<Vec<String>>().join(",\n"))
@@ -193,10 +207,12 @@ impl Dumpable for UnresolvedExpression {
                 "Operation:".red().bold(),
                 indent(&unresolved_operation.dump(arena)).yellow()
             )),
-            UnresolvedExpression::Identifier(name) =>
-                ColoredString::from(format!("{} {}", "Identifier".red().bold(), format!("({name})").green())),
-            UnresolvedExpression::Literal(literal) =>
-                ColoredString::from(format!("{} {}", "Literal: ".red().bold(), format!("{}", literal).green())),
+            UnresolvedExpression::Identifier(name) => {
+                ColoredString::from(format!("{} {}", "Identifier".red().bold(), format!("({name})").green()))
+            },
+            UnresolvedExpression::Literal(literal) => {
+                ColoredString::from(format!("{} {}", "Literal: ".red().bold(), format!("{}", literal).green()))
+            },
             UnresolvedExpression::Tuple { expressions } => {
                 let items: Vec<ColoredString> =
                     expressions.iter().map(|expr| arena.get_unresolved_expr(*expr).dump(arena)).collect();
@@ -209,7 +225,8 @@ impl Dumpable for UnresolvedExpression {
                 ))
             },
             UnresolvedExpression::ArrayLiteral { elements } => {
-                let items: Vec<ColoredString> = elements.iter().map(|expr| arena.get_unresolved_expr(*expr).dump(arena)).collect();
+                let items: Vec<ColoredString> =
+                    elements.iter().map(|expr| arena.get_unresolved_expr(*expr).dump(arena)).collect();
                 ColoredString::from(format!(
                     "{}\n\t{}\n{}\n\t{}",
                     "ArrayLiteral:".red(),
@@ -218,8 +235,10 @@ impl Dumpable for UnresolvedExpression {
                     "]".custom_color(CustomColor::new(129, 137, 150))
                 ))
             },
-            UnresolvedExpression::StackKeyword(name) =>
-                ColoredString::from(format!("{} {}", "Stack Keyword".red().bold(), format!("({name})").green())),
+            UnresolvedExpression::StackKeyword(name) => {
+                ColoredString::from(format!("{} {}", "Stack Keyword".red().bold(), format!("({name})").green()))
+            },
+            UnresolvedExpression::StackEnvironment(stack_modifiers, unresolved_expr_ids) => todo!(),
         }
     }
 }
@@ -352,5 +371,7 @@ impl Dumpable for UnresolvedStatement {
 impl Dumpable for UnresolvedType {
     type Arena = UnresolvedAstArena;
 
-    fn dump(&self, arena: &Self::Arena) -> ColoredString { ColoredString::from(format!("{}", self.get_repr(arena))) }
+    fn dump(&self, arena: &Self::Arena) -> ColoredString {
+        ColoredString::from(format!("{}", self.get_repr(arena)))
+    }
 }

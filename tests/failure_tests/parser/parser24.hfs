@@ -1,0 +1,3 @@
+fn main: () -> () {
+	@( #(if = a) {} ) //? ERROR "expected identifier or * found if"
+}

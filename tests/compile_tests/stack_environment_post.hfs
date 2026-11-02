@@ -1,0 +1,5 @@
+//? COMPILE
+fn main: () -> () {
+	@( #(post = a) { 1 } )
+	@pop_all
+}

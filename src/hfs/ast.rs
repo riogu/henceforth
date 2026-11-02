@@ -1,9 +1,7 @@
 use std::{collections::HashMap, rc::Rc};
 
 use crate::hfs::{
-    ArrayLength, ElaboratedType, ScopeKind, Type,
-    error::{CompileError, DiagnosticInfo},
-    token::*,
+    ArrayLength, ElaboratedType, ScopeKind, StackModifier, Type, error::{CompileError, DiagnosticInfo}, token::*,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
@@ -155,6 +153,19 @@ pub enum Statement {
     },
 }
 
+#[derive(Debug, Clone)]
+pub enum StackBlockExpression {
+    Expr(Expression),
+    StackKeyword(String)    
+}
+
+#[derive(Debug, Clone)]
+pub struct StackEnvironment {
+    pub modifiers: Vec<StackModifier>,   
+    pub resolved_body: Vec<StackBlockExpression>,    
+    pub span: Span,
+}
+
 // ============================================================================
 // Arena storage with token tracking
 // ============================================================================
@@ -187,6 +198,7 @@ pub struct AstArena {
     pub curr_func_call_provenances: Vec<ExprProvenance>, // indexed by FuncId
 
     pub diagnostic_info: Rc<DiagnosticInfo>,
+    pub stack_environments: Vec<StackEnvironment>
 }
 
 impl PartialEq for AstArena {

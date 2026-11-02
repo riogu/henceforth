@@ -1,0 +1,5 @@
+//? COMPILE
+fn main: () -> () {
+	@( 1 2 #(pre = a b, post = a) { @pop } )
+	@pop_all
+}

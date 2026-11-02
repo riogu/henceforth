@@ -190,17 +190,18 @@ impl AstArena {
                                 Expression::Literal(_) => {
                                     panic!("[internal error] somehow got a non integer array length past the type checker")
                                 },
-                                actual_expr => if *expected_expr != *actual_expr {
-                                    return stack_analyzer_error!(
-                                        StackAnalyzerErrorKind::TypeMismatch(
-                                            expected_type.get_repr(&self),
-                                            actual_type.get_repr(&self)
-                                        ),
-                                        self,
-                                        span
-                                    );
-                                    
-                                }
+                                actual_expr => {
+                                    if *expected_expr != *actual_expr {
+                                        return stack_analyzer_error!(
+                                            StackAnalyzerErrorKind::TypeMismatch(
+                                                expected_type.get_repr(&self),
+                                                actual_type.get_repr(&self)
+                                            ),
+                                            self,
+                                            span
+                                        );
+                                    }
+                                },
                             },
                             None => {},
                         },
@@ -288,7 +289,8 @@ impl StackAnalyzer {
         // first called, so it must not disturb that function's in-progress stack state
         let caller_stack = std::mem::take(&mut self.arena.hfs_stack);
 
-        let param_type = self.arena.alloc_type(ElaboratedType::Tuple { type_ids: spec.params.to_vec(), ptr_count: 0 }, span.clone());
+        let param_type =
+            self.arena.alloc_type(ElaboratedType::Tuple { type_ids: spec.params.to_vec(), ptr_count: 0 }, span.clone());
         let return_type =
             self.arena.alloc_type(ElaboratedType::Tuple { type_ids: spec.returns.to_vec(), ptr_count: 0 }, span.clone());
 
@@ -366,7 +368,7 @@ impl StackAnalyzer {
                 *self.arena.get_type_span(hfs_type)
             );
         }
-        
+
         let var_id = self.arena.alloc_var(VarDeclaration { name: unresolved_var.name.clone(), hfs_type }, span);
         self.scope_resolution_stack.push_variable(&unresolved_var.name, var_id);
         Ok(var_id)
@@ -405,13 +407,18 @@ impl StackAnalyzer {
         };
 
         // needed for recursive functions AND to match the correct token
-        let func = FunctionDeclaration { name: name.clone(), param_type, return_type, body: Some(StmtId(69420)), parameter_exprs };
+        let func =
+            FunctionDeclaration { name: name.clone(), param_type, return_type, body: Some(StmtId(69420)), parameter_exprs };
         //------------------------------------------------------------
         // we push scopes so the body can solve identifiers
         let func_id = self.push_function_and_scope_and_alloc(&name, func, span);
 
-        let signature =
-            format!("{}: {} -> {}", name, self.arena.get_type(param_type).get_repr(&self.arena), self.arena.get_type(return_type).get_repr(&self.arena));
+        let signature = format!(
+            "{}: {} -> {}",
+            name,
+            self.arena.get_type(param_type).get_repr(&self.arena),
+            self.arena.get_type(return_type).get_repr(&self.arena)
+        );
         let prev_current_function = self.arena.diagnostic_info.current_function.replace(Some(signature));
 
         let result = match unresolved_body {
@@ -597,8 +604,11 @@ impl StackAnalyzer {
                                 TopLevelId::Statement(stmt_id) => while_body_spans.push(*self.arena.get_stmt_span(*stmt_id)),
                             }
                         }
-                        let error_span =
-                            if while_body_spans.is_empty() { span } else { merge_spans(while_body_spans) };
+                        let error_span = if while_body_spans.is_empty() {
+                            span
+                        } else {
+                            merge_spans(while_body_spans)
+                        };
                         return stack_analyzer_error!(
                             StackAnalyzerErrorKind::ExpectedNetZeroStackEffectWhileLoop(
                                 stack_depth_after as i64 - stack_depth_before as i64
@@ -725,7 +735,11 @@ impl StackAnalyzer {
                     panic!("[internal error] functions only recieve tuples at the moment.")
                 };
                 let is_print_stack = matches!(find_builtin(&func_decl.name), Some(spec) if spec.builtin == Builtin::PrintStack);
-                let param_count = if is_print_stack { self.arena.hfs_stack.len() } else { param_types.len() };
+                let param_count = if is_print_stack {
+                    self.arena.hfs_stack.len()
+                } else {
+                    param_types.len()
+                };
                 let mut arg_count = 0;
                 let mut arg_types = Vec::new();
                 let mut arg_expr_spans = Vec::new();
@@ -955,7 +969,10 @@ impl StackAnalyzer {
 
                 Ok(ExprId(usize::MAX)) // trust me bro
             },
-            UnresolvedExpression::StackEnvironment(stack_modifiers, unresolved_expr_ids) => todo!(),
+            UnresolvedExpression::StackEnvironment(modifiers, body) => {
+                self.collect_stack_environment(modifiers, body, span)?;
+                Ok(ExprId(usize::MAX)) // trust me bro part 2
+            },
         }
     }
 
@@ -1393,5 +1410,28 @@ impl StackAnalyzer {
             },
             _ => Ok(hfs_type),
         }
+    }
+
+    fn collect_stack_environment(
+        &mut self,
+        modifiers: Vec<StackModifier>,
+        body: Vec<UnresolvedExprId>,
+        span: Span,
+    ) -> Result<(), Box<dyn CompileError>> {
+        let mut resolved_body = Vec::with_capacity(body.len());
+        for expr_id in body {
+            let resolved = self.resolve_expr(expr_id)?;
+            match self.unresolved_arena.get_unresolved_expr(expr_id) {
+                UnresolvedExpression::StackKeyword(name) => {
+                    resolved_body.push(StackBlockExpression::StackKeyword(name.clone()));
+                },
+                UnresolvedExpression::StackEnvironment(..) => unimplemented!("nested stack environments are unimplemented"),
+                _ => {
+                    resolved_body.push(StackBlockExpression::Expr(self.arena.get_expr(resolved).clone()));
+                },
+            }
+        }
+        self.arena.stack_environments.push(StackEnvironment { modifiers, resolved_body, span });
+        Ok(())
     }
 }

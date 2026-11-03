@@ -1,0 +1,4 @@
+fn main: () -> () {
+	@( 1 #(pre = a) { } ) //? ERROR "no postcondition found for stack environment with precondition"
+	@pop_all
+}

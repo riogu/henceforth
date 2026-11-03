@@ -5,7 +5,7 @@ pub mod hfscheck {
 }
 
 pub mod tools {
-    #[cfg(feature = "hfs_assert")]
+    // #[cfg(feature = "hfs_assert")]
     pub mod hfs_assert;
 }
 

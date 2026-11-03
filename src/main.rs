@@ -3,12 +3,12 @@
 use std::{error::Error, path::PathBuf, process::exit, rc::Rc};
 
 use clap::{Parser, arg};
-use henceforth::hfs::{
+use henceforth::{hfs::{
     self, LinkOptions, OptPipeline,
     error::{CompileError, DiagnosticInfo},
     get_eof_span,
     ir_lowerer_errors::IrLowererError,
-};
+}, tools};
 
 #[derive(Parser, Debug, Clone)]
 #[command(
@@ -99,6 +99,9 @@ fn run() -> Result<i32, Box<dyn CompileError>> {
     let (top_level_nodes, ast_arena, scope_stack) =
         hfs::StackAnalyzer::resolve(unresolved_top_level_nodes, unresolved_ast_arena.clone(), diagnostic_info.clone())?;
 
+    // #[cfg(feature = "hfs_assert")]
+    hfs::process_environments(ast_arena.stack_environments.clone(), diagnostic_info.clone())?;
+    
     let (top_level_insts, mut ir_arena) =
         hfs::IrLowerer::lower_to_mir(top_level_nodes, ast_arena.clone(), diagnostic_info.clone())?;
 

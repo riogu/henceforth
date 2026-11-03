@@ -1,9 +1,9 @@
 use std::{any::Any, path::PathBuf, rc::Rc};
 
-use crate::hfs::{
-    AstArena, File, IrArena, IrLowerer, Lexer, O0, OptPipeline, Parser, Span, StackAnalyzer, Token, UnresolvedAstArena,
-    error::{CompileError, DiagnosticInfo},
-    get_eof_span,
+use crate::{
+    hfs::{
+        self, AstArena, File, IrArena, IrLowerer, Lexer, O0, OptPipeline, Parser, Span, StackAnalyzer, StackEnvironment, StackModifier, Token, UnresolvedAstArena, error::{CompileError, DiagnosticInfo}, get_eof_span,
+    }, tools::hfs_assert::stack_assist::StackAssistant,
 };
 pub fn merge_spans(spans: Vec<Span>) -> Span {
     match spans.first() {
@@ -17,19 +17,29 @@ pub trait Byproduct {
 }
 
 impl Byproduct for UnresolvedAstArena {
-    fn as_any(&self) -> &dyn Any { self }
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 impl Byproduct for AstArena {
-    fn as_any(&self) -> &dyn Any { self }
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 impl Byproduct for IrArena {
-    fn as_any(&self) -> &dyn Any { self }
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 impl Byproduct for Vec<Token> {
-    fn as_any(&self) -> &dyn Any { self }
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 impl Byproduct for () {
-    fn as_any(&self) -> &dyn Any { self }
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 #[derive(PartialEq, Clone, Copy)]
@@ -40,6 +50,7 @@ pub enum Phase {
     CfgAnalyzer,
     Optimizer,
     Interpreter,
+    StackAssist,
 }
 
 pub fn run_until(
@@ -71,6 +82,12 @@ pub fn run_until(
         return Ok(Rc::new(ast_arena));
     }
 
+    hfs::process_environments(ast_arena.stack_environments.clone(), diagnostic_info.clone())?;
+
+    if phase == Phase::StackAssist {
+        return Ok(Rc::new(()));
+    }
+
     let (_, mut ir_arena) = IrLowerer::lower_to_mir(top_level_nodes, ast_arena, diagnostic_info.clone())?;
 
     if phase == Phase::CfgAnalyzer {
@@ -88,4 +105,15 @@ pub fn run_until(
     }
 
     Ok(Rc::new(()))
+}
+
+pub fn process_environments(environments: Vec<StackEnvironment>, diagnostic_info: Rc<DiagnosticInfo>) -> Result<(), Box<dyn CompileError>> {
+    for env in environments {
+        if let Some(_) = env.modifiers.iter().find(|m| matches!(m, StackModifier::Pre(_)) || matches!(m, StackModifier::Post(_)))
+        {
+            let assistant = StackAssistant::new(diagnostic_info.clone());
+            assistant.find_error_and_correction(env)?;
+        }
+    }
+    Ok(())
 }

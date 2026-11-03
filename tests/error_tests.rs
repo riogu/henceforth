@@ -10,6 +10,7 @@ const FAILURE_TESTS_FOLDERS: &[(&str, Phase)] = &[
     ("tests/failure_tests/lexer", Phase::Lexer),
     ("tests/failure_tests/stack_analyzer", Phase::StackAnalyzer),
     ("tests/failure_tests/parser", Phase::Parser),
+    ("tests/failure_tests/stack_assist", Phase::StackAssist),
 ];
 
 fn generate_test_function(test: Box<dyn Test + Send + Sync>, phase: Phase) -> Box<dyn Fn() -> Result<(), Failed> + Send + Sync> {

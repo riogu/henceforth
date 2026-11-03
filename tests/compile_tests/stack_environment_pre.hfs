@@ -1,5 +1,0 @@
-//? COMPILE
-fn main: () -> () {
-	@( 1 #(pre = a) { } )
-	@pop_all
-}

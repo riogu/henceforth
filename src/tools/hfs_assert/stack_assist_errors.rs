@@ -7,6 +7,7 @@ use crate::hfs::{Span, error::{CompileError, DebugInfo}};
 #[derive(Debug)]
 pub enum StackAssistErrorKind {
     NoPostconditionFound,
+    AssertionFailed(Span, String)
 }
 
 #[derive(Debug)]
@@ -57,6 +58,7 @@ impl CompileError for StackAssistError {
     fn message(&self) -> (String, String) {
         match self.kind {
             StackAssistErrorKind::NoPostconditionFound => (format!("no postcondition found for this stack environment with a precondition"), String::new()),
+            StackAssistErrorKind::AssertionFailed(span, _) => todo!(),
         }
     }
 

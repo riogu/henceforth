@@ -832,7 +832,7 @@ impl Parser {
             token.span.merge(self.last_span()),
         ))
     }
-    fn stack_shape(&mut self) -> Result<Vec<UnresolvedExprId>, Box<dyn CompileError>> {
+    fn stack_shape(&mut self) -> Result<Vec<String>, Box<dyn CompileError>> {
         let mut identifiers = Vec::new();
         loop {
             let ident = match self.tokens.peek() {
@@ -872,7 +872,8 @@ impl Parser {
                 },
             };
 
-            identifiers.push(self.arena.alloc_unresolved_expr(UnresolvedExpression::Identifier(ident.0), ident.1.span));
+            self.arena.alloc_unresolved_expr(UnresolvedExpression::Identifier(ident.0.clone()), ident.1.span);
+            identifiers.push(ident.0)
         }
         Ok(identifiers)
     }

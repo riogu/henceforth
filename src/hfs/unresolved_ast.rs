@@ -45,8 +45,8 @@ impl UnresolvedOperation {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum StackModifier {
-    Pre(Vec<UnresolvedExprId>),
-    Post(Vec<UnresolvedExprId>)
+    Pre(Vec<String>),
+    Post(Vec<String>)
 }
 
 #[derive(Debug, Clone, PartialEq)]

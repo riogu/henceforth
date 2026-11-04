@@ -10,13 +10,13 @@ use crate::stack_assist_error;
 use crate::tools::hfs_assert::marco_enumerator::MarcoEnumerator;
 use crate::tools::hfs_assert::stack_assist_errors::{StackAssistError, StackAssistErrorKind};
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub enum ConstraintKind {
     StackOperation,
     PostCondition,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct TrackedConstraint {
     pub literal: Bool,
     pub span: Span,
@@ -26,7 +26,8 @@ pub struct TrackedConstraint {
 pub struct EncodingContext {
     pub solver: Solver,
     pub state: Array,
-    pub sp: i64,
+    pub sp: Int,
+    pub max_possible_stack_depth: i64,
     pub next_id: i64,
     pub names: HashMap<String, i64>,
     pub constraints: Vec<TrackedConstraint>, // assumption literals, used to track which step is part of the MUS
@@ -39,8 +40,9 @@ impl EncodingContext {
         Self {
             solver: Solver::new(),
             state: Array::new_const("s0", &Sort::int(), &Sort::int()),
-            sp: 0,
+            sp: Int::from_i64(0),
             next_id: 0,
+            max_possible_stack_depth: 0,
             names: HashMap::new(),
             constraints: vec![],
             next_step: 0,
@@ -49,15 +51,26 @@ impl EncodingContext {
     }
 
     pub fn read_stack_at(&self, d: i64) -> Int {
-        self.state.select(&Int::from_i64(self.sp - d)).as_int().unwrap()
+        self.state.select(&(&self.sp - Int::from_i64(d))).as_int().unwrap()
     }
 
-    pub fn commit(&mut self, next: Array, span: &Span) {
+    pub fn commit(&mut self, next: Array, next_sp: Int, span: &Span) {
         let k = self.next_step;
         let p = Bool::new_const(format!("step_{k}"));
+        let previous_state = self.state.clone();
+        let previous_sp = self.sp.clone();
         let new = Array::new_const(format!("s{}", k + 1), &Sort::int(), &Sort::int());
+
+        let new_sp = Int::new_const(format!("sp{}", k + 1));
         self.solver.assert(&p.implies(&new.eq(&next)));
+        self.solver.assert(&p.implies(&new_sp.eq(&next_sp)));
+
+        // to avoid MUSes containing all operations after the one that actually causes the conflict (since it is a sequence of implications), we need to assert that disabling that step implies the state stays still
+        self.solver.assert(&p.not().implies(&new.eq(&previous_state)));
+        self.solver.assert(&p.not().implies(&new_sp.eq(&previous_sp)));
+
         self.state = new;
+        self.sp = new_sp;
         self.constraints.push(TrackedConstraint { literal: p, span: *span, kind: ConstraintKind::StackOperation });
         self.next_step += 1;
     }
@@ -98,6 +111,11 @@ impl StackAssistant {
         let (solver, constraints) = self.generate_variables_and_constraints(&normalized_environment);
 
         dbg!(&solver.get_assertions());
+        dbg!(&constraints);
+
+        for (i, constraint) in constraints.iter().enumerate() {
+            println!("[{i}] literal={} kind={:?} span={:?}", constraint.literal, constraint.kind, constraint.span,);
+        }
         let marco = MarcoEnumerator::new(solver.clone(), constraints.clone());
         let result = marco.enumerate()?;
         dbg!(&result);
@@ -170,9 +188,10 @@ impl StackAssistant {
         // the precondition never fails so we never add any constraints
         // we just build the initial state and store it in the context, so it can be asserted later
         for ident in idents {
+            ctx.max_possible_stack_depth += 1;
             ctx.names.insert(ident.clone(), ctx.next_id);
-            ctx.state = ctx.state.store(&Int::from_i64(ctx.sp), &Int::from_i64(ctx.next_id));
-            ctx.sp += 1;
+            ctx.state = ctx.state.store(&ctx.sp, &Int::from_i64(ctx.next_id));
+            ctx.sp = &ctx.sp + Int::from_i64(1);
             ctx.next_id += 1;
         }
     }
@@ -184,6 +203,7 @@ impl StackAssistant {
             // we get the value in the current stack that corresponds to that postcondition identifier
             let slot_j = ctx.read_stack_at(len - j as i64);
             let q = Bool::new_const(format!("post_{}", ctx.next_post));
+            ctx.solver.assert(&q.implies(&ctx.sp.ge(&Int::from_i64(len))));
 
             // if a name from the pre pins this slot to that pre value, we assert equality between them
             if let Some(&id) = ctx.names.get(name) {
@@ -208,86 +228,137 @@ impl StackAssistant {
         match keyword {
             "@pop" => {
                 let next = ctx.state.clone();
-                ctx.commit(next, span);
-                ctx.sp -= 1;
+                let next_sp = &ctx.sp - Int::from_i64(1);
+
+                ctx.commit(next, next_sp, span);
             },
+
             "@dup" => {
-                let next = ctx.state.store(&Int::from_i64(ctx.sp), &ctx.read_stack_at(1));
-                ctx.commit(next, span);
-                ctx.sp += 1;
+                let next = ctx.state.store(&ctx.sp, &ctx.read_stack_at(1));
+                let next_sp = &ctx.sp + Int::from_i64(1);
+                ctx.max_possible_stack_depth += 1;
+
+                ctx.commit(next, next_sp, span);
             },
+
             "@swap" => {
                 let (a, b) = (ctx.read_stack_at(2), ctx.read_stack_at(1));
-                let next = ctx.state.store(&Int::from_i64(ctx.sp - 2), &b).store(&Int::from_i64(ctx.sp - 1), &a);
-                ctx.commit(next, span);
+
+                let index_a = &ctx.sp - Int::from_i64(2);
+                let index_b = &ctx.sp - Int::from_i64(1);
+
+                let next = ctx.state.store(&index_a, &b).store(&index_b, &a);
+
+                let next_sp = ctx.sp.clone();
+
+                ctx.commit(next, next_sp, span);
             },
+
             "@pop_all" => {
                 let next = ctx.state.clone();
-                ctx.commit(next, span);
-                ctx.sp = 0;
+                let next_sp = Int::from_i64(0);
+
+                ctx.commit(next, next_sp, span);
             },
+
             "@over" => {
                 let a = ctx.read_stack_at(2);
-                let next = ctx.state.store(&Int::from_i64(ctx.sp), &a);
-                ctx.sp += 1;
-                ctx.commit(next, span);
+
+                let next = ctx.state.store(&ctx.sp, &a);
+                let next_sp = &ctx.sp + Int::from_i64(1);
+                ctx.max_possible_stack_depth += 1;
+
+                ctx.commit(next, next_sp, span);
             },
+
             "@rot" => {
                 let (a, b, c) = (ctx.read_stack_at(3), ctx.read_stack_at(2), ctx.read_stack_at(1));
-                let next = ctx
-                    .state
-                    .store(&Int::from_i64(ctx.sp - 3), &b)
-                    .store(&Int::from_i64(ctx.sp - 2), &c)
-                    .store(&Int::from_i64(ctx.sp - 1), &a);
-                ctx.commit(next, span);
+
+                let index_a = &ctx.sp - Int::from_i64(3);
+                let index_b = &ctx.sp - Int::from_i64(2);
+                let index_c = &ctx.sp - Int::from_i64(1);
+
+                let next = ctx.state.store(&index_a, &b).store(&index_b, &c).store(&index_c, &a);
+
+                let next_sp = ctx.sp.clone();
+
+                ctx.commit(next, next_sp, span);
             },
+
             "@rrot" => {
                 let (a, b, c) = (ctx.read_stack_at(3), ctx.read_stack_at(2), ctx.read_stack_at(1));
-                let next = ctx
-                    .state
-                    .store(&Int::from_i64(ctx.sp - 3), &c)
-                    .store(&Int::from_i64(ctx.sp - 2), &a)
-                    .store(&Int::from_i64(ctx.sp - 1), &b);
-                ctx.commit(next, span);
+
+                let index_a = &ctx.sp - Int::from_i64(3);
+                let index_b = &ctx.sp - Int::from_i64(2);
+                let index_c = &ctx.sp - Int::from_i64(1);
+
+                let next = ctx.state.store(&index_a, &c).store(&index_b, &a).store(&index_c, &b);
+
+                let next_sp = ctx.sp.clone();
+
+                ctx.commit(next, next_sp, span);
             },
+
             "@nip" => {
                 let b = ctx.read_stack_at(1);
-                let next = ctx.state.store(&Int::from_i64(ctx.sp - 2), &b);
-                ctx.sp -= 1;
-                ctx.commit(next, span);
+                let index = &ctx.sp - Int::from_i64(2);
+
+                let next = ctx.state.store(&index, &b);
+                let next_sp = &ctx.sp - Int::from_i64(1);
+
+                ctx.commit(next, next_sp, span);
             },
+
             "@tuck" => {
                 let (a, b) = (ctx.read_stack_at(2), ctx.read_stack_at(1));
-                let next = ctx
-                    .state
-                    .store(&Int::from_i64(ctx.sp - 2), &b)
-                    .store(&Int::from_i64(ctx.sp - 1), &a)
-                    .store(&Int::from_i64(ctx.sp), &b);
-                ctx.sp += 1;
-                ctx.commit(next, span);
+
+                let index_a = &ctx.sp - Int::from_i64(2);
+                let index_b = &ctx.sp - Int::from_i64(1);
+                ctx.max_possible_stack_depth += 1;
+
+                let next = ctx.state.store(&index_a, &b).store(&index_b, &a).store(&ctx.sp, &b);
+
+                let next_sp = &ctx.sp + Int::from_i64(1);
+
+                ctx.commit(next, next_sp, span);
             },
+
             "@rev" => {
                 let mut next = ctx.state.clone();
 
-                for i in 0..ctx.sp / 2 {
-                    let left = Int::from_i64(i);
-                    let right = Int::from_i64(ctx.sp - 1 - i);
+                for i in 0..ctx.max_possible_stack_depth {
+                    let index = Int::from_i64(i);
 
-                    let a = ctx.state.select(&left).as_int().unwrap();
-                    let b = ctx.state.select(&right).as_int().unwrap();
+                    let condition = index.lt(&ctx.sp);
 
-                    next = next.store(&left, &b).store(&right, &a);
+                    let reverse_index = &ctx.sp - Int::from_i64(1) - Int::from_i64(i);
+
+                    let reversed = ctx.state.select(&reverse_index).as_int().unwrap();
+
+                    let original = ctx.state.select(&index).as_int().unwrap();
+
+                    let value = condition.ite(&reversed, &original);
+
+                    next = next.store(&index, &value);
                 }
 
-                ctx.commit(next, span);
-            },
-            "@depth" => {
-                let next = ctx.state.store(&Int::from_i64(ctx.sp), &Int::from_i64(ctx.next_id));
+                let next_sp = ctx.sp.clone();
 
-                ctx.sp += 1;
-                ctx.next_id += 1;
-                ctx.commit(next, span);
+                ctx.commit(next, next_sp, span);
             },
+
+            "@depth" => {
+                let value = Int::from_i64(ctx.next_id);
+
+                let next = ctx.state.store(&ctx.sp, &value);
+                let next_sp = &ctx.sp + Int::from_i64(1);
+                ctx.max_possible_stack_depth += 1;
+
+                ctx.next_id += 1;
+
+                ctx.commit(next, next_sp, span);
+            },
+
             _ => panic!("[internal error] found invalid stack keyword when generating encoding"),
         }
     }

@@ -127,7 +127,19 @@ impl MarcoEnumerator {
     }
 
     fn check_subset(&self, subset: &[usize]) -> SatResult {
-        let assumptions: Vec<Bool> = subset.iter().map(|&i| self.constraints[i].literal.clone()).collect();
+        let assumptions: Vec<Bool> = self
+            .constraints
+            .iter()
+            .enumerate()
+            .map(|(i, constraint)| {
+                if subset.contains(&i) {
+                    constraint.literal.clone()
+                } else {
+                    constraint.literal.not()
+                }
+            })
+            .collect();
+
         self.theory_solver.check_assumptions(&assumptions)
     }
 
@@ -157,16 +169,16 @@ impl MarcoEnumerator {
 
 #[cfg(test)]
 mod tests {
-    use crate::hfs::Span;
+    use crate::{hfs::Span, tools::hfs_assert::stack_assist::ConstraintKind};
 
-use super::*;
+    use super::*;
     use z3::ast::Int;
 
     fn make_constraint(solver: &Solver, name: &str, constraint: Bool) -> TrackedConstraint {
         let literal = Bool::new_const(name);
         solver.assert(&literal.implies(&constraint));
 
-        TrackedConstraint { literal, span: Span::default() }
+        TrackedConstraint { literal, span: Span::default(), kind: ConstraintKind::StackOperation }
     }
 
     #[test]

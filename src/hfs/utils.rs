@@ -109,7 +109,7 @@ pub fn run_until(
 
 pub fn process_environments(environments: Vec<StackEnvironment>, diagnostic_info: Rc<DiagnosticInfo>) -> Result<(), Box<dyn CompileError>> {
     for env in environments {
-        if let Some(_) = env.modifiers.iter().find(|m| matches!(m, StackModifier::Pre(_)) || matches!(m, StackModifier::Post(_)))
+        if let Some(_) = env.modifiers.iter().find(|m| matches!(m, StackModifier::Pre(_, _)) || matches!(m, StackModifier::Post(_, _)))
         {
             let assistant = StackAssistant::new(diagnostic_info.clone());
             assistant.find_error_and_correction(env)?;

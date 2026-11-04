@@ -1421,13 +1421,14 @@ impl StackAnalyzer {
         let mut resolved_body = Vec::with_capacity(body.len());
         for expr_id in body {
             let resolved = self.resolve_expr(expr_id)?;
+            let span = self.unresolved_arena.get_unresolved_expr_span(expr_id);
             match self.unresolved_arena.get_unresolved_expr(expr_id) {
                 UnresolvedExpression::StackKeyword(name) => {
-                    resolved_body.push(StackBlockExpression::StackKeyword(name.clone()));
+                    resolved_body.push(StackBlockExpression::StackKeyword(name.clone(), span));
                 },
                 UnresolvedExpression::StackEnvironment(..) => unimplemented!("nested stack environments are unimplemented"),
                 _ => {
-                    resolved_body.push(StackBlockExpression::Expr(self.arena.get_expr(resolved).clone()));
+                    resolved_body.push(StackBlockExpression::Expr(self.arena.get_expr(resolved).clone(), span));
                 },
             }
         }

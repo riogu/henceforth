@@ -744,14 +744,14 @@ impl Parser {
                         return parser_error!(ParserErrorKind::InvalidStackModifier(t.to_string()), &self.arena, span.clone());
                     },
                     "pre" => {
-                        self.expect_identifier()?;
+                        let (_, mod_token) = self.expect_identifier()?;
                         self.expect(TokenKind::EqualSign)?;
-                        modifiers.push(StackModifier::Pre(self.stack_shape()?));
+                        modifiers.push(StackModifier::Pre(self.stack_shape()?, mod_token.span.merge(self.last_span())));
                     },
                     "post" => {
-                        self.expect_identifier()?;
+                        let (_, mod_token) = self.expect_identifier()?;
                         self.expect(TokenKind::EqualSign)?;
-                        modifiers.push(StackModifier::Post(self.stack_shape()?));
+                        modifiers.push(StackModifier::Post(self.stack_shape()?, mod_token.span.merge(self.last_span())));
                     },
                     _ => unreachable!(),
                 },

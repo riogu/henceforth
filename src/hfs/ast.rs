@@ -155,8 +155,8 @@ pub enum Statement {
 
 #[derive(Debug, Clone)]
 pub enum StackBlockExpression {
-    Expr(Expression),
-    StackKeyword(String)    
+    Expr(Expression, Span),
+    StackKeyword(String, Span)    
 }
 
 #[derive(Debug, Clone)]

@@ -66,7 +66,7 @@ impl CompileError for StackAssistError {
                 (format!("no postcondition found for this stack environment with a precondition"), String::new())
             },
             StackAssistErrorKind::AssertionFailed => {
-                ("stack assertion failed".to_string(), "conflict found between this expression and postcondition".to_string())
+                ("stack assertion failed".to_string(), "these expressions conflict with the post condition".to_string())
             },
         }
     }

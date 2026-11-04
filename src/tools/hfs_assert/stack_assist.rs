@@ -12,14 +12,15 @@ use crate::tools::hfs_assert::stack_assist_errors::{StackAssistError, StackAssis
 
 #[derive(Clone, PartialEq)]
 pub enum ConstraintKind {
-    StackOperation, PostCondition
+    StackOperation,
+    PostCondition,
 }
 
 #[derive(Clone)]
 pub struct TrackedConstraint {
     pub literal: Bool,
     pub span: Span,
-    pub kind: ConstraintKind
+    pub kind: ConstraintKind,
 }
 
 pub struct EncodingContext {
@@ -108,21 +109,10 @@ impl StackAssistant {
         }
 
         if !result.muses.is_empty() {
-            // the "best" MUS is the one that contains the earliest stack operation
-            // MUSes also involve postcondition constraints, which always occur earlier, but we want to ignore these
-            //
-            // this provides better errors
-            let best_mus = result.muses.iter().min_by_key(|mus| {
-                mus.iter()
-                    .filter_map(|&i| {
-                        let constraint = &constraints[i];
-
-                        (constraint.kind == ConstraintKind::StackOperation).then_some(constraint.span.start)
-                    })
-                    .map(|pos| (pos.line, pos.col))
-                    .min()
-                    .unwrap_or((usize::MAX, usize::MAX))
-            });
+            let best_mus = result
+                .muses
+                .iter()
+                .min_by_key(|mus| mus.iter().filter(|&&i| constraints[i].kind == ConstraintKind::StackOperation).count());
             match best_mus {
                 Some(loc) => {
                     return stack_assist_error!(

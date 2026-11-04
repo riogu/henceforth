@@ -65,6 +65,8 @@ impl MarcoEnumerator {
                 })
                 .collect();
 
+            let subset = self.maximize_seed(subset);
+            
             match self.check_subset(&subset) {
                 SatResult::Unsat => {
                     let mus = self.shrink(&subset)?;
@@ -95,6 +97,29 @@ impl MarcoEnumerator {
 
     fn check_subset(&self, subset: &[usize]) -> SatResult {
         self.theory_solver.check_assumptions(&self.assumptions_for(subset))
+    }
+
+    fn maximize_seed(&self, seed: Vec<usize>) -> Vec<usize> {
+        let n = self.constraints.len();
+        let mut in_seed = vec![false; n];
+        for &i in &seed {
+            in_seed[i] = true;
+        }
+        let mut seed = seed;
+
+        for i in 0..n {
+            if in_seed[i] {
+                continue;
+            }
+            let mut assumptions: Vec<Bool> = seed.iter().map(|&j| self.selectors[j].clone()).collect();
+            assumptions.push(self.selectors[i].clone());
+
+            if self.map_solver.check_assumptions(&assumptions) == SatResult::Sat {
+                seed.push(i);
+                in_seed[i] = true;
+            }
+        }
+        seed
     }
 
     fn shrink(&self, subset: &[usize]) -> Result<Vec<usize>, Box<dyn CompileError>> {

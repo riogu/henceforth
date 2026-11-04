@@ -113,15 +113,13 @@ impl StackAssistant {
         let normalized_environment = self.normalize_environment(environment.clone())?;
 
         let (solver, constraints) = self.generate_variables_and_constraints(&normalized_environment);
+        let assumptions: Vec<Bool> = constraints.iter().map(|c| c.literal.clone()).collect();
+        if solver.check_assumptions(&assumptions) == SatResult::Sat {
+            return Ok(());
+        }
 
         let marco = MarcoEnumerator::new(solver.clone(), constraints.clone());
         let result = marco.enumerate()?;
-
-        if result.muses.is_empty() {
-            let assumptions: Vec<Bool> = constraints.iter().map(|c| c.literal.clone()).collect();
-
-            assert_eq!(solver.check_assumptions(&assumptions), SatResult::Sat,);
-        }
 
         if !result.muses.is_empty() {
             let best_mus = result.muses.iter().min_by_key(|mus| {

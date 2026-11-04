@@ -1,4 +1,6 @@
-use z3::{SatResult, Solver, ast::Bool};
+use std::time::{Duration, Instant};
+
+use z3::{Params, SatResult, Solver, ast::Bool};
 
 use crate::{hfs::error::CompileError, tools::hfs_assert::stack_assist::TrackedConstraint};
 
@@ -30,7 +32,13 @@ pub struct MarcoEnumerator {
 impl MarcoEnumerator {
     pub fn new(theory_solver: Solver, constraints: Vec<TrackedConstraint>) -> Self {
         let selectors: Vec<Bool> = (0..constraints.len()).map(|i| Bool::new_const(format!("selector_{i}"))).collect();
-        Self { theory_solver, map_solver: Solver::new(), constraints, selectors }
+
+        let map_solver = Solver::new();
+        let mut p = Params::new();
+        p.set_u32("smt.phase_selection", 1);
+        map_solver.set_params(&p);
+
+        Self { theory_solver, map_solver, constraints, selectors }
     }
 
     pub fn enumerate(&self) -> Result<MarcoResult, Box<dyn CompileError>> {
@@ -77,8 +85,33 @@ impl MarcoEnumerator {
         Ok(result)
     }
 
+    fn assumptions_for(&self, subset: &[usize]) -> Vec<Bool> {
+        let mut selected = vec![false; self.constraints.len()];
+        for &i in subset {
+            selected[i] = true;
+        }
+        self.constraints.iter().zip(selected).map(|(c, on)| if on { c.literal.clone() } else { c.literal.not() }).collect()
+    }
+
+    fn check_subset(&self, subset: &[usize]) -> SatResult {
+        self.theory_solver.check_assumptions(&self.assumptions_for(subset))
+    }
+
     fn shrink(&self, subset: &[usize]) -> Result<Vec<usize>, Box<dyn CompileError>> {
+        // we use z3 to find a smaller core before running the deletion loop
         let mut mus = subset.to_vec();
+        loop {
+            if self.check_subset(&mus) != SatResult::Unsat {
+                break;
+            }
+            let core = self.theory_solver.get_unsat_core();
+            let next: Vec<usize> = mus.iter().copied().filter(|&i| core.contains(&self.constraints[i].literal)).collect();
+            if next.len() == mus.len() || self.check_subset(&next) != SatResult::Unsat {
+                break;
+            }
+            mus = next;
+        }
+
         let mut i = 0;
 
         while i < mus.len() {
@@ -124,23 +157,6 @@ impl MarcoEnumerator {
         }
 
         Ok(mss)
-    }
-
-    fn check_subset(&self, subset: &[usize]) -> SatResult {
-        let assumptions: Vec<Bool> = self
-            .constraints
-            .iter()
-            .enumerate()
-            .map(|(i, constraint)| {
-                if subset.contains(&i) {
-                    constraint.literal.clone()
-                } else {
-                    constraint.literal.not()
-                }
-            })
-            .collect();
-
-        self.theory_solver.check_assumptions(&assumptions)
     }
 
     fn block_mus(&self, mus: &[usize]) {

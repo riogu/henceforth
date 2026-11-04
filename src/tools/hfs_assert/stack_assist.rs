@@ -7,8 +7,10 @@ use z3::{SatResult, Solver, Sort};
 use crate::hfs::error::{CompileError, DiagnosticInfo};
 use crate::hfs::{Expression, Span, StackBlockExpression, StackEnvironment, StackModifier, VALID_STACK_KEYWORDS};
 use crate::stack_assist_error;
+use crate::tools::hfs_assert::marco_enumerator::MarcoEnumerator;
 use crate::tools::hfs_assert::stack_assist_errors::{StackAssistError, StackAssistErrorKind};
 
+#[derive(Clone)]
 pub struct TrackedConstraint {
     pub literal: Bool,
     pub span: Span,
@@ -85,16 +87,23 @@ impl StackAssistant {
         let normalized_environment = self.normalize_environment(environment.clone())?;
 
         let (solver, constraints) = self.generate_variables_and_constraints(&normalized_environment);
-        let assumptions: Vec<Bool> = constraints.iter().map(|constraint| constraint.literal.clone()).collect();
 
-        if solver.check_assumptions(&assumptions) == SatResult::Unsat {
-            let core = solver.get_unsat_core();
-            let mus = self.minimize_core(core, &solver);
-            let mus_span = self.get_mus_span(&mus);
-            let mcs = self.find_mcs(&mus);
-            let correction = self.find_correction(mcs, &normalized_environment);
-            return stack_assist_error!(StackAssistErrorKind::AssertionFailed(mus_span, correction), &self, environment.span);
+        let marco = MarcoEnumerator::new(solver.clone(), constraints.clone());
+        let result = marco.enumerate()?;
+
+        if result.muses.is_empty() {
+            let assumptions: Vec<Bool> = constraints.iter().map(|c| c.literal.clone()).collect();
+
+            assert_eq!(
+                solver.check_assumptions(&assumptions),
+                SatResult::Sat,
+            );
         }
+
+        if !result.muses.is_empty() {
+            todo!()
+        }
+
         Ok(())
     }
 
@@ -134,22 +143,6 @@ impl StackAssistant {
         }
 
         (ctx.solver, ctx.constraints)
-    }
-
-    fn minimize_core(&self, core: Vec<z3::ast::Bool>, solver: &Solver) -> Vec<z3::ast::Bool> {
-        vec![]
-    }
-
-    fn find_mcs(&self, mus: &Vec<z3::ast::Bool>) -> Vec<z3::ast::Bool> {
-        vec![]
-    }
-
-    fn find_correction(&self, mcs: Vec<z3::ast::Bool>, environment: &StackEnvironment) -> String {
-        "".to_string()
-    }
-
-    fn get_mus_span(&self, mus: &Vec<z3::ast::Bool>) -> Span {
-        Span::default()
     }
 
     fn encode_precondition(&self, idents: &[String], ctx: &mut EncodingContext) {

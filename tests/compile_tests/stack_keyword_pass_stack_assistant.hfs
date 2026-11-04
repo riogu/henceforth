@@ -1,0 +1,75 @@
+//? COMPILE
+fn test_pop: () -> () {
+    @(1 2 #(pre = a b, post = a) { @pop } )
+    @pop_all;
+}
+
+fn test_dup: () -> () {
+    @(1 #(pre = a, post = a a) { @dup } )
+    @pop_all;
+}
+
+fn test_swap: () -> () {
+    @(1 2 #(pre = a b, post = b a) { @swap } )
+    @pop_all;
+}
+
+fn test_over: () -> () {
+    @(1 2 #(pre = a b, post = a b a) { @over } )
+    @pop_all;
+}
+
+fn test_nip: () -> () {
+    @(1 2 #(pre = a b, post = b) { @nip } )
+    @pop_all;
+}
+
+fn test_tuck: () -> () {
+    @(1 2 #(pre = a b, post = b a b) { @tuck } )
+    @pop_all;
+}
+
+fn test_rot: () -> () {
+    @(1 2 3 #(pre = a b c, post = b c a) { @rot } )
+    @pop_all;
+}
+
+fn test_rrot: () -> () {
+    @(1 2 3 #(pre = a b c, post = c a b) { @rrot } )
+    @pop_all;
+}
+
+fn test_rev: () -> () {
+    @(1 2 3 4 #(pre = a b c d, post = d c b a) { @rev } )
+    @pop_all;
+}
+
+fn test_pop_all: () -> () {
+    @(1 2 3 #(pre = a b c, post =) { @pop_all } )
+    @pop_all;
+}
+
+fn test_depth: () -> () {
+    @(1 2 #(pre = a b, post = a b c) { @depth } )
+    @pop_all;
+}
+
+fn test_stress: () -> () {
+    @(1 2 3 4 5 #(pre = a b c d e, post = e d c b a) {
+        @dup       // a b c d e e
+        @swap       // a b c d e e
+        @over      // a b c d e e e
+        @rot       // a b c d e e e
+        @rrot      // a b c d e e e
+        @nip       // a b c d e e
+        @tuck      // a b c d e e e
+        @pop       // a b c d e e
+        @pop       // a b c d e
+        @rot       // a b e c d
+        @rrot      // a b c d e
+        @rev       // e d c b a
+    } )
+    @pop_all;
+}
+
+fn main: () -> () {}

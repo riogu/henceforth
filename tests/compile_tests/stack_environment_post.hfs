@@ -1,5 +1,5 @@
 //? COMPILE
 fn main: () -> () {
-	@( #(post = a) { 1 } )
+	@( #(post = a) { @depth } )
 	@pop_all
 }

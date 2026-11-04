@@ -78,7 +78,7 @@ impl StackAssistant {
                 resolved_body: environment.resolved_body,
                 span: environment.span,
             }),
-            (Some(_), None) => return stack_assist_error!(StackAssistErrorKind::NoPostconditionFound, &self, environment.span),
+            (Some(_), None) => return stack_assist_error!(StackAssistErrorKind::NoPostconditionFound, &self, vec![environment.span]),
             (Some(_), Some(_)) => Ok(environment),
         }
     }
@@ -88,20 +88,22 @@ impl StackAssistant {
 
         let (solver, constraints) = self.generate_variables_and_constraints(&normalized_environment);
 
+        dbg!(&solver.get_assertions());
         let marco = MarcoEnumerator::new(solver.clone(), constraints.clone());
         let result = marco.enumerate()?;
+        dbg!(&result);
 
         if result.muses.is_empty() {
             let assumptions: Vec<Bool> = constraints.iter().map(|c| c.literal.clone()).collect();
 
-            assert_eq!(
-                solver.check_assumptions(&assumptions),
-                SatResult::Sat,
-            );
+            assert_eq!(solver.check_assumptions(&assumptions), SatResult::Sat,);
         }
 
         if !result.muses.is_empty() {
-            todo!()
+            match self.get_error_locations(&result.muses, &constraints).first() {
+                Some(loc) => return stack_assist_error!(StackAssistErrorKind::AssertionFailed, &self, loc.clone()),
+                None => panic!("[internal error] found muses but found no error locations"),
+            }
         }
 
         Ok(())
@@ -269,5 +271,9 @@ impl StackAssistant {
             },
             _ => panic!("[internal error] found invalid stack keyword when generating encoding"),
         }
+    }
+
+    fn get_error_locations(&self, muses: &[Vec<usize>], constraints: &[TrackedConstraint]) -> Vec<Vec<Span>> {
+        muses.iter().map(|mus| mus.iter().map(|&i| constraints[i].span).collect()).collect()
     }
 }

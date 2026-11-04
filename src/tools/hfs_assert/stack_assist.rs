@@ -1,12 +1,33 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use z3::{SatResult, Solver};
+use z3::ast::{Array, Int};
+use z3::{SatResult, Solver, Sort};
 
 use crate::hfs::error::{CompileError, DiagnosticInfo};
-use crate::hfs::{Expression, Span, StackBlockExpression, StackEnvironment, StackModifier};
+use crate::hfs::{Expression, Span, StackBlockExpression, StackEnvironment, StackModifier, VALID_STACK_KEYWORDS};
 use crate::stack_assist_error;
 use crate::tools::hfs_assert::stack_assist_errors::{StackAssistError, StackAssistErrorKind};
+
+pub struct EncodingContext {
+    pub solver: Solver,
+    pub state: Array,
+    pub sp: i64,
+    pub next_id: i64,
+    pub names: HashMap<String, i64>,
+}
+
+impl EncodingContext {
+    pub fn new() -> Self {
+        Self {
+            solver: Solver::new(),
+            state: Array::new_const("so", &Sort::int(), &Sort::int()),
+            sp: 0,
+            next_id: 0,
+            names: HashMap::new(),
+        }
+    }
+}
 
 pub struct StackAssistant {
     pub diagnostic_info: Rc<DiagnosticInfo>,
@@ -22,13 +43,15 @@ impl StackAssistant {
             environment.modifiers.iter().find(|m| matches!(m, StackModifier::Pre(_))),
             environment.modifiers.iter().find(|m| matches!(m, StackModifier::Post(_))),
         ) {
-            (None, None) => unreachable!(), // this should never be reached since we check for a pre or post before entering the stack assistant,
+            (None, None) => unreachable!(
+                "[internal error] somehow found no pre or post conditions inside an environment that entered the stack assistant"
+            ),
             (None, Some(m)) => Ok(StackEnvironment {
                 modifiers: vec![StackModifier::Pre(vec![]), m.clone()],
                 resolved_body: environment.resolved_body,
                 span: environment.span,
             }),
-            (Some(m), None) => return stack_assist_error!(StackAssistErrorKind::NoPostconditionFound, &self, environment.span),
+            (Some(_), None) => return stack_assist_error!(StackAssistErrorKind::NoPostconditionFound, &self, environment.span),
             (Some(_), Some(_)) => Ok(environment),
         }
     }
@@ -50,29 +73,32 @@ impl StackAssistant {
     }
 
     fn generate_variables_and_constraints(&self, environment: &StackEnvironment) -> Solver {
-        let solver = Solver::new();
+        let mut ctx = EncodingContext::new();
 
         if let Some(StackModifier::Pre(idents)) = environment.modifiers.iter().find(|m| matches!(m, StackModifier::Pre(_))) {
-            let s0 = self.generate_precondition_variables_and_constraints(idents, &solver);
-            dbg!(s0);
+            self.generate_precondition_variables_and_constraints(idents, &mut ctx);
         }
-        dbg!(solver.get_assertions());
 
-        // for expr in environment.resolved_body.iter() {
-        //     match expr {
-        //         StackBlockExpression::Expr(expression) => match expression {
-        //             Expression::Operation(operation) => todo!(),
-        //             Expression::Identifier(identifier) => todo!(),
-        //             Expression::Literal(literal) => todo!(),
-        //             Expression::Tuple { expressions } => todo!(),
-        //             Expression::ArrayLiteral { elements } => todo!(),
-        //             Expression::Parameter { index, type_id } => todo!(),
-        //             Expression::ReturnValue(type_id) => todo!(),
-        //         },
-        //         StackBlockExpression::StackKeyword(keyword) => todo!(),
-        //     }
-        // }
-        solver
+        for expr in environment.resolved_body.iter() {
+            match expr {
+                StackBlockExpression::Expr(expression) => match expression {
+                    Expression::Operation(operation) => todo!(),
+                    Expression::Identifier(identifier) => todo!(),
+                    Expression::Literal(literal) => todo!(),
+                    Expression::Tuple { expressions } => todo!(),
+                    Expression::ArrayLiteral { elements } => todo!(),
+                    Expression::Parameter { index, type_id } => todo!(),
+                    Expression::ReturnValue(type_id) => todo!(),
+                },
+                StackBlockExpression::StackKeyword(keyword) => match keyword {
+                    keyword if !VALID_STACK_KEYWORDS.contains(&keyword.as_str()) => {
+                        unreachable!("[internal error] somehow found an invalid stack keyword in the stack assistant")
+                    },
+                    _ => todo!(),
+                },
+            }
+        }
+        ctx.solver
     }
 
     fn minimize_core(&self, core: Vec<z3::ast::Bool>) -> Vec<z3::ast::Bool> {
@@ -91,19 +117,14 @@ impl StackAssistant {
         Span::default()
     }
 
-    fn generate_precondition_variables_and_constraints(&self, idents: &[String], solver: &Solver) -> Vec<z3::ast::Int> {
-        let mut vars: HashMap<String, z3::ast::Int> = HashMap::new();
-        let mut initial_stack: Vec<z3::ast::Int> = vec![];
+    fn generate_precondition_variables_and_constraints(&self, idents: &[String], ctx: &mut EncodingContext) {
+        // the precondition never fails so we never add any constraints
+        // we just build the initial state and store it in the context, so it can be asserted later
         for ident in idents {
-            let vars_len = vars.len();
-            let v = vars.entry(ident.clone()).or_insert_with(|| {
-                let tag = vars_len as i64;
-                let v = z3::ast::Int::new_const(format!("{ident}"));
-                solver.assert(&v.eq(&z3::ast::Int::from_i64(tag)));
-                v
-            });
-            initial_stack.push(v.clone());
+            ctx.names.insert(ident.clone(), ctx.next_id);
+            ctx.state = ctx.state.store(&Int::from_i64(ctx.sp), &Int::from_i64(ctx.next_id));
+            ctx.sp += 1;
+            ctx.next_id += 1;
         }
-        return initial_stack
     }
 }

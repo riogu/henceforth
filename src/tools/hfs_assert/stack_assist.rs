@@ -26,6 +26,7 @@ pub struct TrackedConstraint {
 pub struct EncodingContext {
     pub solver: Solver,
     pub state: Array,
+    pub initial_sp: Int,
     pub sp: Int,
     pub max_possible_stack_depth: i64,
     pub next_id: i64,
@@ -37,16 +38,18 @@ pub struct EncodingContext {
 
 impl EncodingContext {
     pub fn new() -> Self {
+        let initial_sp = Int::new_const("initial_sp");
         Self {
             solver: Solver::new(),
             state: Array::new_const("s0", &Sort::int(), &Sort::int()),
-            sp: Int::from_i64(0),
+            sp: initial_sp.clone(),
             next_id: 0,
             max_possible_stack_depth: 0,
             names: HashMap::new(),
             constraints: vec![],
             next_step: 0,
             next_post: 0,
+            initial_sp,
         }
     }
 
@@ -54,7 +57,7 @@ impl EncodingContext {
         self.state.select(&(&self.sp - Int::from_i64(d))).as_int().unwrap()
     }
 
-    pub fn commit(&mut self, next: Array, next_sp: Int, span: &Span) {
+    pub fn commit(&mut self, next: Array, next_sp: Int, validity: Bool, span: &Span) {
         let k = self.next_step;
         let p = Bool::new_const(format!("step_{k}"));
         let previous_state = self.state.clone();
@@ -62,6 +65,7 @@ impl EncodingContext {
         let new = Array::new_const(format!("s{}", k + 1), &Sort::int(), &Sort::int());
 
         let new_sp = Int::new_const(format!("sp{}", k + 1));
+        self.solver.assert(&p.implies(&validity));
         self.solver.assert(&p.implies(&new.eq(&next)));
         self.solver.assert(&p.implies(&new_sp.eq(&next_sp)));
 
@@ -110,15 +114,8 @@ impl StackAssistant {
 
         let (solver, constraints) = self.generate_variables_and_constraints(&normalized_environment);
 
-        dbg!(&solver.get_assertions());
-        dbg!(&constraints);
-
-        for (i, constraint) in constraints.iter().enumerate() {
-            println!("[{i}] literal={} kind={:?} span={:?}", constraint.literal, constraint.kind, constraint.span,);
-        }
         let marco = MarcoEnumerator::new(solver.clone(), constraints.clone());
         let result = marco.enumerate()?;
-        dbg!(&result);
 
         if result.muses.is_empty() {
             let assumptions: Vec<Bool> = constraints.iter().map(|c| c.literal.clone()).collect();
@@ -127,10 +124,11 @@ impl StackAssistant {
         }
 
         if !result.muses.is_empty() {
-            let best_mus = result
-                .muses
-                .iter()
-                .min_by_key(|mus| mus.iter().filter(|&&i| constraints[i].kind == ConstraintKind::StackOperation).count());
+            let best_mus = result.muses.iter().min_by_key(|mus| {
+                let operation_count = mus.iter().filter(|&&i| constraints[i].kind == ConstraintKind::StackOperation).count();
+
+                (operation_count == 0, operation_count)
+            });
             match best_mus {
                 Some(loc) => {
                     return stack_assist_error!(
@@ -148,6 +146,8 @@ impl StackAssistant {
 
     fn generate_variables_and_constraints(&self, environment: &StackEnvironment) -> (Solver, Vec<TrackedConstraint>) {
         let mut ctx = EncodingContext::new();
+
+        ctx.solver.assert(&ctx.initial_sp.ge(&Int::from_i64(0)));
 
         if let Some(StackModifier::Pre(idents, _)) = environment.modifiers.iter().find(|m| matches!(m, StackModifier::Pre(_, _)))
         {
@@ -190,7 +190,8 @@ impl StackAssistant {
         for ident in idents {
             ctx.max_possible_stack_depth += 1;
             ctx.names.insert(ident.clone(), ctx.next_id);
-            ctx.state = ctx.state.store(&ctx.sp, &Int::from_i64(ctx.next_id));
+            let index = &ctx.sp;
+            ctx.state = ctx.state.store(index, &Int::from_i64(ctx.next_id));
             ctx.sp = &ctx.sp + Int::from_i64(1);
             ctx.next_id += 1;
         }
@@ -230,7 +231,8 @@ impl StackAssistant {
                 let next = ctx.state.clone();
                 let next_sp = &ctx.sp - Int::from_i64(1);
 
-                ctx.commit(next, next_sp, span);
+                let validity = ctx.sp.ge(&Int::from_i64(1));
+                ctx.commit(next, next_sp, validity, span);
             },
 
             "@dup" => {
@@ -238,7 +240,8 @@ impl StackAssistant {
                 let next_sp = &ctx.sp + Int::from_i64(1);
                 ctx.max_possible_stack_depth += 1;
 
-                ctx.commit(next, next_sp, span);
+                let validity = ctx.sp.ge(&Int::from_i64(1));
+                ctx.commit(next, next_sp, validity, span);
             },
 
             "@swap" => {
@@ -251,14 +254,16 @@ impl StackAssistant {
 
                 let next_sp = ctx.sp.clone();
 
-                ctx.commit(next, next_sp, span);
+                let validity = ctx.sp.ge(&Int::from_i64(2));
+                ctx.commit(next, next_sp, validity, span);
             },
 
             "@pop_all" => {
                 let next = ctx.state.clone();
                 let next_sp = Int::from_i64(0);
 
-                ctx.commit(next, next_sp, span);
+                let validity = ctx.sp.ge(&Int::from_i64(0));
+                ctx.commit(next, next_sp, validity, span);
             },
 
             "@over" => {
@@ -268,7 +273,8 @@ impl StackAssistant {
                 let next_sp = &ctx.sp + Int::from_i64(1);
                 ctx.max_possible_stack_depth += 1;
 
-                ctx.commit(next, next_sp, span);
+                let validity = ctx.sp.ge(&Int::from_i64(2));
+                ctx.commit(next, next_sp, validity, span);
             },
 
             "@rot" => {
@@ -282,7 +288,8 @@ impl StackAssistant {
 
                 let next_sp = ctx.sp.clone();
 
-                ctx.commit(next, next_sp, span);
+                let validity = ctx.sp.ge(&Int::from_i64(3));
+                ctx.commit(next, next_sp, validity, span);
             },
 
             "@rrot" => {
@@ -296,7 +303,8 @@ impl StackAssistant {
 
                 let next_sp = ctx.sp.clone();
 
-                ctx.commit(next, next_sp, span);
+                let validity = ctx.sp.ge(&Int::from_i64(3));
+                ctx.commit(next, next_sp, validity, span);
             },
 
             "@nip" => {
@@ -306,7 +314,8 @@ impl StackAssistant {
                 let next = ctx.state.store(&index, &b);
                 let next_sp = &ctx.sp - Int::from_i64(1);
 
-                ctx.commit(next, next_sp, span);
+                let validity = ctx.sp.ge(&Int::from_i64(2));
+                ctx.commit(next, next_sp, validity, span);
             },
 
             "@tuck" => {
@@ -320,7 +329,8 @@ impl StackAssistant {
 
                 let next_sp = &ctx.sp + Int::from_i64(1);
 
-                ctx.commit(next, next_sp, span);
+                let validity = ctx.sp.ge(&Int::from_i64(2));
+                ctx.commit(next, next_sp, validity, span);
             },
 
             "@rev" => {
@@ -344,7 +354,8 @@ impl StackAssistant {
 
                 let next_sp = ctx.sp.clone();
 
-                ctx.commit(next, next_sp, span);
+                let validity = ctx.sp.ge(&Int::from_i64(0));
+                ctx.commit(next, next_sp, validity, span);
             },
 
             "@depth" => {
@@ -356,7 +367,8 @@ impl StackAssistant {
 
                 ctx.next_id += 1;
 
-                ctx.commit(next, next_sp, span);
+                let validity = ctx.sp.ge(&Int::from_i64(0));
+                ctx.commit(next, next_sp, validity, span);
             },
 
             _ => panic!("[internal error] found invalid stack keyword when generating encoding"),

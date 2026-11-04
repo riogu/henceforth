@@ -10,10 +10,16 @@ use crate::stack_assist_error;
 use crate::tools::hfs_assert::marco_enumerator::MarcoEnumerator;
 use crate::tools::hfs_assert::stack_assist_errors::{StackAssistError, StackAssistErrorKind};
 
+#[derive(Clone, PartialEq)]
+pub enum ConstraintKind {
+    StackOperation, PostCondition
+}
+
 #[derive(Clone)]
 pub struct TrackedConstraint {
     pub literal: Bool,
     pub span: Span,
+    pub kind: ConstraintKind
 }
 
 pub struct EncodingContext {
@@ -51,7 +57,7 @@ impl EncodingContext {
         let new = Array::new_const(format!("s{}", k + 1), &Sort::int(), &Sort::int());
         self.solver.assert(&p.implies(&new.eq(&next)));
         self.state = new;
-        self.constraints.push(TrackedConstraint { literal: p, span: *span });
+        self.constraints.push(TrackedConstraint { literal: p, span: *span, kind: ConstraintKind::StackOperation });
         self.next_step += 1;
     }
 }
@@ -78,7 +84,9 @@ impl StackAssistant {
                 resolved_body: environment.resolved_body,
                 span: environment.span,
             }),
-            (Some(_), None) => return stack_assist_error!(StackAssistErrorKind::NoPostconditionFound, &self, vec![environment.span]),
+            (Some(_), None) => {
+                return stack_assist_error!(StackAssistErrorKind::NoPostconditionFound, &self, vec![environment.span]);
+            },
             (Some(_), Some(_)) => Ok(environment),
         }
     }
@@ -100,8 +108,29 @@ impl StackAssistant {
         }
 
         if !result.muses.is_empty() {
-            match self.get_error_locations(&result.muses, &constraints).first() {
-                Some(loc) => return stack_assist_error!(StackAssistErrorKind::AssertionFailed, &self, loc.clone()),
+            // the "best" MUS is the one that contains the earliest stack operation
+            // MUSes also involve postcondition constraints, which always occur earlier, but we want to ignore these
+            //
+            // this provides better errors
+            let best_mus = result.muses.iter().min_by_key(|mus| {
+                mus.iter()
+                    .filter_map(|&i| {
+                        let constraint = &constraints[i];
+
+                        (constraint.kind == ConstraintKind::StackOperation).then_some(constraint.span.start)
+                    })
+                    .map(|pos| (pos.line, pos.col))
+                    .min()
+                    .unwrap_or((usize::MAX, usize::MAX))
+            });
+            match best_mus {
+                Some(loc) => {
+                    return stack_assist_error!(
+                        StackAssistErrorKind::AssertionFailed,
+                        &self,
+                        self.get_error_locations(&[loc.clone()], &constraints).clone().first().unwrap().clone()
+                    );
+                },
                 None => panic!("[internal error] found muses but found no error locations"),
             }
         }
@@ -179,7 +208,7 @@ impl StackAssistant {
                 ctx.solver.assert(&q.implies(&constraint));
             }
 
-            ctx.constraints.push(TrackedConstraint { literal: q, span: *span });
+            ctx.constraints.push(TrackedConstraint { literal: q, span: *span, kind: ConstraintKind::PostCondition });
             ctx.next_post += 1;
         }
     }

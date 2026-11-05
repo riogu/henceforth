@@ -147,6 +147,22 @@ impl StackAssistant {
 
         ctx.solver.assert(&ctx.initial_sp.ge(&Int::from_i64(0)));
 
+        // stack slots below the precondition must have negative ids, to prevent them from conflicting with the actual visible stack
+        let post_len = environment
+            .modifiers
+            .iter()
+            .find_map(|m| match m {
+                StackModifier::Post(idents, _) => Some(idents.len()),
+                _ => None,
+            })
+            .unwrap_or(0);
+        let depth_bound = (3 * environment.resolved_body.len() + post_len) as i64;
+
+        for k in 1..=depth_bound {
+            let slot = ctx.state.select(&(&ctx.initial_sp - Int::from_i64(k))).as_int().unwrap();
+            ctx.solver.assert(&slot.eq(&Int::from_i64(-k)));
+        }
+
         if let Some(StackModifier::Pre(idents, _)) = environment.modifiers.iter().find(|m| matches!(m, StackModifier::Pre(_, _)))
         {
             self.encode_precondition(idents, &mut ctx);

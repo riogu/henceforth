@@ -31,6 +31,7 @@ pub struct EncodingContext {
     pub max_possible_stack_depth: i64,
     pub next_id: i64,
     pub names: HashMap<String, i64>,
+    pub depth_offset: i64,
     pub constraints: Vec<TrackedConstraint>, // assumption literals, used to track which step is part of the MUS
     pub next_step: usize,
     pub next_post: usize,
@@ -50,6 +51,7 @@ impl EncodingContext {
             next_step: 0,
             next_post: 0,
             initial_sp,
+            depth_offset: 0,
         }
     }
 
@@ -150,9 +152,7 @@ impl StackAssistant {
 
                     None => {
                         return stack_assist_error!(
-                            StackAssistErrorKind::AssertionFailed(
-                                vec![Span::default()]
-                            ),
+                            StackAssistErrorKind::AssertionFailed(vec![Span::default()]),
                             &self,
                             self.get_error_locations(&[loc.clone()], &constraints).first().unwrap().clone()
                         );
@@ -167,6 +167,17 @@ impl StackAssistant {
 
     fn generate_variables_and_constraints(&self, environment: &StackEnvironment) -> (Solver, Vec<TrackedConstraint>) {
         let mut ctx = EncodingContext::new();
+
+        let pre_len = environment
+            .modifiers
+            .iter()
+            .find_map(|m| match m {
+                StackModifier::Pre(idents, _) => Some(idents.len()),
+                _ => None,
+            })
+            .unwrap_or(0);
+
+        ctx.depth_offset = (pre_len + environment.resolved_body.len()) as i64 + 1;
 
         ctx.solver.assert(&ctx.initial_sp.ge(&Int::from_i64(0)));
 
@@ -396,13 +407,11 @@ impl StackAssistant {
             },
 
             "@depth" => {
-                let value = Int::from_i64(ctx.next_id);
+                let value = &ctx.sp + Int::from_i64(ctx.depth_offset);
 
                 let next = ctx.state.store(&ctx.sp, &value);
                 let next_sp = &ctx.sp + Int::from_i64(1);
                 ctx.max_possible_stack_depth += 1;
-
-                ctx.next_id += 1;
 
                 let validity = ctx.sp.ge(&Int::from_i64(0));
                 ctx.commit(next, next_sp, validity, span);

@@ -127,15 +127,29 @@ impl StackAssistant {
 
                 (operation_count == 0, operation_count)
             });
+
+            let best_mcs = result
+                .mcses
+                .iter()
+                .filter(|mcs| !mcs.is_empty() && mcs.iter().all(|&i| constraints[i].kind == ConstraintKind::StackOperation))
+                .min_by_key(|mcs| (mcs.len(), std::cmp::Reverse(mcs.iter().max().copied())));
+
             match best_mus {
-                Some(loc) => {
-                    return stack_assist_error!(
-                        StackAssistErrorKind::AssertionFailed,
-                        &self,
-                        self.get_error_locations(&[loc.clone()], &constraints).clone().first().unwrap().clone()
-                    );
+                Some(loc) => match best_mcs {
+                    Some(mcs) => {
+                        dbg!(self.get_error_locations(&[mcs.clone()], &constraints));
+                        return stack_assist_error!(
+                            StackAssistErrorKind::AssertionFailed(
+                                self.get_error_locations(&[mcs.clone()], &constraints).first().unwrap().clone()
+                            ),
+                            &self,
+                            self.get_error_locations(&[loc.clone()], &constraints).first().unwrap().clone()
+                        );
+                    },
+
+                    None => todo!(),
                 },
-                None => panic!("[internal error] found muses but found no error locations"),
+                None => panic!("[internal error] could not find best MUS"),
             }
         }
 

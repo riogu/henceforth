@@ -10,7 +10,7 @@ use crate::hfs::{
 #[derive(Debug)]
 pub enum StackAssistErrorKind {
     NoPostconditionFound,
-    AssertionFailed,
+    AssertionFailed(Vec<Span>),
 }
 
 #[derive(Debug)]
@@ -65,7 +65,7 @@ impl CompileError for StackAssistError {
             StackAssistErrorKind::NoPostconditionFound => {
                 (format!("no postcondition found for this stack environment with a precondition"), String::new())
             },
-            StackAssistErrorKind::AssertionFailed => {
+            StackAssistErrorKind::AssertionFailed(_) => {
                 ("stack assertion failed".to_string(), "these expressions conflict with the post condition".to_string())
             },
         }
@@ -102,7 +102,7 @@ impl CompileError for StackAssistError {
         let source = std::fs::read_to_string(&self.path).map_err(|e| format!("Could not read source file: {}", e))?;
 
         match self.kind {
-            StackAssistErrorKind::AssertionFailed => self.render_multiple_pointers(&source),
+            StackAssistErrorKind::AssertionFailed(_) => self.render_multiple_pointers(&source),
             _ => self.render_single_pointer(&source),
         }
     }

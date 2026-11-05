@@ -134,6 +134,7 @@ impl StackAssistant {
                 .filter(|mcs| !mcs.is_empty() && mcs.iter().all(|&i| constraints[i].kind == ConstraintKind::StackOperation))
                 .min_by_key(|mcs| (mcs.len(), std::cmp::Reverse(mcs.iter().max().copied())));
 
+            dbg!(&result.mcses);
             match best_mus {
                 Some(loc) => match best_mcs {
                     Some(mcs) => {
@@ -147,7 +148,15 @@ impl StackAssistant {
                         );
                     },
 
-                    None => todo!(),
+                    None => {
+                        return stack_assist_error!(
+                            StackAssistErrorKind::AssertionFailed(
+                                vec![Span::default()]
+                            ),
+                            &self,
+                            self.get_error_locations(&[loc.clone()], &constraints).first().unwrap().clone()
+                        );
+                    },
                 },
                 None => panic!("[internal error] could not find best MUS"),
             }

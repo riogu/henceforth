@@ -1,0 +1,4 @@
+fn main: () -> () {
+	@( 1 2 3 #(pre = a b c, post = a b c) { @rot @rot } )//? ERROR "stack assertion failed"
+	@pop_all
+}

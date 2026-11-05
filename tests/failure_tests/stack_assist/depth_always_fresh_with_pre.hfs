@@ -1,0 +1,4 @@
+fn main: () -> () {
+	@( 1 #(pre = a, post = a a) { @depth } )//? ERROR "stack assertion failed"
+	@pop_all
+}

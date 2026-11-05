@@ -1,0 +1,31 @@
+//? COMPILE
+
+fn integers: () -> () {
+	@( #(post = a) { 1 })
+	@pop_all
+}
+fn floats: () -> () {
+	@( #(post = a) { 1.3 })
+	@pop_all
+}
+fn bools: () -> () {
+	@( #(post = a) { true })
+	@pop_all
+}
+
+fn strings: () -> () {
+	@( #(post = a) { "test" })
+	@pop_all
+}
+
+fn tuples: () -> () {
+	@( #(post = a) { (1 2) })
+	@pop_all
+}
+
+fn arrays: () -> () {
+	@( #(post = a) { [1 2] })
+	@pop_all
+}
+
+fn main: () -> () {}

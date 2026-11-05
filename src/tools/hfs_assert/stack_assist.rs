@@ -5,7 +5,7 @@ use z3::ast::{Array, Bool, Int};
 use z3::{SatResult, Solver, Sort};
 
 use crate::hfs::error::{CompileError, DiagnosticInfo};
-use crate::hfs::{Expression, Span, StackBlockExpression, StackEnvironment, StackModifier, VALID_STACK_KEYWORDS};
+use crate::hfs::{Expression, Identifier, Span, StackBlockExpression, StackEnvironment, StackModifier, VALID_STACK_KEYWORDS};
 use crate::stack_assist_error;
 use crate::tools::hfs_assert::marco_enumerator::MarcoEnumerator;
 use crate::tools::hfs_assert::stack_assist_errors::{StackAssistError, StackAssistErrorKind};
@@ -35,6 +35,7 @@ pub struct EncodingContext {
     pub constraints: Vec<TrackedConstraint>, // assumption literals, used to track which step is part of the MUS
     pub next_step: usize,
     pub next_post: usize,
+    pub literal_ids: HashMap<String, i64>,
 }
 
 impl EncodingContext {
@@ -52,7 +53,17 @@ impl EncodingContext {
             next_post: 0,
             initial_sp,
             depth_offset: 0,
+            literal_ids: HashMap::new(),
         }
+    }
+
+    pub fn push_to_stack(&mut self, id: i64, span: &Span) {
+        let next = self.state.store(&self.sp, &Int::from_i64(id));
+        let next_sp = &self.sp + Int::from_i64(1);
+        self.max_possible_stack_depth += 1;
+
+        let validity = self.sp.ge(&Int::from_i64(0));
+        self.commit(next, next_sp, validity, span);
     }
 
     pub fn read_stack_at(&self, d: i64) -> Int {
@@ -79,6 +90,14 @@ impl EncodingContext {
         self.sp = new_sp;
         self.constraints.push(TrackedConstraint { literal: p, span: *span, kind: ConstraintKind::StackOperation });
         self.next_step += 1;
+    }
+
+    fn literal_id(&mut self, key: String) -> i64 {
+        *self.literal_ids.entry(key).or_insert_with(|| {
+            let id = self.next_id;
+            self.next_id += 1;
+            id
+        })
     }
 }
 
@@ -206,10 +225,11 @@ impl StackAssistant {
             match expr {
                 StackBlockExpression::Expr(expression, span) => match expression {
                     Expression::Operation(operation) => todo!(),
-                    Expression::Identifier(identifier) => todo!(),
-                    Expression::Literal(literal) => todo!(),
-                    Expression::Tuple { expressions } => todo!(),
-                    Expression::ArrayLiteral { elements } => todo!(),
+                    Expression::Identifier(identifier) => self.encode_identifier(identifier, &mut ctx, span),
+                    Expression::Literal(_) | Expression::ArrayLiteral { .. } | Expression::Tuple { .. } => {
+                        // TODO: make arrays and tuples use the arena to see if they are equal and intern properly
+                        self.encode_value(expression, &mut ctx, span)
+                    },
                     Expression::Parameter { .. } | Expression::ReturnValue(_) => {
                         panic!("[internal error] found function related expressions inside a stack environment")
                     },
@@ -423,5 +443,20 @@ impl StackAssistant {
 
     fn get_error_locations(&self, muses: &[Vec<usize>], constraints: &[TrackedConstraint]) -> Vec<Vec<Span>> {
         muses.iter().map(|mus| mus.iter().map(|&i| constraints[i].span).collect()).collect()
+    }
+
+    fn encode_value(&self, expression: &Expression, ctx: &mut EncodingContext, span: &Span) {
+        let id = ctx.literal_id(format!("{expression:?}"));
+        ctx.push_to_stack(id, span);
+    }
+
+    fn encode_identifier(&self, identifier: &Identifier, ctx: &mut EncodingContext, span: &Span) {
+        match identifier {
+            Identifier::Variable(_) | Identifier::GlobalVar(_) => {
+                let id = ctx.literal_id(format!("{identifier:?}"));
+                ctx.push_to_stack(id, span);
+            },
+            Identifier::Function(_) => panic!("[internal error] function identifiers can't be inside a stack block"),
+        }
     }
 }

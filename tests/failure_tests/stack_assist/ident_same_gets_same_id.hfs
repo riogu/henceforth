@@ -1,0 +1,6 @@
+fn main: () -> () {
+	let x: i32;
+	@(5) &= x;
+	@( #(post = a b) { x x } ) //? ERROR "stack assertion failed"
+	@pop_all
+}

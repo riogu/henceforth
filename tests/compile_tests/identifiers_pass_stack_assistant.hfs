@@ -1,0 +1,7 @@
+//? COMPILE
+fn main: () -> () {
+	let v: i32;
+	@(5) &= v;
+	@( #(post = a) { v })
+	@pop_all;
+}

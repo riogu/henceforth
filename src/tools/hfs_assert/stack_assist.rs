@@ -1,14 +1,27 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use z3::ast::{Array, Bool, Int};
-use z3::{SatResult, Solver, Sort};
+use z3::ast::{Array, Bool, Dynamic, Int};
+use z3::{FuncDecl, SatResult, Solver, Sort, Symbol};
 
 use crate::hfs::error::{CompileError, DiagnosticInfo};
 use crate::hfs::{Expression, Identifier, Span, StackBlockExpression, StackEnvironment, StackModifier, VALID_STACK_KEYWORDS};
 use crate::stack_assist_error;
 use crate::tools::hfs_assert::marco_enumerator::MarcoEnumerator;
 use crate::tools::hfs_assert::stack_assist_errors::{StackAssistError, StackAssistErrorKind};
+
+#[derive(Clone)]
+pub struct Value(Dynamic);
+
+impl Value {
+    pub fn new(ast: Dynamic) -> Self {
+        Self(ast)
+    }
+
+    pub fn as_ast(&self) -> &Dynamic {
+        &self.0
+    }
+}
 
 #[derive(Clone, PartialEq, Debug)]
 pub enum ConstraintKind {
@@ -28,22 +41,26 @@ pub struct EncodingContext {
     pub state: Array,
     pub initial_sp: Int,
     pub sp: Int,
+    pub value_sort: Sort,
     pub max_possible_stack_depth: i64,
     pub next_id: i64,
-    pub names: HashMap<String, i64>,
+    pub names: HashMap<String, Value>,
     pub depth_offset: i64,
+    pub depth_fn: FuncDecl,
+    pub depth_values: Vec<(Int, Value)>,
     pub constraints: Vec<TrackedConstraint>, // assumption literals, used to track which step is part of the MUS
     pub next_step: usize,
     pub next_post: usize,
-    pub literal_ids: HashMap<String, i64>,
+    pub literal_values: HashMap<String, Value>,
 }
 
 impl EncodingContext {
     pub fn new() -> Self {
+        let value_sort = Sort::uninterpreted(Symbol::from("Value"));
         let initial_sp = Int::new_const("initial_sp");
         Self {
             solver: Solver::new(),
-            state: Array::new_const("s0", &Sort::int(), &Sort::int()),
+            state: Array::new_const("s0", &Sort::int(), &value_sort),
             sp: initial_sp.clone(),
             next_id: 0,
             max_possible_stack_depth: 0,
@@ -53,12 +70,15 @@ impl EncodingContext {
             next_post: 0,
             initial_sp,
             depth_offset: 0,
-            literal_ids: HashMap::new(),
+            literal_values: HashMap::new(),
+            depth_fn: FuncDecl::new("depth", &[&Sort::int()], &value_sort),
+            value_sort,
+            depth_values: vec![],
         }
     }
 
-    pub fn push_to_stack(&mut self, id: i64, span: &Span) {
-        let next = self.state.store(&self.sp, &Int::from_i64(id));
+    pub fn push_to_stack(&mut self, value: &Value, span: &Span) {
+        let next = self.state.store(&self.sp, value.as_ast());
         let next_sp = &self.sp + Int::from_i64(1);
         self.max_possible_stack_depth += 1;
 
@@ -66,8 +86,10 @@ impl EncodingContext {
         self.commit(next, next_sp, validity, span);
     }
 
-    pub fn read_stack_at(&self, d: i64) -> Int {
-        self.state.select(&(&self.sp - Int::from_i64(d))).as_int().unwrap()
+    pub fn read_stack_at(&self, d: i64) -> Value {
+        let ast = self.state.select(&(&self.sp - Int::from_i64(d)));
+
+        Value::new(ast)
     }
 
     pub fn commit(&mut self, next: Array, next_sp: Int, validity: Bool, span: &Span) {
@@ -75,7 +97,7 @@ impl EncodingContext {
         let p = Bool::new_const(format!("step_{k}"));
         let previous_state = self.state.clone();
         let previous_sp = self.sp.clone();
-        let new = Array::new_const(format!("s{}", k + 1), &Sort::int(), &Sort::int());
+        let new = Array::new_const(format!("s{}", k + 1), &Sort::int(), &self.value_sort);
 
         let new_sp = Int::new_const(format!("sp{}", k + 1));
         self.solver.assert(&p.implies(&validity));
@@ -92,12 +114,21 @@ impl EncodingContext {
         self.next_step += 1;
     }
 
-    fn literal_id(&mut self, key: String) -> i64 {
-        *self.literal_ids.entry(key).or_insert_with(|| {
-            let id = self.next_id;
-            self.next_id += 1;
-            id
-        })
+    pub fn fresh_value(&mut self) -> Value {
+        let id = self.next_id;
+        self.next_id += 1;
+
+        Value::new(Dynamic::new_const(format!("value_{id}"), &self.value_sort))
+    }
+
+    pub fn get_or_create_value(&mut self, key: String) -> Value {
+        if let Some(value) = self.literal_values.get(&key) {
+            return value.clone();
+        }
+
+        let value = self.fresh_value();
+        self.literal_values.insert(key, value.clone());
+        value
     }
 }
 
@@ -135,6 +166,7 @@ impl StackAssistant {
 
         let (solver, constraints) = self.generate_variables_and_constraints(&normalized_environment);
         let assumptions: Vec<Bool> = constraints.iter().map(|c| c.literal.clone()).collect();
+
         if solver.check_assumptions(&assumptions) == SatResult::Sat {
             return Ok(());
         }
@@ -199,23 +231,6 @@ impl StackAssistant {
         ctx.depth_offset = (pre_len + environment.resolved_body.len()) as i64 + 1;
 
         ctx.solver.assert(&ctx.initial_sp.ge(&Int::from_i64(0)));
-
-        // stack slots below the precondition must have negative ids, to prevent them from conflicting with the actual visible stack
-        let post_len = environment
-            .modifiers
-            .iter()
-            .find_map(|m| match m {
-                StackModifier::Post(idents, _) => Some(idents.len()),
-                _ => None,
-            })
-            .unwrap_or(0);
-        let depth_bound = (3 * environment.resolved_body.len() + post_len) as i64;
-
-        for k in 1..=depth_bound {
-            let slot = ctx.state.select(&(&ctx.initial_sp - Int::from_i64(k))).as_int().unwrap();
-            ctx.solver.assert(&slot.eq(&Int::from_i64(-k)));
-        }
-
         if let Some(StackModifier::Pre(idents, _)) = environment.modifiers.iter().find(|m| matches!(m, StackModifier::Pre(_, _)))
         {
             self.encode_precondition(idents, &mut ctx);
@@ -253,15 +268,24 @@ impl StackAssistant {
     }
 
     fn encode_precondition(&self, idents: &[String], ctx: &mut EncodingContext) {
-        // the precondition never fails so we never add any constraints
-        // we just build the initial state and store it in the context, so it can be asserted later
+        let mut previous_values: Vec<Value> = Vec::new();
+
         for ident in idents {
+            let value = ctx.get_or_create_value(format!("precondition:{ident}"));
+
+            // distinct precondition identifiers represent distinct values
+            for previous in &previous_values {
+                ctx.solver.assert(&value.as_ast().eq(previous.as_ast()).not());
+            }
+
+            let index = ctx.sp.clone();
+            ctx.state = ctx.state.store(&index, value.as_ast());
+
+            ctx.names.insert(ident.clone(), value.clone());
+            previous_values.push(value);
+
             ctx.max_possible_stack_depth += 1;
-            ctx.names.insert(ident.clone(), ctx.next_id);
-            let index = &ctx.sp;
-            ctx.state = ctx.state.store(index, &Int::from_i64(ctx.next_id));
             ctx.sp = &ctx.sp + Int::from_i64(1);
-            ctx.next_id += 1;
         }
     }
 
@@ -272,17 +296,18 @@ impl StackAssistant {
             // we get the value in the current stack that corresponds to that postcondition identifier
             let slot_j = ctx.read_stack_at(len - j as i64);
             let q = Bool::new_const(format!("post_{}", ctx.next_post));
-            ctx.solver.assert(&q.implies(&ctx.sp.ge(&Int::from_i64(len))));
+            let required_sp = &ctx.initial_sp + Int::from_i64(len);
+            ctx.solver.assert(&q.implies(&ctx.sp.ge(&required_sp)));
 
             // if a name from the pre pins this slot to that pre value, we assert equality between them
-            if let Some(&id) = ctx.names.get(name) {
-                ctx.solver.assert(&q.implies(&slot_j.eq(&Int::from_i64(id))));
+            if let Some(value) = ctx.names.get(name) {
+                ctx.solver.assert(&q.implies(&slot_j.as_ast().eq(value.as_ast())));
             }
 
             // same name => same value, different name => different value
             for i in 0..j {
                 let slot_i = ctx.read_stack_at(len - i as i64);
-                let same = slot_j.eq(&slot_i);
+                let same = slot_j.as_ast().eq(slot_i.as_ast());
                 let constraint = if post[i] == *name { same } else { same.not() };
                 ctx.solver.assert(&q.implies(&constraint));
             }
@@ -304,7 +329,7 @@ impl StackAssistant {
             },
 
             "@dup" => {
-                let next = ctx.state.store(&ctx.sp, &ctx.read_stack_at(1));
+                let next = ctx.state.store(&ctx.sp, ctx.read_stack_at(1).as_ast());
                 let next_sp = &ctx.sp + Int::from_i64(1);
                 ctx.max_possible_stack_depth += 1;
 
@@ -318,7 +343,7 @@ impl StackAssistant {
                 let index_a = &ctx.sp - Int::from_i64(2);
                 let index_b = &ctx.sp - Int::from_i64(1);
 
-                let next = ctx.state.store(&index_a, &b).store(&index_b, &a);
+                let next = ctx.state.store(&index_a, b.as_ast()).store(&index_b, a.as_ast());
 
                 let next_sp = ctx.sp.clone();
 
@@ -337,7 +362,7 @@ impl StackAssistant {
             "@over" => {
                 let a = ctx.read_stack_at(2);
 
-                let next = ctx.state.store(&ctx.sp, &a);
+                let next = ctx.state.store(&ctx.sp, a.as_ast());
                 let next_sp = &ctx.sp + Int::from_i64(1);
                 ctx.max_possible_stack_depth += 1;
 
@@ -352,7 +377,7 @@ impl StackAssistant {
                 let index_b = &ctx.sp - Int::from_i64(2);
                 let index_c = &ctx.sp - Int::from_i64(1);
 
-                let next = ctx.state.store(&index_a, &b).store(&index_b, &c).store(&index_c, &a);
+                let next = ctx.state.store(&index_a, b.as_ast()).store(&index_b, c.as_ast()).store(&index_c, a.as_ast());
 
                 let next_sp = ctx.sp.clone();
 
@@ -367,7 +392,7 @@ impl StackAssistant {
                 let index_b = &ctx.sp - Int::from_i64(2);
                 let index_c = &ctx.sp - Int::from_i64(1);
 
-                let next = ctx.state.store(&index_a, &c).store(&index_b, &a).store(&index_c, &b);
+                let next = ctx.state.store(&index_a, c.as_ast()).store(&index_b, a.as_ast()).store(&index_c, b.as_ast());
 
                 let next_sp = ctx.sp.clone();
 
@@ -379,7 +404,7 @@ impl StackAssistant {
                 let b = ctx.read_stack_at(1);
                 let index = &ctx.sp - Int::from_i64(2);
 
-                let next = ctx.state.store(&index, &b);
+                let next = ctx.state.store(&index, b.as_ast());
                 let next_sp = &ctx.sp - Int::from_i64(1);
 
                 let validity = ctx.sp.ge(&Int::from_i64(2));
@@ -393,7 +418,7 @@ impl StackAssistant {
                 let index_b = &ctx.sp - Int::from_i64(1);
                 ctx.max_possible_stack_depth += 1;
 
-                let next = ctx.state.store(&index_a, &b).store(&index_b, &a).store(&ctx.sp, &b);
+                let next = ctx.state.store(&index_a, b.as_ast()).store(&index_b, a.as_ast()).store(&ctx.sp, b.as_ast());
 
                 let next_sp = &ctx.sp + Int::from_i64(1);
 
@@ -411,9 +436,9 @@ impl StackAssistant {
 
                     let reverse_index = &ctx.sp - Int::from_i64(1) - Int::from_i64(i);
 
-                    let reversed = ctx.state.select(&reverse_index).as_int().unwrap();
+                    let reversed = ctx.state.select(&reverse_index);
 
-                    let original = ctx.state.select(&index).as_int().unwrap();
+                    let original = ctx.state.select(&index);
 
                     let value = condition.ite(&reversed, &original);
 
@@ -427,9 +452,24 @@ impl StackAssistant {
             },
 
             "@depth" => {
-                let value = &ctx.sp + Int::from_i64(ctx.depth_offset);
+                let depth = &ctx.sp + Int::from_i64(ctx.depth_offset);
+                let value = Value::new(ctx.depth_fn.apply(&[&depth]));
 
-                let next = ctx.state.store(&ctx.sp, &value);
+                for val in ctx.literal_values.values().chain(ctx.names.values()) {
+                    ctx.solver.assert(&value.as_ast().eq(val.as_ast()).not());
+                }
+
+                for (prev_depth, prev_value) in &ctx.depth_values {
+                    // different depths must produce different values
+                    let same_depth = depth.eq(prev_depth);
+                    let different_value = value.as_ast().eq(prev_value.as_ast()).not();
+
+                    ctx.solver.assert(&Bool::or(&[&same_depth, &different_value]));
+                }
+
+                ctx.depth_values.push((depth.clone(), value.clone()));
+
+                let next = ctx.state.store(&ctx.sp, value.as_ast());
                 let next_sp = &ctx.sp + Int::from_i64(1);
                 ctx.max_possible_stack_depth += 1;
 
@@ -446,15 +486,15 @@ impl StackAssistant {
     }
 
     fn encode_value(&self, expression: &Expression, ctx: &mut EncodingContext, span: &Span) {
-        let id = ctx.literal_id(format!("{expression:?}"));
-        ctx.push_to_stack(id, span);
+        let value = ctx.get_or_create_value(format!("literal:{expression:?}"));
+        ctx.push_to_stack(&value, span);
     }
 
     fn encode_identifier(&self, identifier: &Identifier, ctx: &mut EncodingContext, span: &Span) {
         match identifier {
             Identifier::Variable(_) | Identifier::GlobalVar(_) => {
-                let id = ctx.literal_id(format!("{identifier:?}"));
-                ctx.push_to_stack(id, span);
+                let value = &ctx.get_or_create_value(format!("identifier:{identifier:?}"));
+                ctx.push_to_stack(&value, span);
             },
             Identifier::Function(_) => panic!("[internal error] function identifiers can't be inside a stack block"),
         }

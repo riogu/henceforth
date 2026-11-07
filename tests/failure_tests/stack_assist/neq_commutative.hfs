@@ -1,0 +1,4 @@
+fn main: () -> () {
+	@( 1 2 #(pre = a b, post = r r) { @over @over != @rrot @swap != } )
+	@pop_all
+}

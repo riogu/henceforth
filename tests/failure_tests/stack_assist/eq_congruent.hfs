@@ -1,0 +1,4 @@
+fn main: () -> () {
+	@( 1 2 3 #(pre = a b c, post = r s) { @rrot @over @over + @rrot @swap + @rot @tuck == @rrot == } ) //? ERROR "stack assertion failed"
+	@pop_all
+}

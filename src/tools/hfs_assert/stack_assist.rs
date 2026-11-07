@@ -5,7 +5,9 @@ use z3::ast::{Array, Bool, Dynamic, Int};
 use z3::{FuncDecl, SatResult, Solver, Sort, Symbol};
 
 use crate::hfs::error::{CompileError, DiagnosticInfo};
-use crate::hfs::{Expression, Identifier, Span, StackBlockExpression, StackEnvironment, StackModifier, VALID_STACK_KEYWORDS};
+use crate::hfs::{
+    Expression, Identifier, Operation, Span, StackBlockExpression, StackEnvironment, StackModifier, VALID_STACK_KEYWORDS,
+};
 use crate::stack_assist_error;
 use crate::tools::hfs_assert::marco_enumerator::MarcoEnumerator;
 use crate::tools::hfs_assert::stack_assist_errors::{StackAssistError, StackAssistErrorKind};
@@ -52,6 +54,7 @@ pub struct EncodingContext {
     pub next_step: usize,
     pub next_post: usize,
     pub literal_values: HashMap<String, Value>,
+    pub op_fns: HashMap<&'static str, FuncDecl>,
 }
 
 impl EncodingContext {
@@ -74,6 +77,7 @@ impl EncodingContext {
             depth_fn: FuncDecl::new("depth", &[&Sort::int()], &value_sort),
             value_sort,
             depth_values: vec![],
+            op_fns: HashMap::new(),
         }
     }
 
@@ -130,6 +134,18 @@ impl EncodingContext {
         self.literal_values.insert(key, value.clone());
         value
     }
+
+    fn apply_op(&mut self, name: &'static str, args: &[&Value]) -> Value {
+        if !self.op_fns.contains_key(name) {
+            let domain: Vec<&Sort> = args.iter().map(|_| &self.value_sort).collect();
+            let f = FuncDecl::new(name, &domain, &self.value_sort);
+            self.op_fns.insert(name, f);
+        }
+
+        let f = &self.op_fns[name];
+        let asts: Vec<&dyn z3::ast::Ast> = args.iter().map(|v| v.as_ast() as &dyn z3::ast::Ast).collect();
+        Value::new(f.apply(&asts))
+    }
 }
 
 pub struct StackAssistant {
@@ -167,6 +183,7 @@ impl StackAssistant {
         let (solver, constraints) = self.generate_variables_and_constraints(&normalized_environment);
         let assumptions: Vec<Bool> = constraints.iter().map(|c| c.literal.clone()).collect();
 
+        dbg!(&solver.get_assertions());
         if solver.check_assumptions(&assumptions) == SatResult::Sat {
             return Ok(());
         }
@@ -239,7 +256,7 @@ impl StackAssistant {
         for expr in environment.resolved_body.iter() {
             match expr {
                 StackBlockExpression::Expr(expression, span) => match expression {
-                    Expression::Operation(operation) => todo!(),
+                    Expression::Operation(operation) => self.encode_operation(operation, &mut ctx, span),
                     Expression::Identifier(identifier) => self.encode_identifier(identifier, &mut ctx, span),
                     Expression::Literal(_) | Expression::ArrayLiteral { .. } | Expression::Tuple { .. } => {
                         // TODO: make arrays and tuples use the arena to see if they are equal and intern properly
@@ -499,6 +516,55 @@ impl StackAssistant {
                 ctx.push_to_stack(&value, span);
             },
             Identifier::Function(_) => panic!("[internal error] function identifiers can't be inside a stack block"),
+        }
+    }
+
+    fn encode_binary(&self, name: &'static str, commutative: bool, ctx: &mut EncodingContext, span: &Span) {
+        let (a, b) = (ctx.read_stack_at(2), ctx.read_stack_at(1));
+        let result = ctx.apply_op(name, &[&a, &b]);
+
+        if commutative {
+            let swapped = ctx.apply_op(name, &[&b, &a]);
+            ctx.solver.assert(&result.as_ast().eq(swapped.as_ast()));
+        }
+
+        let index = &ctx.sp - Int::from_i64(2);
+        let next = ctx.state.store(&index, result.as_ast());
+        let next_sp = &ctx.sp - Int::from_i64(1);
+        let validity = ctx.sp.ge(&Int::from_i64(2));
+        ctx.commit(next, next_sp, validity, span);
+    }
+
+    fn encode_unary(&self, name: &'static str, ctx: &mut EncodingContext, span: &Span) {
+        let a = ctx.read_stack_at(1);
+        let result = ctx.apply_op(name, &[&a]);
+
+        let index = &ctx.sp - Int::from_i64(1);
+        let next = ctx.state.store(&index, result.as_ast());
+        let next_sp = ctx.sp.clone();
+        let validity = ctx.sp.ge(&Int::from_i64(1));
+        ctx.commit(next, next_sp, validity, span);
+    }
+
+    fn encode_operation(&self, operation: &Operation, ctx: &mut EncodingContext, span: &Span) {
+        match operation {
+            Operation::Add(..) => self.encode_binary("add", true, ctx, span),
+            Operation::Mul(..) => self.encode_binary("mul", true, ctx, span),
+            Operation::Equal(..) => self.encode_binary("eq", true, ctx, span),
+            Operation::NotEqual(..) => self.encode_binary("neq", true, ctx, span),
+            Operation::And(..) => self.encode_binary("and", true, ctx, span),
+            Operation::Or(..) => self.encode_binary("or", true, ctx, span),
+            Operation::Sub(..) => self.encode_binary("sub", false, ctx, span),
+            Operation::Div(..) => self.encode_binary("div", false, ctx, span),
+            Operation::Mod(..) => self.encode_binary("mod", false, ctx, span),
+            Operation::Less(..) => self.encode_binary("lt", false, ctx, span),
+            Operation::LessEqual(..) => self.encode_binary("le", false, ctx, span),
+            Operation::Greater(..) => self.encode_binary("gt", false, ctx, span),
+            Operation::GreaterEqual(..) => self.encode_binary("ge", false, ctx, span),
+            Operation::ArrayAccess(..) => self.encode_binary("index", false, ctx, span),
+            Operation::Not(_) => self.encode_unary("not", ctx, span),
+            Operation::AddressOf(_) => self.encode_unary("addr_of", ctx, span),
+            Operation::Dereference(_) => self.encode_unary("deref", ctx, span),
         }
     }
 }

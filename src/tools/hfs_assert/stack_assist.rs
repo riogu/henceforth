@@ -268,21 +268,23 @@ impl StackAssistant {
     }
 
     fn encode_precondition(&self, idents: &[String], ctx: &mut EncodingContext) {
-        let mut previous_values: Vec<Value> = Vec::new();
+        let mut previous: Vec<(&String, Value)> = Vec::new();
 
         for ident in idents {
             let value = ctx.get_or_create_value(format!("precondition:{ident}"));
 
             // distinct precondition identifiers represent distinct values
-            for previous in &previous_values {
-                ctx.solver.assert(&value.as_ast().eq(previous.as_ast()).not());
+            for (prev_name, prev_value) in &previous {
+                if *prev_name != ident {
+                    ctx.solver.assert(&value.as_ast().eq(prev_value.as_ast()).not());
+                }
             }
 
             let index = ctx.sp.clone();
             ctx.state = ctx.state.store(&index, value.as_ast());
 
             ctx.names.insert(ident.clone(), value.clone());
-            previous_values.push(value);
+            previous.push((ident, value));
 
             ctx.max_possible_stack_depth += 1;
             ctx.sp = &ctx.sp + Int::from_i64(1);

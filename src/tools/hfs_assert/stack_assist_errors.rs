@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use crate::{
     hfs::{
         Span,
-        error::{CompileError, DebugInfo, Label, Snippet},
+        error::{CompileError, DebugInfo, Hint, HintKind, Label, Snippet},
     },
     impl_display_for_error,
 };
@@ -22,6 +22,33 @@ pub enum StackAssistSpan {
     ModificationHint(Span),
     AdditionHint(Span),
     RegularSpan(Span),
+}
+
+impl StackAssistSpan {
+    fn span(&self) -> Span {
+        match self {
+            Self::PostCondition(s)
+            | Self::StackOperation(s)
+            | Self::RemovalHint(s)
+            | Self::ModificationHint(s)
+            | Self::AdditionHint(s)
+            | Self::RegularSpan(s) => *s,
+        }
+    }
+}
+
+impl StackAssistError {
+    fn hint_for(&self, keep: fn(&StackAssistSpan) -> bool, kind: HintKind, singular: &str, plural: &str) -> Option<Hint> {
+        let mut spans: Vec<Span> = self.spans.iter().filter(|s| keep(s)).map(|s| s.span()).collect();
+        if spans.is_empty() {
+            return None;
+        }
+        spans.sort_by_key(|s| (s.start.line, s.start.col));
+
+        let message = if spans.len() == 1 { singular } else { plural };
+        let labels = spans.into_iter().map(|span| Label { span, message: None }).collect();
+        Some(Hint { kind, message: message.to_string(), snippets: vec![Snippet::new(self.path.clone(), labels)] })
+    }
 }
 
 #[derive(Debug)]
@@ -114,6 +141,32 @@ impl CompileError for StackAssistError {
             },
             None => Span::default(),
         }
+    }
+
+    fn hints(&self) -> Vec<Hint> {
+        [
+            self.hint_for(
+                |s| matches!(s, StackAssistSpan::RemovalHint(_)),
+                HintKind::Removal,
+                "try removing this operation",
+                "try removing these operations",
+            ),
+            self.hint_for(
+                |s| matches!(s, StackAssistSpan::ModificationHint(_)),
+                HintKind::Modification,
+                "try changing this operation",
+                "try changing these operations",
+            ),
+            self.hint_for(
+                |s| matches!(s, StackAssistSpan::AdditionHint(_)),
+                HintKind::Addition,
+                "try adding an operation here",
+                "try adding operations here",
+            ),
+        ]
+        .into_iter()
+        .flatten()
+        .collect()
     }
 }
 

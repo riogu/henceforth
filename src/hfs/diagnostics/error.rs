@@ -15,6 +15,11 @@ pub struct Label {
     pub message: Option<String>,
 }
 
+pub enum DiagnosticKind {
+    Error,
+    Hint(HintKind),
+}
+
 pub struct Snippet {
     pub path: PathBuf,
     pub labels: Vec<Label>,
@@ -31,14 +36,6 @@ impl Snippet {
         Self { path, labels, gutter, pad, bar }
     }
 
-    fn get_lines(&self) -> Vec<String> {
-        let src = match fs::read_to_string(&self.path) {
-            Ok(src) => src,
-            Err(e) => format!("\n<source unavailable: {e}>"),
-        };
-        src.lines().map(String::from).collect()
-    }
-
     fn blank_line(&self) -> String {
         format!("\n{} {}", self.pad, self.bar)
     }
@@ -47,15 +44,47 @@ impl Snippet {
         format!("\n{}{} {}:{}:{}", self.pad, "-->".blue(), self.path.display(), first.span.start.line, first.span.start.col)
     }
 
-    fn source_line(&self, lines: &[&str], n: usize) -> String {
-        let gutter = self.gutter;
+    fn source_line(&self, lines: &[&str], n: usize, labels: &[&Label], kind: &DiagnosticKind) -> String {
         let text = lines.get(n - 1).copied().unwrap_or("");
-        let num = format!("{:>gutter$}", n).blue().bold();
-        format!("\n{num} {} {}", self.bar, text.replace('\t', "    "))
+        let text = match kind {
+            DiagnosticKind::Error => text.replace('\t', "    "),
+            DiagnosticKind::Hint(_) => self.highlight_text(text, n, labels, kind),
+        };
+
+        let num = format!("{:>width$}", n, width = self.gutter).blue().bold();
+
+        format!("\n{num} {} {text}", self.bar)
     }
 
-    fn underline(&self, line: &str, group: &[&Label]) -> String {
+    fn labels_on_line<'a>(labels: &[&'a Label], line: usize) -> Vec<&'a Label> {
+        labels.iter().copied().filter(|l| l.span.start.line <= line && l.span.end.line >= line).collect()
+    }
+
+    fn underline_character(&self, kind: &DiagnosticKind) -> char {
+        match kind {
+            DiagnosticKind::Error => '^',
+            DiagnosticKind::Hint(hint_kind) => match hint_kind {
+                HintKind::Addition => '+',
+                HintKind::Removal => '-',
+                HintKind::Modification => '~',
+            },
+        }
+    }
+
+    fn color_underline(&self, underline: String, kind: &DiagnosticKind) -> ColoredString {
+        match kind {
+            DiagnosticKind::Error => underline.red(),
+            DiagnosticKind::Hint(hint_kind) => match hint_kind {
+                HintKind::Addition => underline.green(),
+                HintKind::Removal => underline.red(),
+                HintKind::Modification => underline.yellow(),
+            },
+        }
+    }
+
+    fn underline(&self, line: &str, group: &[&Label], kind: &DiagnosticKind) -> String {
         let mut row: Vec<char> = Vec::new();
+        let char = self.underline_character(kind);
         for l in group {
             let offset = display_col(line, l.span.start.col);
             let width = if l.span.is_multiline() {
@@ -68,14 +97,66 @@ impl Snippet {
                 row.resize(offset + width, ' ');
             }
             for c in &mut row[offset..offset + width] {
-                *c = '^';
+                *c = char;
             }
         }
         let row: String = row.into_iter().collect();
-        format!("\n{} {} {}", self.pad, self.bar, row.red().bold())
+        format!("\n{} {} {}", self.pad, self.bar, self.color_underline(row, kind).bold())
     }
 
-    fn message_rows(&self, line: &str, group: &[&Label]) -> String {
+    fn highlight_text(&self, line: &str, line_no: usize, labels: &[&Label], kind: &DiagnosticKind) -> String {
+        let text = line.replace('\t', "    ");
+        let chars: Vec<char> = text.chars().collect();
+
+        let mut highlighted = vec![false; chars.len()];
+
+        for label in labels {
+            let start = if line_no == label.span.start.line {
+                display_col(line, label.span.start.col)
+            } else {
+                0
+            };
+
+            let end = if line_no == label.span.end.line {
+                display_col(line, label.span.end.col)
+            } else {
+                chars.len()
+            };
+
+            let start = start.min(chars.len());
+            let end = end.min(chars.len());
+
+            for i in start..end {
+                highlighted[i] = true;
+            }
+        }
+
+        let mut out = String::new();
+        let mut i = 0;
+
+        while i < chars.len() {
+            let state = highlighted[i];
+            let mut j = i + 1;
+
+            while j < chars.len() && highlighted[j] == state {
+                j += 1;
+            }
+
+            let segment: String = chars[i..j].iter().collect();
+
+            if state {
+                out += &self.color_underline(segment, kind).bold().to_string();
+            } else {
+                out += &segment;
+            }
+
+            i = j;
+        }
+
+        out
+    }
+
+    fn message_rows(&self, line: &str, group: &[&Label], kind: &DiagnosticKind) -> String {
         let mut out = String::new();
         let msgs: Vec<(usize, &str)> =
             group.iter().filter_map(|l| l.message.as_deref().map(|m| (display_col(line, l.span.start.col), m))).collect();
@@ -90,12 +171,12 @@ impl Snippet {
                 }
             }
             let row: String = row.into_iter().collect();
-            out += &format!("\n{} {} {}", self.pad, self.bar, format!("{row}{m}").red().bold());
+            out += &format!("\n{} {} {}", self.pad, self.bar, self.color_underline(format!("{row}{m}"), kind).bold());
         }
         out
     }
 
-    pub fn render(&self, show_location: bool) -> String {
+    pub fn render(&self, show_location: bool, kind: DiagnosticKind) -> String {
         let src = match fs::read_to_string(&self.path) {
             Ok(src) => src,
             Err(e) => return format!("\n<source unavailable: {e}>"),
@@ -119,16 +200,20 @@ impl Snippet {
                 out += &format!("\n{}", "...".blue().bold());
             }
             if line_no > last_printed {
-                out += &self.source_line(&lines, line_no);
+                let active = Self::labels_on_line(&labels, line_no);
+
+                out += &self.source_line(&lines, line_no, &active, &kind);
                 last_printed = line_no;
             }
             let line = lines.get(line_no - 1).copied().unwrap_or("");
-            out += &self.underline(line, group);
-            out += &self.message_rows(line, group);
+            out += &self.underline(line, group, &kind);
+            out += &self.message_rows(line, group, &kind);
 
             let end_line = group.iter().map(|l| l.span.end.line).max().unwrap();
             for n in (last_printed + 1)..=end_line {
-                out += &self.source_line(&lines, n);
+                let active = Self::labels_on_line(&labels, line_no);
+
+                out += &self.source_line(&lines, n, &active, &kind);
                 last_printed = n;
             }
         }
@@ -142,7 +227,15 @@ impl Snippet {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HintKind {
+    Addition,
+    Removal,
+    Modification,
+}
+
 pub struct Hint {
+    pub kind: HintKind,
     pub message: String,
     pub snippets: Vec<Snippet>,
 }
@@ -169,12 +262,12 @@ pub trait CompileError: Display + Debug {
     fn render(&self) -> ColoredString {
         let mut out = format!("{}", self.header());
         for s in self.snippets() {
-            out += &s.render(true);
+            out += &s.render(true, DiagnosticKind::Error);
         }
         for h in self.hints() {
             out += &format!("\n{} {}", "hint:".cyan().bold(), h.message);
             for s in &h.snippets {
-                out += &s.render(false);
+                out += &s.render(false, DiagnosticKind::Hint(h.kind));
             }
         }
         out += &self.debug_info().to_string();
@@ -243,4 +336,3 @@ fn display_col(_line: &str, col: usize) -> usize {
 fn display_width(line: &str) -> usize {
     line.replace('\t', "    ").chars().count()
 }
-

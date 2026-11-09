@@ -1,5 +1,3 @@
-use std::time::{Duration, Instant};
-
 use z3::{Params, SatResult, Solver, ast::Bool};
 
 use crate::{hfs::error::CompileError, tools::hfs_assert::stack_assist::TrackedConstraint};

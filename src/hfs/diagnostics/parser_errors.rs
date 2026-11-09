@@ -4,11 +4,8 @@ use colored::{ColoredString, Colorize, CustomColor};
 
 use crate::{
     hfs::{
-        Span, TokenKind, Type, UnresolvedAstArena, UnresolvedExpression, UnresolvedFunctionDeclaration, UnresolvedOperation,
-        UnresolvedStatement, UnresolvedTopLevelId, UnresolvedType, UnresolvedVarDeclaration, VALID_STACK_MODIFIERS,
-        error::{CompileError, DebugInfo, Dumpable, Label, Snippet},
-    },
-    impl_display_for_error,
+        Span, StackModifier, TokenKind, Type, UnresolvedAstArena, UnresolvedExpression, UnresolvedFunctionDeclaration, UnresolvedOperation, UnresolvedStatement, UnresolvedTopLevelId, UnresolvedType, UnresolvedVarDeclaration, VALID_STACK_MODIFIERS, error::{CompileError, DebugInfo, Dumpable, Label, Snippet},
+    }, impl_display_for_error,
 };
 
 #[derive(Debug)]
@@ -225,7 +222,7 @@ impl Dumpable for UnresolvedExpression {
                     elements.iter().map(|expr| arena.get_unresolved_expr(*expr).dump(arena)).collect();
                 ColoredString::from(format!(
                     "{}\n\t{}\n{}\n\t{}",
-                    "ArrayLiteral:".red(),
+                    "Array Literal:".red(),
                     "[".custom_color(CustomColor::new(129, 137, 150)),
                     indent_list(&items),
                     "]".custom_color(CustomColor::new(129, 137, 150))
@@ -234,7 +231,33 @@ impl Dumpable for UnresolvedExpression {
             UnresolvedExpression::StackKeyword(name) => {
                 ColoredString::from(format!("{} {}", "Stack Keyword".red().bold(), format!("({name})").green()))
             },
-            UnresolvedExpression::StackEnvironment(stack_modifiers, unresolved_expr_ids) => todo!(),
+            UnresolvedExpression::StackEnvironment(stack_modifiers, body) => {
+                let modifiers: Vec<ColoredString> =
+                    stack_modifiers.iter().map(|modifier| modifier.dump(arena)).collect();
+                let body_str: Vec<ColoredString> = 
+                    body.iter().map(|expr| arena.get_unresolved_expr(*expr).dump(arena)).collect();
+                ColoredString::from(format!(
+                    "{}\n\tModifiers: \n\t{}\n{}\n\t{}Body:\n\t{}\n{}\n\t{}",
+                    "Stack Environment:".red(),
+                    "[".custom_color(CustomColor::new(129, 137, 150)),
+                    indent_list(&modifiers),
+                    "]".custom_color(CustomColor::new(129, 137, 150)),
+                    "[".custom_color(CustomColor::new(129, 137, 150)),
+                    indent_list(&body_str),
+                    "]".custom_color(CustomColor::new(129, 137, 150)),
+                ))
+            },
+        }
+    }
+}
+
+impl Dumpable for StackModifier {
+    type Arena = UnresolvedAstArena;
+
+    fn dump(&self, _: &Self::Arena) -> ColoredString {
+        match self {
+            StackModifier::Pre(items, _) => ColoredString::from(format!("Pre({})", items.join(", "))),
+            StackModifier::Post(items, _) => ColoredString::from(format!("Post({})", items.join(", "))),
         }
     }
 }

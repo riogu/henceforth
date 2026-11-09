@@ -2,9 +2,14 @@ use std::{fmt::Display, path::PathBuf};
 
 use colored::{ColoredString, Colorize, CustomColor};
 
-use crate::{hfs::{
-    Span, TokenKind, Type, UnresolvedAstArena, UnresolvedExpression, UnresolvedFunctionDeclaration, UnresolvedOperation, UnresolvedStatement, UnresolvedTopLevelId, UnresolvedType, UnresolvedVarDeclaration, VALID_STACK_MODIFIERS, error::{CompileError, DebugInfo, Dumpable, Label, Snippet},
-}, impl_display_for_error};
+use crate::{
+    hfs::{
+        Span, TokenKind, Type, UnresolvedAstArena, UnresolvedExpression, UnresolvedFunctionDeclaration, UnresolvedOperation,
+        UnresolvedStatement, UnresolvedTopLevelId, UnresolvedType, UnresolvedVarDeclaration, VALID_STACK_MODIFIERS,
+        error::{CompileError, DebugInfo, Dumpable, Label, Snippet},
+    },
+    impl_display_for_error,
+};
 
 #[derive(Debug)]
 pub enum Expectable {
@@ -112,6 +117,10 @@ impl CompileError for ParserError {
 
     fn snippets(&self) -> Vec<Snippet> {
         vec![Snippet { path: self.path.clone(), labels: vec![Label { span: self.span, message: None }] }]
+    }
+
+    fn get_span(&self) -> Span {
+        self.span
     }
 }
 

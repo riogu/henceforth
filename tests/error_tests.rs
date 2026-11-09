@@ -16,7 +16,7 @@ const FAILURE_TESTS_FOLDERS: &[(&str, Phase)] = &[
 fn generate_test_function(test: Box<dyn Test + Send + Sync>, phase: Phase) -> Box<dyn Fn() -> Result<(), Failed> + Send + Sync> {
     Box::new(move || {
         if let Err(e) = run_until(test.path().to_str().unwrap(), phase, None) {
-            if test.check(TestInput::Error(e.message().0, e.get_line())) {
+            if test.check(TestInput::Error(e.message(), e.get_line())) {
                 Ok(())
             } else {
                 Err(format!("different error found {}", e).into())

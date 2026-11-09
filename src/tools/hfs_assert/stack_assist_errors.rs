@@ -71,6 +71,12 @@ impl CompileError for StackAssistError {
 
         vec![Snippet { path: self.path.clone(), labels }]
     }
+    fn get_span(&self) -> Span {
+        match self.spans.first() {
+            Some(first) => *first,
+            None => Span::default(),
+        }
+    }
 }
 
 impl_display_for_error!(StackAssistError);

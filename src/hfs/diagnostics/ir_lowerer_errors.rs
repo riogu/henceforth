@@ -123,6 +123,9 @@ impl CompileError for IrLowererError {
             }]
         }
     }
+    fn get_span(&self) -> Span {
+        self.span
+    }
 }
 
 impl_display_for_error!(IrLowererError);

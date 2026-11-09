@@ -168,6 +168,10 @@ impl CompileError for StackAnalyzerError {
     fn current_function(&self) -> Option<String> {
         self.current_function.clone()
     }
+
+    fn get_span(&self) -> Span {
+        self.span
+    }
 }
 
 impl_display_for_error!(StackAnalyzerError);

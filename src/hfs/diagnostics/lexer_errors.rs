@@ -76,6 +76,10 @@ impl CompileError for LexerError {
             }],
         }]
     }
+
+    fn get_span(&self) -> Span {
+        self.span
+    }
 }
 
 impl_display_for_error!(LexerError);

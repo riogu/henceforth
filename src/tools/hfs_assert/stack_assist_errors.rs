@@ -98,7 +98,7 @@ impl CompileError for StackAssistError {
         [(post_spans, post_text), (op_spans, op_text)]
             .into_iter()
             .filter(|(spans, _)| !spans.is_empty())
-            .map(|(spans, text)| Snippet { path: self.path.clone(), labels: to_labels(spans, text) })
+            .map(|(spans, text)| Snippet::new(self.path.clone(), to_labels(spans, text)))
             .collect()
     }
 

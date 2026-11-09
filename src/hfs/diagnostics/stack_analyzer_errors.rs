@@ -143,9 +143,9 @@ impl CompileError for StackAnalyzerError {
     }
 
     fn snippets(&self) -> Vec<Snippet> {
-        vec![Snippet {
-            path: self.path.clone(),
-            labels: vec![Label {
+        vec![Snippet::new(
+            self.path.clone(),
+            vec![Label {
                 span: self.span,
                 message: match &self.kind {
                     StackAnalyzerErrorKind::StackUnderflow => Some("stack underflow occured here".into()),
@@ -159,7 +159,7 @@ impl CompileError for StackAnalyzerError {
                     _ => None,
                 },
             }],
-        }]
+        )]
     }
 
     fn get_debug_info(&self) -> DebugInfo {

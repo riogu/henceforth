@@ -116,7 +116,7 @@ impl CompileError for ParserError {
     }
 
     fn snippets(&self) -> Vec<Snippet> {
-        vec![Snippet { path: self.path.clone(), labels: vec![Label { span: self.span, message: None }] }]
+        vec![Snippet::new(self.path.clone(), vec![Label { span: self.span, message: None }])]
     }
 
     fn get_span(&self) -> Span {

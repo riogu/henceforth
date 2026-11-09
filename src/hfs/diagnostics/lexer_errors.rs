@@ -1,13 +1,13 @@
-use std::{
-    fmt::{self, Display},
-    path::PathBuf,
-};
 use crate::{
     hfs::{
         Span, Token, VALID_STACK_KEYWORDS,
         error::{CompileError, DebugInfo, Label, Snippet},
     },
     impl_display_for_error,
+};
+use std::{
+    fmt::{self, Display},
+    path::PathBuf,
 };
 
 #[derive(Debug)]
@@ -64,9 +64,9 @@ impl CompileError for LexerError {
     }
 
     fn snippets(&self) -> Vec<Snippet> {
-        vec![Snippet {
-            path: self.path.clone(),
-            labels: vec![Label {
+        vec![Snippet::new(
+            self.path.clone(),
+            vec![Label {
                 span: self.span,
                 message: match self.kind {
                     LexerErrorKind::UnexpectedChar => Some("unexpected character".into()),
@@ -74,7 +74,7 @@ impl CompileError for LexerError {
                     LexerErrorKind::InvalidStackKeyword => None,
                 },
             }],
-        }]
+        )]
     }
 
     fn get_span(&self) -> Span {

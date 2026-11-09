@@ -8,6 +8,7 @@ use std::{
 use colored::{ColoredString, Colorize};
 
 use crate::hfs::Span;
+const MAX_WIDTH: usize = 100;
 
 pub struct Label {
     pub span: Span,
@@ -17,6 +18,128 @@ pub struct Label {
 pub struct Snippet {
     pub path: PathBuf,
     pub labels: Vec<Label>,
+    gutter: usize,
+    pad: String,
+    bar: ColoredString,
+}
+
+impl Snippet {
+    pub fn new(path: PathBuf, labels: Vec<Label>) -> Self {
+        let gutter = number_length(labels.iter().map(|l| l.span.end.line).max().unwrap());
+        let pad = " ".repeat(gutter);
+        let bar = "|".blue().bold();
+        Self { path, labels, gutter, pad, bar }
+    }
+
+    fn get_lines(&self) -> Vec<String> {
+        let src = match fs::read_to_string(&self.path) {
+            Ok(src) => src,
+            Err(e) => format!("\n<source unavailable: {e}>"),
+        };
+        src.lines().map(String::from).collect()
+    }
+
+    fn blank_line(&self) -> String {
+        format!("\n{} {}", self.pad, self.bar)
+    }
+
+    fn location_line(&self, first: &Label) -> String {
+        format!("\n{}{} {}:{}:{}", self.pad, "-->".blue(), self.path.display(), first.span.start.line, first.span.start.col)
+    }
+
+    fn source_line(&self, lines: &[&str], n: usize) -> String {
+        let gutter = self.gutter;
+        let text = lines.get(n - 1).copied().unwrap_or("");
+        let num = format!("{:>gutter$}", n).blue().bold();
+        format!("\n{num} {} {}", self.bar, text.replace('\t', "    "))
+    }
+
+    fn underline(&self, line: &str, group: &[&Label]) -> String {
+        let mut row: Vec<char> = Vec::new();
+        for l in group {
+            let offset = display_col(line, l.span.start.col);
+            let width = if l.span.is_multiline() {
+                display_width(line) - offset
+            } else {
+                display_col(line, l.span.end.col) - offset
+            }
+            .max(1);
+            if row.len() < offset + width {
+                row.resize(offset + width, ' ');
+            }
+            for c in &mut row[offset..offset + width] {
+                *c = '^';
+            }
+        }
+        let row: String = row.into_iter().collect();
+        format!("\n{} {} {}", self.pad, self.bar, row.red().bold())
+    }
+
+    fn message_rows(&self, line: &str, group: &[&Label]) -> String {
+        let mut out = String::new();
+        let msgs: Vec<(usize, &str)> =
+            group.iter().filter_map(|l| l.message.as_deref().map(|m| (display_col(line, l.span.start.col), m))).collect();
+        for k in (0..msgs.len()).rev() {
+            let (col, m) = msgs[k];
+            let budget = MAX_WIDTH.saturating_sub(self.gutter + 3 + m.chars().count());
+            let col = col.min(budget);
+            let mut row = vec![' '; col];
+            for &(c, _) in &msgs[..k] {
+                if c < col {
+                    row[c] = '|';
+                }
+            }
+            let row: String = row.into_iter().collect();
+            out += &format!("\n{} {} {}", self.pad, self.bar, format!("{row}{m}").red().bold());
+        }
+        out
+    }
+
+    pub fn render(&self, show_location: bool) -> String {
+        let src = match fs::read_to_string(&self.path) {
+            Ok(src) => src,
+            Err(e) => return format!("\n<source unavailable: {e}>"),
+        };
+        let lines: Vec<&str> = src.lines().collect();
+        let labels = self.sorted_labels();
+        let Some(first) = labels.first() else {
+            return String::new();
+        };
+
+        let mut out = String::new();
+        if show_location {
+            out += &self.location_line(first);
+        }
+        out += &self.blank_line();
+
+        let mut last_printed = 0usize;
+        for group in labels.chunk_by(|a, b| a.span.start.line == b.span.start.line) {
+            let line_no = group[0].span.start.line;
+            if last_printed != 0 && line_no > last_printed + 1 {
+                out += &format!("\n{}", "...".blue().bold());
+            }
+            if line_no > last_printed {
+                out += &self.source_line(&lines, line_no);
+                last_printed = line_no;
+            }
+            let line = lines.get(line_no - 1).copied().unwrap_or("");
+            out += &self.underline(line, group);
+            out += &self.message_rows(line, group);
+
+            let end_line = group.iter().map(|l| l.span.end.line).max().unwrap();
+            for n in (last_printed + 1)..=end_line {
+                out += &self.source_line(&lines, n);
+                last_printed = n;
+            }
+        }
+        out + &self.blank_line()
+    }
+
+    fn sorted_labels(&self) -> Vec<&Label> {
+        let mut labels: Vec<&Label> = self.labels.iter().collect();
+        labels.sort_by_key(|l| (l.span.start.line, l.span.start.col));
+        labels
+    }
 }
 
 pub struct Hint {
@@ -46,12 +169,12 @@ pub trait CompileError: Display + Debug {
     fn render(&self) -> ColoredString {
         let mut out = format!("{}", self.header());
         for s in self.snippets() {
-            out += &render_snippet(&s, true);
+            out += &s.render(true);
         }
         for h in self.hints() {
             out += &format!("\n{} {}", "hint:".cyan().bold(), h.message);
             for s in &h.snippets {
-                out += &render_snippet(s, false);
+                out += &s.render(false);
             }
         }
         out += &self.debug_info().to_string();
@@ -121,99 +244,3 @@ fn display_width(line: &str) -> usize {
     line.replace('\t', "    ").chars().count()
 }
 
-const MAX_WIDTH: usize = 100;
-
-pub fn render_snippet(s: &Snippet, show_location: bool) -> String {
-    let src = match fs::read_to_string(&s.path) {
-        Ok(src) => src,
-        Err(e) => return format!("\n<source unavailable: {e}>"),
-    };
-    let lines: Vec<&str> = src.lines().collect();
-
-    let mut labels: Vec<&Label> = s.labels.iter().collect();
-    labels.sort_by_key(|l| (l.span.start.line, l.span.start.col));
-    let Some(first) = labels.first() else {
-        return String::new();
-    };
-
-    let gutter = number_length(labels.iter().map(|l| l.span.end.line).max().unwrap());
-    let pad = " ".repeat(gutter);
-    let bar = "|".blue().bold();
-    let mut out = String::new();
-
-    if show_location {
-        out += &format!("\n{pad}{} {}:{}:{}", "-->".blue(), s.path.display(), first.span.start.line, first.span.start.col);
-    }
-    out += &format!("\n{pad} {bar}");
-
-    let print_line = |out: &mut String, n: usize| {
-        let text = lines.get(n - 1).copied().unwrap_or("");
-        let num = format!("{:>gutter$}", n).blue().bold();
-        *out += &format!("\n{num} {bar} {}", text.replace('\t', "    "));
-    };
-
-    let mut last_printed = 0usize;
-    let mut i = 0;
-    while i < labels.len() {
-        let line_no = labels[i].span.start.line;
-        let mut j = i;
-        while j < labels.len() && labels[j].span.start.line == line_no {
-            j += 1;
-        }
-        let group = &labels[i..j];
-        i = j;
-
-        if last_printed != 0 && line_no > last_printed + 1 {
-            out += &format!("\n{}", "...".blue().bold());
-        }
-        if line_no > last_printed {
-            print_line(&mut out, line_no);
-            last_printed = line_no;
-        }
-        let line = lines.get(line_no - 1).copied().unwrap_or("");
-
-        let mut row: Vec<char> = Vec::new();
-        for l in group {
-            let offset = display_col(line, l.span.start.col);
-            let width = if l.span.is_multiline() {
-                display_width(line) - offset
-            } else {
-                display_col(line, l.span.end.col) - offset
-            }
-            .max(1);
-            if row.len() < offset + width {
-                row.resize(offset + width, ' ');
-            }
-            for c in &mut row[offset..offset + width] {
-                *c = '^';
-            }
-        }
-        let row: String = row.into_iter().collect();
-        out += &format!("\n{pad} {bar} {}", row.red().bold());
-
-        let msgs: Vec<(usize, &str)> =
-            group.iter().filter_map(|l| l.message.as_deref().map(|m| (display_col(line, l.span.start.col), m))).collect();
-        for k in (0..msgs.len()).rev() {
-            let (col, m) = msgs[k];
-            let budget = MAX_WIDTH.saturating_sub(gutter + 3 + m.chars().count());
-            let col = col.min(budget);
-            let mut row = vec![' '; col];
-            for &(c, _) in &msgs[..k] {
-                if c < col {
-                    row[c] = '|';
-                }
-            }
-            let row: String = row.into_iter().collect();
-            out += &format!("\n{pad} {bar} {}", format!("{row}{m}").red().bold());
-        }
-
-        let end_line = group.iter().map(|l| l.span.end.line).max().unwrap();
-        for n in (last_printed + 1)..=end_line {
-            print_line(&mut out, n);
-            last_printed = n;
-        }
-    }
-
-    out += &format!("\n{pad} {bar}");
-    out
-}

@@ -110,9 +110,9 @@ impl CompileError for IrLowererError {
 
     fn snippets(&self) -> Vec<Snippet> {
         {
-            vec![Snippet {
-                path: self.path.clone(),
-                labels: vec![Label {
+            vec![Snippet::new(
+                self.path.clone(),
+                vec![Label {
                     span: self.span,
                     message: match &self.kind {
                         IrLowererErrorKind::StackUnderflow => Some("stack underflow occured here".into()),
@@ -120,7 +120,7 @@ impl CompileError for IrLowererError {
                         _ => None,
                     },
                 }],
-            }]
+            )]
         }
     }
     fn get_span(&self) -> Span {

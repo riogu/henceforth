@@ -1,4 +1,5 @@
 fn main: () -> () {
 	@( 1 2 #(pre = a b, post = a b) { @pop @pop } )//? ERROR "stack assertion failed"
+	//? HINT "try removing {{*}}" @[^1]
 	@pop_all
 }

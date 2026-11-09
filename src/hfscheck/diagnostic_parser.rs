@@ -6,6 +6,7 @@ pub struct DiagnosticParser {}
 
 pub struct DiagnosticTest {
     pub path: PathBuf,
+    pub is_error: bool,
     pub message_check: Box<dyn Fn(String) -> bool + Send + Sync>,
     pub diagnostic_line_check: Box<dyn Fn(usize) -> bool + Send + Sync>,
 }
@@ -20,10 +21,14 @@ impl Test for DiagnosticTest {
     }
 
     fn path(&self) -> &PathBuf { &self.path }
+
+    fn is_error(&self) -> bool {
+        self.is_error
+    }
 }
 
 impl DiagnosticParser {
-    pub fn generate_test(path: &'_ PathBuf, line_number: usize, diagnostic: String) -> DiagnosticTest {
+    pub fn generate_test(path: &'_ PathBuf, line_number: usize, diagnostic: String, is_error: bool) -> DiagnosticTest {
         let mut chars_iter = diagnostic.chars().peekable();
         let mut diagnostic_line_check: Box<dyn Fn(usize) -> bool + Send + Sync> = Box::new(move |l| l == line_number);
         let mut bindings = HashMap::new();
@@ -54,7 +59,7 @@ impl DiagnosticParser {
             }
         }
 
-        return DiagnosticTest { path: path.clone(), message_check, diagnostic_line_check };
+        return DiagnosticTest { path: path.clone(), message_check, diagnostic_line_check, is_error };
     }
 
     fn generate_diagnostic_line_check(diagnostic_position: String, line_number: usize) -> Box<dyn Fn(usize) -> bool + Send + Sync> {
@@ -89,7 +94,7 @@ mod tests {
     #[test]
     fn test_empty_diagnostic_matches_any_message() {
         let path = PathBuf::new();
-        let test = DiagnosticParser::generate_test(&path, 1, String::new());
+        let test = DiagnosticParser::generate_test(&path, 1, String::new(), true);
         assert!((test.message_check)(String::from("any message")));
         assert!((test.message_check)(String::from("literally any message")));
         assert!((test.message_check)(String::new()));
@@ -98,7 +103,7 @@ mod tests {
     #[test]
     fn test_empty_diagnostic_matches_exact_line() {
         let path = PathBuf::new();
-        let test = DiagnosticParser::generate_test(&path, 1, String::new());
+        let test = DiagnosticParser::generate_test(&path, 1, String::new(), true);
         assert!((test.diagnostic_line_check)(1));
         assert!(!(test.diagnostic_line_check)(3));
         assert!(!(test.diagnostic_line_check)(5));
@@ -107,7 +112,7 @@ mod tests {
     #[test]
     fn test_upstar_matches_any_before() {
         let path = PathBuf::new();
-        let test = DiagnosticParser::generate_test(&path, 50, String::from("@[^*]"));
+        let test = DiagnosticParser::generate_test(&path, 50, String::from("@[^*]"), true);
         assert!((test.diagnostic_line_check)(30));
         assert!((test.diagnostic_line_check)(1));
         assert!((test.diagnostic_line_check)(15));
@@ -118,7 +123,7 @@ mod tests {
     #[test]
     fn test_downstar_matches_any_after() {
         let path = PathBuf::new();
-        let test = DiagnosticParser::generate_test(&path, 50, String::from("@[v*]"));
+        let test = DiagnosticParser::generate_test(&path, 50, String::from("@[v*]"), true);
         assert!((test.diagnostic_line_check)(60));
         assert!((test.diagnostic_line_check)(70));
         assert!((test.diagnostic_line_check)(150));
@@ -129,28 +134,28 @@ mod tests {
     #[test]
     fn test_downn_matches_n_after() {
         let path = PathBuf::new();
-        let test = DiagnosticParser::generate_test(&path, 50, String::from("@[v5]"));
+        let test = DiagnosticParser::generate_test(&path, 50, String::from("@[v5]"), true);
         assert!((test.diagnostic_line_check)(55));
     }
 
     #[test]
     fn test_upn_matches_n_before() {
         let path = PathBuf::new();
-        let test = DiagnosticParser::generate_test(&path, 50, String::from("@[^5]"));
+        let test = DiagnosticParser::generate_test(&path, 50, String::from("@[^5]"), true);
         assert!((test.diagnostic_line_check)(45));
     }
 
     #[test]
     fn test_dot_matches_exact_line() {
         let path = PathBuf::new();
-        let test = DiagnosticParser::generate_test(&path, 50, String::from("@[.]"));
+        let test = DiagnosticParser::generate_test(&path, 50, String::from("@[.]"), true);
         assert!((test.diagnostic_line_check)(50));
     }
 
     #[test]
     fn test_empty_pos_matches_exact_line() {
         let path = PathBuf::new();
-        let test = DiagnosticParser::generate_test(&path, 50, String::from("@[]"));
+        let test = DiagnosticParser::generate_test(&path, 50, String::from("@[]"), true);
         assert!((test.diagnostic_line_check)(50));
     }
 }

@@ -16,10 +16,23 @@ const FAILURE_TESTS_FOLDERS: &[(&str, Phase)] = &[
 fn generate_test_function(test: Box<dyn Test + Send + Sync>, phase: Phase) -> Box<dyn Fn() -> Result<(), Failed> + Send + Sync> {
     Box::new(move || {
         if let Err(e) = run_until(test.path().to_str().unwrap(), phase, None) {
-            if test.check(TestInput::Diagnostic(e.message(), e.get_line())) {
-                Ok(())
+            if test.is_error() {
+                if test.check(TestInput::Diagnostic(e.message(), e.get_line())) {
+                    Ok(())
+                } else {
+                    Err(format!("different diagnostic found {}", e).into())
+                }
             } else {
-                Err(format!("different diagnostic found {}", e).into())
+                let hints = e.hints();
+                let hint = match hints.first() {
+                    Some(first) => first,
+                    None => panic!("[internal error] no hints found"),
+                };
+                if test.check(TestInput::Diagnostic(hint.message.clone(), e.get_line())) {
+                    Ok(())
+                } else {
+                    Err(format!("different diagnostic found {}", e).into())
+                }
             }
         } else {
             Err("no diagnostic found".into())
@@ -34,8 +47,9 @@ fn get_tests() -> Result<Vec<Trial>, Box<dyn Error>> {
         for entry in entries {
             let tests = generate_tests(&entry);
             for test in tests {
+                let name = format!("{}:{}", if test.is_error() { "ERROR" } else { "HINT" }, entry.to_str().unwrap());
                 let trial = generate_test_function(test, folder.1);
-                trials.push(Trial::test(entry.to_str().unwrap(), trial));
+                trials.push(Trial::test(name, trial));
             }
         }
     }

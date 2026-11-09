@@ -1,5 +1,6 @@
 fn main: () -> () {
 	let a: [5]i32;
 	@(a 2 3 #(pre = c a b, post = r s) { @over @over + @rrot @swap + @rot @tuck @swap [] @rot @rot @swap [] } ) //? ERROR "stack assertion failed"
+	//? HINT "try removing {{*}}" @[^1]
 	@pop_all
 }

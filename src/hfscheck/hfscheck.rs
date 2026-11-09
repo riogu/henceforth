@@ -20,7 +20,7 @@ pub enum CheckKind {
 
 #[derive(Debug, PartialEq)]
 pub enum Assertion<'a> {
-    Diagnostic(&'a PathBuf, usize, String),
+    Diagnostic(&'a PathBuf, usize, String, bool),
     CheckFn { path: &'a PathBuf, name: String, checks: Vec<CheckKind>, pipelines: Vec<String> },
     Compile(&'a PathBuf),
 }
@@ -43,6 +43,9 @@ pub enum TestInput {
 pub trait Test {
     fn check(&self, input: TestInput) -> bool;
     fn path(&self) -> &PathBuf;
+    fn is_error(&self) -> bool {
+        panic!("cannot call is_error on a non-diagnostic test")
+    }
 }
 
 type HfsRegexFn = Box<dyn Fn(String) -> bool + Send + Sync + 'static>;
@@ -126,7 +129,7 @@ impl HfsRegex {
                     }
                 },
 
-                '{' =>
+                '{' => {
                     if chars.next_if(|c| c == &'{').is_some() {
                         let inner_chars = {
                             let mut inner = String::new();
@@ -152,7 +155,8 @@ impl HfsRegex {
                             inner
                         };
                         patterns.append(&mut HfsRegex::parse_inner(inner_chars));
-                    },
+                    }
+                },
                 c => {
                     let mut text = String::from(c);
                     while let Some(c) = chars.next_if(|c| !matches!(c, ' ' | '[' | '{' | '*' | '.')) {
@@ -236,7 +240,12 @@ pub fn find_assertions<'a>(path: &'a PathBuf, text: String) -> Vec<Assertion<'a>
                                     let rest = &line_string[line_column..].trim_start_matches(' ');
                                     let (kind, msg) = rest.split_once(' ').unwrap_or((rest, ""));
                                     match kind {
-                                        "ERROR" => assertions.push(Assertion::Diagnostic(path, line_number + 1, msg.to_string())),
+                                        "ERROR" => {
+                                            assertions.push(Assertion::Diagnostic(path, line_number + 1, msg.to_string(), true))
+                                        },
+                                        "HINT" => {
+                                            assertions.push(Assertion::Diagnostic(path, line_number + 1, msg.to_string(), false))
+                                        },
                                         "COMPILE" => assertions.push(Assertion::Compile(path)),
                                         "CHECK" => {
                                             let (check_kind, msg) = msg.split_once(' ').unwrap_or((msg, ""));
@@ -265,7 +274,7 @@ pub fn find_assertions<'a>(path: &'a PathBuf, text: String) -> Vec<Assertion<'a>
                                                         rest.trim_matches('"').trim().to_string(),
                                                     )
                                                 },
-                                                _ =>
+                                                _ => {
                                                     if msg.len() > 0 {
                                                         CheckKind::Plain(
                                                             (check_kind.to_string() + " " + msg)
@@ -277,7 +286,8 @@ pub fn find_assertions<'a>(path: &'a PathBuf, text: String) -> Vec<Assertion<'a>
                                                         CheckKind::Plain(
                                                             (check_kind.to_string()).trim_matches('"').trim().to_string(),
                                                         )
-                                                    },
+                                                    }
+                                                },
                                             };
                                             if let Some(Assertion::CheckFn { checks, .. }) = curr_check_fn.as_mut() {
                                                 checks.push(kind);
@@ -312,9 +322,13 @@ pub struct CompileTest {
 impl Test for CompileTest {
     // check is unused by CompileTest, we don't actually want to check for
     // conditions other than it compiling (this part is done in the trial generation)
-    fn check(&self, _: TestInput) -> bool { true }
+    fn check(&self, _: TestInput) -> bool {
+        true
+    }
 
-    fn path(&self) -> &PathBuf { &self.path }
+    fn path(&self) -> &PathBuf {
+        &self.path
+    }
 }
 
 pub fn generate_tests(path: &PathBuf) -> Vec<Box<dyn Test + Send + Sync>> {
@@ -322,7 +336,9 @@ pub fn generate_tests(path: &PathBuf) -> Vec<Box<dyn Test + Send + Sync>> {
     let mut tests: Vec<Box<dyn Test + Send + Sync>> = Vec::new();
     for assertion in assertions {
         match assertion {
-            Assertion::Diagnostic(path, line, diagnostic) => tests.push(Box::new(DiagnosticParser::generate_test(path, line, diagnostic))),
+            Assertion::Diagnostic(path, line, diagnostic, is_error) => {
+                tests.push(Box::new(DiagnosticParser::generate_test(path, line, diagnostic, is_error)))
+            },
             Assertion::CheckFn { path, name, checks, pipelines } => {
                 let mut dump = false;
                 let mut parsed_pipelines: Vec<(Box<dyn OptPipeline + Send + Sync>, bool)> = pipelines
@@ -379,7 +395,16 @@ mod assertion_tests {
         let assertions = find_assertions(&path, fs::read_to_string(&path).expect("Could not read file."));
 
         assert_eq!(assertions.len(), 1);
-        assert_eq!(assertions[0], Assertion::Diagnostic(&path, 1, String::from("\"unexpected character\"")));
+        assert_eq!(assertions[0], Assertion::Diagnostic(&path, 1, String::from("\"unexpected character\""), true));
+    }
+
+    #[test]
+    fn test_finds_hint_diagnostic() {
+        let path = PathBuf::new();
+        let assertions = find_assertions(&path, "//? HINT \"try removing {{*}}\"".to_string());
+
+        assert_eq!(assertions.len(), 1);
+        assert_eq!(assertions[0], Assertion::Diagnostic(&path, 1, String::from("\"try removing {{*}}\""), false));
     }
 
     #[test]

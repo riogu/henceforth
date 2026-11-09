@@ -29,8 +29,8 @@ name = "henceforth"
 path = "src/lib.rs"
 
 [[test]]
-name = "error_tests"
-path = "tests/error_tests.rs"
+name = "diagnostic_tests"
+path = "tests/diagnostic_tests.rs"
 harness = false
 
 [[test]]

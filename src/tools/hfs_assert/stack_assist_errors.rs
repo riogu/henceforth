@@ -14,11 +14,21 @@ pub enum StackAssistErrorKind {
     AssertionFailed,
 }
 
+#[derive(Debug, Clone)]
+pub enum StackAssistSpan {
+    PostCondition(Span),
+    StackOperation(Span),
+    RemovalHint(Span),
+    ModificationHint(Span),
+    AdditionHint(Span),
+    RegularSpan(Span),
+}
+
 #[derive(Debug)]
 pub struct StackAssistError {
     pub kind: StackAssistErrorKind,
     pub path: PathBuf,
-    pub spans: Vec<Span>,
+    pub spans: Vec<StackAssistSpan>,
     pub debug_info: DebugInfo,
 }
 
@@ -54,26 +64,54 @@ impl CompileError for StackAssistError {
     }
 
     fn snippets(&self) -> Vec<Snippet> {
-        let label_text = match &self.kind {
-            StackAssistErrorKind::NoPostconditionFound => None,
-            StackAssistErrorKind::AssertionFailed => Some("these expressions conflict with the post condition"),
+        let sorted = |pick: fn(&StackAssistSpan) -> Option<Span>| -> Vec<Span> {
+            let mut spans: Vec<Span> = self.spans.iter().filter_map(pick).collect();
+            spans.sort_by_key(|s| (s.start.line, s.start.col));
+            spans
         };
 
-        let mut spans = self.spans.clone();
-        spans.sort_by_key(|s| (s.start.line, s.start.col));
+        let post_spans = sorted(|s| match s {
+            StackAssistSpan::PostCondition(span) => Some(*span),
+            _ => None,
+        });
+        let op_spans = sorted(|s| match s {
+            StackAssistSpan::StackOperation(span) => Some(*span),
+            _ => None,
+        });
 
-        let last = spans.len().saturating_sub(1);
-        let labels = spans
-            .iter()
-            .enumerate()
-            .map(|(i, span)| Label { span: *span, message: if i == last { label_text.map(String::from) } else { None } })
-            .collect();
+        let to_labels = |spans: Vec<Span>, text: Option<&str>| -> Vec<Label> {
+            let last = spans.len().saturating_sub(1);
+            spans
+                .into_iter()
+                .enumerate()
+                .map(|(i, span)| Label { span, message: if i == last { text.map(String::from) } else { None } })
+                .collect()
+        };
 
-        vec![Snippet { path: self.path.clone(), labels }]
+        let (post_text, op_text) = match &self.kind {
+            StackAssistErrorKind::NoPostconditionFound => (None, None),
+            StackAssistErrorKind::AssertionFailed => {
+                (Some("postcondition does not hold"), Some("these expressions conflict with the postcondition"))
+            },
+        };
+
+        [(post_spans, post_text), (op_spans, op_text)]
+            .into_iter()
+            .filter(|(spans, _)| !spans.is_empty())
+            .map(|(spans, text)| Snippet { path: self.path.clone(), labels: to_labels(spans, text) })
+            .collect()
     }
+
     fn get_span(&self) -> Span {
         match self.spans.first() {
-            Some(first) => *first,
+            Some(first) => match first {
+                StackAssistSpan::PostCondition(span) => *span,
+                StackAssistSpan::StackOperation(span) => *span,
+                StackAssistSpan::RemovalHint(span) => *span,
+                StackAssistSpan::ModificationHint(span) => *span,
+                StackAssistSpan::AdditionHint(span) => *span,
+                StackAssistSpan::RegularSpan(span) => *span,
+            },
             None => Span::default(),
         }
     }

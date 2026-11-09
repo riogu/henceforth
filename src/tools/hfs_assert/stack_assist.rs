@@ -10,7 +10,7 @@ use crate::hfs::{
 };
 use crate::stack_assist_error;
 use crate::tools::hfs_assert::marco_enumerator::MarcoEnumerator;
-use crate::tools::hfs_assert::stack_assist_errors::{StackAssistError, StackAssistErrorKind};
+use crate::tools::hfs_assert::stack_assist_errors::{StackAssistError, StackAssistErrorKind, StackAssistSpan};
 
 #[derive(Clone)]
 pub struct Value(Dynamic);
@@ -171,7 +171,11 @@ impl StackAssistant {
                 span: environment.span,
             }),
             (Some(_), None) => {
-                return stack_assist_error!(StackAssistErrorKind::NoPostconditionFound, &self, vec![environment.span]);
+                return stack_assist_error!(
+                    StackAssistErrorKind::NoPostconditionFound,
+                    &self,
+                    vec![StackAssistSpan::RegularSpan(environment.span)]
+                );
             },
             (Some(_), Some(_)) => Ok(environment),
         }
@@ -183,7 +187,6 @@ impl StackAssistant {
         let (solver, constraints) = self.generate_variables_and_constraints(&normalized_environment);
         let assumptions: Vec<Bool> = constraints.iter().map(|c| c.literal.clone()).collect();
 
-        dbg!(&solver.get_assertions());
         if solver.check_assumptions(&assumptions) == SatResult::Sat {
             return Ok(());
         }
@@ -191,44 +194,24 @@ impl StackAssistant {
         let marco = MarcoEnumerator::new(solver.clone(), constraints.clone());
         let result = marco.enumerate()?;
 
-        if !result.muses.is_empty() {
-            let best_mus = result.muses.iter().min_by_key(|mus| {
-                let operation_count = mus.iter().filter(|&&i| constraints[i].kind == ConstraintKind::StackOperation).count();
+        let best_mus = result.muses.iter().min_by_key(|mus| {
+            let operation_count = mus.iter().filter(|&&i| constraints[i].kind == ConstraintKind::StackOperation).count();
+            (operation_count == 0, operation_count)
+        });
 
-                (operation_count == 0, operation_count)
-            });
+        let _best_mcs = result
+            .mcses
+            .iter()
+            .filter(|mcs| !mcs.is_empty() && mcs.iter().all(|&i| constraints[i].kind == ConstraintKind::StackOperation))
+            .min_by_key(|mcs| (mcs.len(), std::cmp::Reverse(mcs.iter().max().copied())));
 
-            let best_mcs = result
-                .mcses
-                .iter()
-                .filter(|mcs| !mcs.is_empty() && mcs.iter().all(|&i| constraints[i].kind == ConstraintKind::StackOperation))
-                .min_by_key(|mcs| (mcs.len(), std::cmp::Reverse(mcs.iter().max().copied())));
-
-            dbg!(&result.mcses);
-            match best_mus {
-                Some(loc) => match best_mcs {
-                    Some(mcs) => {
-                        dbg!(self.get_error_locations(&[mcs.clone()], &constraints));
-                        return stack_assist_error!(
-                            StackAssistErrorKind::AssertionFailed,
-                            &self,
-                            self.get_error_locations(&[loc.clone()], &constraints).first().unwrap().clone()
-                        );
-                    },
-
-                    None => {
-                        return stack_assist_error!(
-                            StackAssistErrorKind::AssertionFailed,
-                            &self,
-                            self.get_error_locations(&[loc.clone()], &constraints).first().unwrap().clone()
-                        );
-                    },
-                },
-                None => panic!("[internal error] could not find best MUS"),
-            }
+        match best_mus {
+            Some(mus) => {
+                let spans = self.get_error_locations(&[mus.clone()], &constraints).remove(0);
+                stack_assist_error!(StackAssistErrorKind::AssertionFailed, &self, spans)
+            },
+            None => Ok(()),
         }
-
-        Ok(())
     }
 
     fn generate_variables_and_constraints(&self, environment: &StackEnvironment) -> (Solver, Vec<TrackedConstraint>) {
@@ -498,8 +481,21 @@ impl StackAssistant {
         }
     }
 
-    fn get_error_locations(&self, muses: &[Vec<usize>], constraints: &[TrackedConstraint]) -> Vec<Vec<Span>> {
-        muses.iter().map(|mus| mus.iter().map(|&i| constraints[i].span).collect()).collect()
+    fn get_error_locations(&self, muses: &[Vec<usize>], constraints: &[TrackedConstraint]) -> Vec<Vec<StackAssistSpan>> {
+        muses
+            .iter()
+            .map(|mus| {
+                mus.iter()
+                    .map(|&i| {
+                        let c = &constraints[i];
+                        match c.kind {
+                            ConstraintKind::StackOperation => StackAssistSpan::StackOperation(c.span),
+                            ConstraintKind::PostCondition => StackAssistSpan::PostCondition(c.span),
+                        }
+                    })
+                    .collect()
+            })
+            .collect()
     }
 
     fn encode_value(&self, expression: &Expression, ctx: &mut EncodingContext, span: &Span) {

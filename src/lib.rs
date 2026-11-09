@@ -1,5 +1,5 @@
 pub mod hfscheck {
-    pub mod error_parser;
+    pub mod diagnostic_parser;
     pub mod hfscheck;
     pub mod ir_check;
 }

@@ -3,7 +3,7 @@ use std::{collections::HashMap, fs, path::PathBuf};
 use crate::{
     hfs::{O0, OptPipeline},
     hfscheck::{
-        error_parser::ErrorParser,
+        diagnostic_parser::DiagnosticParser,
         ir_check::{IrCheck, IrTest},
     },
 };
@@ -20,7 +20,7 @@ pub enum CheckKind {
 
 #[derive(Debug, PartialEq)]
 pub enum Assertion<'a> {
-    Error(&'a PathBuf, usize, String),
+    Diagnostic(&'a PathBuf, usize, String),
     CheckFn { path: &'a PathBuf, name: String, checks: Vec<CheckKind>, pipelines: Vec<String> },
     Compile(&'a PathBuf),
 }
@@ -35,7 +35,7 @@ pub enum HfsRegex {
 }
 
 pub enum TestInput {
-    Error(String, usize),
+    Diagnostic(String, usize),
     Ir(String),
     Compile,
 }
@@ -236,7 +236,7 @@ pub fn find_assertions<'a>(path: &'a PathBuf, text: String) -> Vec<Assertion<'a>
                                     let rest = &line_string[line_column..].trim_start_matches(' ');
                                     let (kind, msg) = rest.split_once(' ').unwrap_or((rest, ""));
                                     match kind {
-                                        "ERROR" => assertions.push(Assertion::Error(path, line_number + 1, msg.to_string())),
+                                        "ERROR" => assertions.push(Assertion::Diagnostic(path, line_number + 1, msg.to_string())),
                                         "COMPILE" => assertions.push(Assertion::Compile(path)),
                                         "CHECK" => {
                                             let (check_kind, msg) = msg.split_once(' ').unwrap_or((msg, ""));
@@ -322,7 +322,7 @@ pub fn generate_tests(path: &PathBuf) -> Vec<Box<dyn Test + Send + Sync>> {
     let mut tests: Vec<Box<dyn Test + Send + Sync>> = Vec::new();
     for assertion in assertions {
         match assertion {
-            Assertion::Error(path, line, error) => tests.push(Box::new(ErrorParser::generate_test(path, line, error))),
+            Assertion::Diagnostic(path, line, diagnostic) => tests.push(Box::new(DiagnosticParser::generate_test(path, line, diagnostic))),
             Assertion::CheckFn { path, name, checks, pipelines } => {
                 let mut dump = false;
                 let mut parsed_pipelines: Vec<(Box<dyn OptPipeline + Send + Sync>, bool)> = pipelines
@@ -374,16 +374,16 @@ mod assertion_tests {
     use crate::hfscheck::hfscheck::{Assertion, CheckKind, find_assertions};
 
     #[test]
-    fn test_finds_error() {
+    fn test_finds_diagnostic() {
         let path = PathBuf::from("tests/failure_tests/lexer/lexer1.hfs");
         let assertions = find_assertions(&path, fs::read_to_string(&path).expect("Could not read file."));
 
         assert_eq!(assertions.len(), 1);
-        assert_eq!(assertions[0], Assertion::Error(&path, 1, String::from("\"unexpected character\"")));
+        assert_eq!(assertions[0], Assertion::Diagnostic(&path, 1, String::from("\"unexpected character\"")));
     }
 
     #[test]
-    fn test_no_errors() {
+    fn test_no_diagnostics() {
         let path = PathBuf::from("tests/compile_tests/operations.hfs");
         let assertions = find_assertions(&path, fs::read_to_string(&path).expect("Could not read file."));
         // 1 for the COMPILE directive

@@ -2,11 +2,14 @@ use std::{fmt::Display, path::PathBuf};
 
 use colored::ColoredString;
 
-use crate::hfs::{
-    AstArena, IrArena, IrFuncId, Span,
-    error::{CompileError, DebugInfo},
-    prettify_ir, print,
-    stack_analyzer_errors::StackAnalyzerError,
+use crate::{
+    hfs::{
+        AstArena, IrArena, IrFuncId, Span,
+        error::{CompileError, DebugInfo, Label, Snippet},
+        prettify_ir, print,
+        stack_analyzer_errors::StackAnalyzerError,
+    },
+    impl_display_for_error,
 };
 
 #[derive(Debug)]
@@ -72,44 +75,54 @@ impl IrLowererError {
 }
 
 impl CompileError for IrLowererError {
-    fn message(&self) -> (String, String) {
+    fn message(&self) -> String {
         match &self.kind {
-            IrLowererErrorKind::StackUnderflow =>
-                (String::from("stack underflow"), String::from("stack underflow occurred here")),
-            IrLowererErrorKind::ExpectedItemOnStack => (String::from("expected item on stack"), String::new()),
-            IrLowererErrorKind::ExpectedNetZeroStackEffectIfStmt(found) => (
-                format!("expected a net-zero stack effect on all branches, found a stack depth difference of {}", found),
-                String::new(),
-            ),
-            IrLowererErrorKind::ExpectedNetZeroStackEffectWhileLoop(found) => (
-                format!("expected while loop to maintain a net-zero stack effect, found a stack depth difference of {}", found),
-                String::new(),
-            ),
-            IrLowererErrorKind::MismatchingStackDepths(expected, actual) =>
-                (format!("expected a stack depth of {}, found a stack depth of {}", expected, actual), String::new()),
-            IrLowererErrorKind::IncorrectTupleLength(expected, actual) =>
-                (format!("expected a tuple of size {}, found a tuple of size {}", expected, actual), String::new()),
-            IrLowererErrorKind::IncorrectPointerCount(expected, actual) =>
-                (format!("expected a pointer count of {}, found a pointer count of {}", expected, actual), String::new()),
-            IrLowererErrorKind::MismatchingTypes(expected, actual) =>
-                (format!("expected {}, found {}", expected, actual), format!("found {}", actual)),
-            IrLowererErrorKind::NoStatementsInGlobalScope =>
-                (String::from("statements are not allowed in the global scope"), String::new()),
+            IrLowererErrorKind::StackUnderflow => String::from("stack underflow"),
+            IrLowererErrorKind::ExpectedItemOnStack => String::from("expected item on stack"),
+            IrLowererErrorKind::ExpectedNetZeroStackEffectIfStmt(found) => {
+                format!("expected a net-zero stack effect on all branches, found a stack depth difference of {}", found)
+            },
+            IrLowererErrorKind::ExpectedNetZeroStackEffectWhileLoop(found) => {
+                format!("expected while loop to maintain a net-zero stack effect, found a stack depth difference of {}", found)
+            },
+            IrLowererErrorKind::MismatchingStackDepths(expected, actual) => {
+                format!("expected a stack depth of {}, found a stack depth of {}", expected, actual)
+            },
+            IrLowererErrorKind::IncorrectTupleLength(expected, actual) => {
+                format!("expected a tuple of size {}, found a tuple of size {}", expected, actual)
+            },
+            IrLowererErrorKind::IncorrectPointerCount(expected, actual) => {
+                format!("expected a pointer count of {}, found a pointer count of {}", expected, actual)
+            },
+            IrLowererErrorKind::MismatchingTypes(expected, actual) => {
+                format!("expected {}, found {}", expected, actual)
+            },
+            IrLowererErrorKind::NoStatementsInGlobalScope => String::from("statements are not allowed in the global scope"),
         }
     }
 
-    fn get_path(&self) -> PathBuf { self.path.clone() }
-    fn get_debug_info(&self) -> DebugInfo { self.debug_info.clone() }
-    fn get_span(&self) -> Span { self.span }
-    fn current_function(&self) -> Option<String> { self.current_function.clone() }
-}
+    fn get_debug_info(&self) -> DebugInfo {
+        self.debug_info.clone()
+    }
+    fn current_function(&self) -> Option<String> {
+        self.current_function.clone()
+    }
 
-impl Display for IrLowererError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let source_code = match self.source_code() {
-            Ok(source_code) => source_code,
-            Err(e) => ColoredString::from(format!("<source unavailable: {}>", e)),
-        };
-        write!(f, "{}\n{}\n{}{}", self.header(), self.location(), source_code, self.debug_info())
+    fn snippets(&self) -> Vec<Snippet> {
+        {
+            vec![Snippet {
+                path: self.path.clone(),
+                labels: vec![Label {
+                    span: self.span,
+                    message: match &self.kind {
+                        IrLowererErrorKind::StackUnderflow => Some("stack underflow occured here".into()),
+                        IrLowererErrorKind::MismatchingTypes(_, actual) => Some(format!("found {}", actual)),
+                        _ => None,
+                    },
+                }],
+            }]
+        }
     }
 }
+
+impl_display_for_error!(IrLowererError);

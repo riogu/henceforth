@@ -2,12 +2,12 @@ use std::{
     fmt::{self, Display},
     path::PathBuf,
 };
-
-use colored::ColoredString;
-
-use crate::hfs::{
-    Span, Token, VALID_STACK_KEYWORDS,
-    error::{CompileError, DebugInfo},
+use crate::{
+    hfs::{
+        Span, Token, VALID_STACK_KEYWORDS,
+        error::{CompileError, DebugInfo, Label, Snippet},
+    },
+    impl_display_for_error,
 };
 
 #[derive(Debug)]
@@ -49,34 +49,36 @@ impl LexerError {
 }
 
 impl CompileError for LexerError {
-    fn message(&self) -> (String, String) {
+    fn message(&self) -> String {
         match self.kind {
-            LexerErrorKind::UnexpectedChar => (String::from("unexpected character"), String::from("unexpected character")),
-            LexerErrorKind::UnexpectedEof => (String::from("unexpected EOF"), String::from("unexpected EOF")),
-            LexerErrorKind::InvalidStackKeyword => (
-                format!(
-                    "invalid stack keyword, the valid keywords are {}",
-                    VALID_STACK_KEYWORDS.iter().map(|kw| format!("`{}`", kw)).collect::<Vec<String>>().join(", ")
-                ),
-                String::new(),
+            LexerErrorKind::UnexpectedChar => String::from("unexpected character"),
+            LexerErrorKind::UnexpectedEof => String::from("unexpected EOF"),
+            LexerErrorKind::InvalidStackKeyword => format!(
+                "invalid stack keyword, the valid keywords are {}",
+                VALID_STACK_KEYWORDS.iter().map(|kw| format!("`{}`", kw)).collect::<Vec<String>>().join(", ")
             ),
         }
     }
-    fn get_span(&self) -> Span { self.span }
-    fn get_path(&self) -> PathBuf { self.path.clone() }
-    fn get_debug_info(&self) -> DebugInfo { self.debug_info.clone() }
-}
+    fn get_debug_info(&self) -> DebugInfo {
+        self.debug_info.clone()
+    }
 
-impl Display for LexerError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let source_code = match self.source_code() {
-            Ok(source_code) => source_code,
-            Err(e) => ColoredString::from(format!("<source unavailable: {}>", e)),
-        };
-
-        write!(f, "{}\n{}\n{}{}", self.header(), self.location(), source_code, self.debug_info())
+    fn snippets(&self) -> Vec<Snippet> {
+        vec![Snippet {
+            path: self.path.clone(),
+            labels: vec![Label {
+                span: self.span,
+                message: match self.kind {
+                    LexerErrorKind::UnexpectedChar => Some("unexpected character".into()),
+                    LexerErrorKind::UnexpectedEof => Some("unexpected EOF".into()),
+                    LexerErrorKind::InvalidStackKeyword => None,
+                },
+            }],
+        }]
     }
 }
+
+impl_display_for_error!(LexerError);
 
 impl Display for Token {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

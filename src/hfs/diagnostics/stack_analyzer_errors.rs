@@ -2,10 +2,13 @@ use std::{fmt::Display, path::PathBuf};
 
 use colored::{ColoredString, Colorize, CustomColor};
 
-use crate::hfs::{
-    AstArena, ElaboratedType, Expression, FunctionDeclaration, Identifier, Operation, Span, Statement, TopLevelId, Type,
-    VarDeclaration,
-    error::{CompileError, DebugInfo, Dumpable},
+use crate::{
+    hfs::{
+        AstArena, ElaboratedType, Expression, FunctionDeclaration, Identifier, Operation, Span, Statement, TopLevelId, Type,
+        VarDeclaration,
+        error::{CompileError, DebugInfo, Dumpable, Label, Snippet},
+    },
+    impl_display_for_error,
 };
 
 #[derive(Debug)]
@@ -83,67 +86,95 @@ impl StackAnalyzerError {
 }
 
 impl CompileError for StackAnalyzerError {
-    fn message(&self) -> (String, String) {
+    fn message(&self) -> String {
         match &self.kind {
-            StackAnalyzerErrorKind::StackUnderflow =>
-                (String::from("stack underflow"), String::from("stack underflow occurred here")),
-            StackAnalyzerErrorKind::ExpectedItemOnStack => (String::from("expected item on stack"), String::new()),
-            StackAnalyzerErrorKind::IncorrectNumberReturnValues(expected, actual) =>
-                (format!("expected {} values on stack for return, found {}", expected, actual), String::new()),
-            StackAnalyzerErrorKind::TypeMismatchReturnValues(expected, actual) =>
-                (format!("expected {} on stack for return, found {}", expected, actual), String::new()),
-            StackAnalyzerErrorKind::TypeMismatch(expected, actual) =>
-                (format!("expected {}, found {}", expected, actual), format!("found {}", actual)),
-            StackAnalyzerErrorKind::IncorrectTupleLength(expected, actual) =>
-                (format!("expected a tuple of size {}, found a tuple of size {}", expected, actual), String::new()),
-            StackAnalyzerErrorKind::IncorrectPointerCount(expected, actual) =>
-                (format!("expected a pointer count of {}, found a pointer count of {}", expected, actual), String::new()),
-            StackAnalyzerErrorKind::MismatchingStackDepths(expected, actual) =>
-                (format!("expected a stack depth of {}, found a stack depth of {}", expected, actual), String::new()),
-            StackAnalyzerErrorKind::ExpectedNetZeroStackEffectIfStmt(found) => (
-                format!("expected a net-zero stack effect on all branches, found a stack depth difference of {}", found),
-                String::new(),
-            ),
-            StackAnalyzerErrorKind::ExpectedNetZeroStackEffectWhileLoop(found) => (
-                format!("expected while loop to maintain a net-zero stack effect, found a stack depth difference of {}", found),
-                String::new(),
-            ),
-            StackAnalyzerErrorKind::FoundXOutsideWhileLoop(jump_keyword) =>
-                (format!("found {} outside while loop", jump_keyword), format!("found {}", jump_keyword)),
-            StackAnalyzerErrorKind::AssignValueToFunction => (format!("cannot assign value to a function"), String::new()),
-            StackAnalyzerErrorKind::TooManyDereferences(actual, max) =>
-                (format!("cannot dereference {} times", actual), format!("type only has {} levels of indirection", max)),
-            StackAnalyzerErrorKind::CallVariableAsFunction => (format!("cannot call variable as a function"), String::new()),
-            StackAnalyzerErrorKind::UseOfUndeclaredIdentifier(name) =>
-                (format!("use of undeclared identifier '{}'", name), format!("undeclared identifier")),
-            StackAnalyzerErrorKind::IndexOutOfBounds(idx, len) =>
-                (format!("index {} is out of bounds for array of length {}", idx, len), "out of bounds".to_string()),
-            StackAnalyzerErrorKind::ArrayLengthMustBeCompileTime(name) =>
-                (format!("found runtime value on length expression for '{}'", name), String::new()),
-            StackAnalyzerErrorKind::ArrayLengthMustBeCompileTimeOnParameter =>
-                (format!("found runtime value on length expression for parameter"), String::new()),
-            StackAnalyzerErrorKind::ArrayLengthMustBeCompileTimeOnReturnType =>
-                (format!("found runtime value on length expression for return type"), String::new()),
-            StackAnalyzerErrorKind::ArrayLengthMustExistOnVarDeclaration(actual) => (format!("array variable must have a known length, found {}", actual), String::new()),
+            StackAnalyzerErrorKind::StackUnderflow => String::from("stack underflow"),
+            StackAnalyzerErrorKind::ExpectedItemOnStack => String::from("expected item on stack"),
+            StackAnalyzerErrorKind::IncorrectNumberReturnValues(expected, actual) => {
+                format!("expected {} values on stack for return, found {}", expected, actual)
+            },
+            StackAnalyzerErrorKind::TypeMismatchReturnValues(expected, actual) => {
+                format!("expected {} on stack for return, found {}", expected, actual)
+            },
+            StackAnalyzerErrorKind::TypeMismatch(expected, actual) => format!("expected {}, found {}", expected, actual),
+            StackAnalyzerErrorKind::IncorrectTupleLength(expected, actual) => {
+                format!("expected a tuple of size {}, found a tuple of size {}", expected, actual)
+            },
+            StackAnalyzerErrorKind::IncorrectPointerCount(expected, actual) => {
+                format!("expected a pointer count of {}, found a pointer count of {}", expected, actual)
+            },
+            StackAnalyzerErrorKind::MismatchingStackDepths(expected, actual) => {
+                format!("expected a stack depth of {}, found a stack depth of {}", expected, actual)
+            },
+            StackAnalyzerErrorKind::ExpectedNetZeroStackEffectIfStmt(found) => {
+                format!("expected a net-zero stack effect on all branches, found a stack depth difference of {}", found)
+            },
+
+            StackAnalyzerErrorKind::ExpectedNetZeroStackEffectWhileLoop(found) => {
+                format!("expected while loop to maintain a net-zero stack effect, found a stack depth difference of {}", found)
+            },
+            StackAnalyzerErrorKind::FoundXOutsideWhileLoop(jump_keyword) => {
+                format!("found {} outside while loop", jump_keyword)
+            },
+            StackAnalyzerErrorKind::AssignValueToFunction => format!("cannot assign value to a function"),
+            StackAnalyzerErrorKind::TooManyDereferences(actual, _) => {
+                format!("cannot dereference {} times", actual)
+            },
+            StackAnalyzerErrorKind::CallVariableAsFunction => format!("cannot call variable as a function"),
+            StackAnalyzerErrorKind::UseOfUndeclaredIdentifier(name) => {
+                format!("use of undeclared identifier '{}'", name)
+            },
+            StackAnalyzerErrorKind::IndexOutOfBounds(idx, len) => {
+                format!("index {} is out of bounds for array of length {}", idx, len)
+            },
+            StackAnalyzerErrorKind::ArrayLengthMustBeCompileTime(name) => {
+                format!("found runtime value on length expression for '{}'", name)
+            },
+            StackAnalyzerErrorKind::ArrayLengthMustBeCompileTimeOnParameter => {
+                format!("found runtime value on length expression for parameter")
+            },
+            StackAnalyzerErrorKind::ArrayLengthMustBeCompileTimeOnReturnType => {
+                format!("found runtime value on length expression for return type")
+            },
+            StackAnalyzerErrorKind::ArrayLengthMustExistOnVarDeclaration(actual) => {
+                format!("array variable must have a known length, found {}", actual)
+            },
         }
     }
 
-    fn get_path(&self) -> PathBuf { self.path.clone() }
-    fn get_debug_info(&self) -> DebugInfo { self.debug_info.clone() }
-    fn get_span(&self) -> Span { self.span }
-    fn current_function(&self) -> Option<String> { self.current_function.clone() }
-}
+    fn snippets(&self) -> Vec<Snippet> {
+        vec![Snippet {
+            path: self.path.clone(),
+            labels: vec![Label {
+                span: self.span,
+                message: match &self.kind {
+                    StackAnalyzerErrorKind::StackUnderflow => Some("stack underflow occured here".into()),
+                    StackAnalyzerErrorKind::TypeMismatch(_, actual) => Some(format!("found {}", actual)),
+                    StackAnalyzerErrorKind::FoundXOutsideWhileLoop(x) => Some(format!("found {}", x)),
+                    StackAnalyzerErrorKind::UseOfUndeclaredIdentifier(_) => Some("undeclared identifier".into()),
+                    StackAnalyzerErrorKind::IndexOutOfBounds(..) => Some("out of bounds".into()),
+                    StackAnalyzerErrorKind::TooManyDereferences(_, max) => {
+                        Some(format!("type only has {} levels of indirection", max))
+                    },
+                    _ => None,
+                },
+            }],
+        }]
+    }
 
-impl Display for StackAnalyzerError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let source_code = match self.source_code() {
-            Ok(source_code) => source_code,
-            Err(e) => ColoredString::from(format!("<source unavailable: {}>", e)),
-        };
-        write!(f, "{}\n{}\n{}{}", self.header(), self.location(), source_code, self.debug_info())
+    fn get_debug_info(&self) -> DebugInfo {
+        self.debug_info.clone()
+    }
+    fn current_function(&self) -> Option<String> {
+        self.current_function.clone()
     }
 }
-fn indent(s: &ColoredString) -> ColoredString { ColoredString::from(s.trim_start_matches('\n').replace('\n', "\n\t")) }
+
+impl_display_for_error!(StackAnalyzerError);
+
+fn indent(s: &ColoredString) -> ColoredString {
+    ColoredString::from(s.trim_start_matches('\n').replace('\n', "\n\t"))
+}
 
 fn indent_list(items: &[ColoredString]) -> ColoredString {
     ColoredString::from(items.iter().map(|s| format!("\t{}", indent(s))).collect::<Vec<String>>().join(",\n"))
@@ -379,8 +410,9 @@ impl Dumpable for Expression {
 
     fn dump(&self, arena: &Self::Arena) -> ColoredString {
         match self {
-            Expression::Operation(operation) =>
-                ColoredString::from(format!("{}\n\t{}", "Operation:".red().bold(), indent(&operation.dump(arena)).yellow())),
+            Expression::Operation(operation) => {
+                ColoredString::from(format!("{}\n\t{}", "Operation:".red().bold(), indent(&operation.dump(arena)).yellow()))
+            },
             Expression::Identifier(name) => ColoredString::from(format!(
                 "{} {}",
                 "Identifier".red().bold(),
@@ -391,8 +423,9 @@ impl Dumpable for Expression {
                     ")".custom_color(CustomColor::new(129, 137, 150)),
                 )
             )),
-            Expression::Literal(literal) =>
-                ColoredString::from(format!("{} {}", "Literal: ".red().bold(), format!("{}", literal).green())),
+            Expression::Literal(literal) => {
+                ColoredString::from(format!("{} {}", "Literal: ".red().bold(), format!("{}", literal).green()))
+            },
             Expression::Tuple { expressions } => {
                 let items: Vec<ColoredString> = expressions.iter().map(|expr| arena.get_expr(*expr).dump(arena)).collect();
                 ColoredString::from(format!(
@@ -564,5 +597,7 @@ impl Dumpable for Statement {
 }
 
 impl ElaboratedType {
-    fn dump_resolved(&self, arena: &AstArena) -> ColoredString { ColoredString::from(format!("{}", self.get_repr(arena))) }
+    fn dump_resolved(&self, arena: &AstArena) -> ColoredString {
+        ColoredString::from(format!("{}", self.get_repr(arena)))
+    }
 }

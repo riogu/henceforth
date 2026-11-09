@@ -210,9 +210,7 @@ impl StackAssistant {
                     Some(mcs) => {
                         dbg!(self.get_error_locations(&[mcs.clone()], &constraints));
                         return stack_assist_error!(
-                            StackAssistErrorKind::AssertionFailed(
-                                self.get_error_locations(&[mcs.clone()], &constraints).first().unwrap().clone()
-                            ),
+                            StackAssistErrorKind::AssertionFailed,
                             &self,
                             self.get_error_locations(&[loc.clone()], &constraints).first().unwrap().clone()
                         );
@@ -220,7 +218,7 @@ impl StackAssistant {
 
                     None => {
                         return stack_assist_error!(
-                            StackAssistErrorKind::AssertionFailed(vec![Span::default()]),
+                            StackAssistErrorKind::AssertionFailed,
                             &self,
                             self.get_error_locations(&[loc.clone()], &constraints).first().unwrap().clone()
                         );

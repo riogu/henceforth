@@ -2,9 +2,9 @@ use std::{fmt::Display, path::PathBuf};
 
 use colored::{ColoredString, Colorize, CustomColor};
 
-use crate::hfs::{
-    Span, TokenKind, Type, UnresolvedAstArena, UnresolvedExpression, UnresolvedFunctionDeclaration, UnresolvedOperation, UnresolvedStatement, UnresolvedTopLevelId, UnresolvedType, UnresolvedVarDeclaration, VALID_STACK_MODIFIERS, error::{CompileError, DebugInfo, Dumpable},
-};
+use crate::{hfs::{
+    Span, TokenKind, Type, UnresolvedAstArena, UnresolvedExpression, UnresolvedFunctionDeclaration, UnresolvedOperation, UnresolvedStatement, UnresolvedTopLevelId, UnresolvedType, UnresolvedVarDeclaration, VALID_STACK_MODIFIERS, error::{CompileError, DebugInfo, Dumpable, Label, Snippet},
+}, impl_display_for_error};
 
 #[derive(Debug)]
 pub enum Expectable {
@@ -81,7 +81,7 @@ impl ParserError {
 }
 
 impl CompileError for ParserError {
-    fn message(&self) -> (String, String) {
+    fn message(&self) -> String {
         match &self.kind {
             ParserErrorKind::ExpectedButFound(expected, found) => match found {
                 Some(found) => {
@@ -89,46 +89,33 @@ impl CompileError for ParserError {
                         "{}",
                         expected.iter().map(|expected| format!("{}", expected)).collect::<Vec<String>>().join(" or ")
                     );
-                    (format!("expected {}, found '{}'", expected_repr, found), String::new())
+                    format!("expected {}, found '{}'", expected_repr, found)
                 },
                 None => {
                     let expected_repr = format!(
                         "{}",
                         expected.iter().map(|expected| format!("{}", expected)).collect::<Vec<String>>().join(" or ")
                     );
-                    (format!("expected {}", expected_repr), String::new())
+                    format!("expected {}", expected_repr)
                 },
             },
-            ParserErrorKind::InvalidStackModifier(modifier) => (
-                format!(
-                    "invalid stack modifier `{modifier}`, the valid modifiers are {}",
-                    VALID_STACK_MODIFIERS.iter().map(|kw| format!("`{}`", kw)).collect::<Vec<String>>().join(", ")
-                ),
-                String::new(),
+            ParserErrorKind::InvalidStackModifier(modifier) => format!(
+                "invalid stack modifier `{modifier}`, the valid modifiers are {}",
+                VALID_STACK_MODIFIERS.iter().map(|kw| format!("`{}`", kw)).collect::<Vec<String>>().join(", ")
             ),
         }
     }
 
-    fn get_path(&self) -> PathBuf {
-        self.path.clone()
-    }
     fn get_debug_info(&self) -> DebugInfo {
         self.debug_info.clone()
     }
-    fn get_span(&self) -> Span {
-        self.span
+
+    fn snippets(&self) -> Vec<Snippet> {
+        vec![Snippet { path: self.path.clone(), labels: vec![Label { span: self.span, message: None }] }]
     }
 }
 
-impl Display for ParserError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let source_code = match self.source_code() {
-            Ok(source_code) => source_code,
-            Err(e) => ColoredString::from(format!("<source unavailable: {}>", e)),
-        };
-        write!(f, "{}\n{}\n{}{}", self.header(), self.location(), source_code, self.debug_info())
-    }
-}
+impl_display_for_error!(ParserError);
 
 fn indent(s: &ColoredString) -> ColoredString {
     ColoredString::from(s.trim_start_matches('\n').replace('\n', "\n\t"))

@@ -576,7 +576,7 @@ impl Parser {
                         self.expect(TokenKind::RightBracket)?;
                         Ok(self
                             .arena
-                            .alloc_unresolved_expr(UnresolvedExpression::Operation(UnresolvedOperation::ArrayAccess), token.span))
+                            .alloc_unresolved_expr(UnresolvedExpression::Operation(UnresolvedOperation::ArrayAccess), token.span.merge(self.last_span())))
                     },
                     Some(_) => {
                         let mut elements = Vec::new();

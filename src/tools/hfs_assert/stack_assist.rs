@@ -199,7 +199,7 @@ impl StackAssistant {
             (operation_count == 0, operation_count)
         });
 
-        let _best_mcs = result
+        let best_mcs = result
             .mcses
             .iter()
             .filter(|mcs| !mcs.is_empty() && mcs.iter().all(|&i| constraints[i].kind == ConstraintKind::StackOperation))
@@ -207,8 +207,15 @@ impl StackAssistant {
 
         match best_mus {
             Some(mus) => {
-                let spans = self.get_error_locations(&[mus.clone()], &constraints).remove(0);
-                stack_assist_error!(StackAssistErrorKind::AssertionFailed, &self, spans)
+                let mus_spans = self.get_mus_locations(&[mus.clone()], &constraints).remove(0);
+                match best_mcs {
+                    Some(mcs) => {
+                        let mcs_spans = self.get_mcs_locations(&[mcs.clone()], &constraints).remove(0);
+                        let spans: Vec<StackAssistSpan> = mus_spans.into_iter().chain(mcs_spans).collect();
+                        stack_assist_error!(StackAssistErrorKind::AssertionFailed, &self, spans)
+                    },
+                    None => stack_assist_error!(StackAssistErrorKind::AssertionFailed, &self, mus_spans),
+                }
             },
             None => Ok(()),
         }
@@ -481,7 +488,7 @@ impl StackAssistant {
         }
     }
 
-    fn get_error_locations(&self, muses: &[Vec<usize>], constraints: &[TrackedConstraint]) -> Vec<Vec<StackAssistSpan>> {
+    fn get_mus_locations(&self, muses: &[Vec<usize>], constraints: &[TrackedConstraint]) -> Vec<Vec<StackAssistSpan>> {
         muses
             .iter()
             .map(|mus| {
@@ -492,6 +499,20 @@ impl StackAssistant {
                             ConstraintKind::StackOperation => StackAssistSpan::StackOperation(c.span),
                             ConstraintKind::PostCondition => StackAssistSpan::PostCondition(c.span),
                         }
+                    })
+                    .collect()
+            })
+            .collect()
+    }
+
+    fn get_mcs_locations(&self, mcses: &[Vec<usize>], constraints: &[TrackedConstraint]) -> Vec<Vec<StackAssistSpan>> {
+        mcses
+            .iter()
+            .map(|mcs| {
+                mcs.iter()
+                    .map(|&i| {
+                        let c = &constraints[i];
+                        StackAssistSpan::RemovalHint(c.span)
                     })
                     .collect()
             })
